@@ -24,8 +24,8 @@ function LoginForm() {
         <div className="bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
           {/* Logo + Título */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-2xl shadow-xl shadow-indigo-500/30 mb-5">
-              <Car className="w-8 h-8 text-white" />
+            <div className="inline-flex items-center justify-center mb-5">
+              <img src="/logo.jpeg" alt="Auto Design Online" className="w-24 h-24 rounded-2xl shadow-xl shadow-indigo-500/30 object-cover" />
             </div>
             <h1 className="text-2xl font-black text-white tracking-tight leading-tight">
               CRM para Concessionárias

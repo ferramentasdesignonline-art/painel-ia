@@ -20,8 +20,8 @@ export function Sidebar() {
     <div className="flex flex-col w-72 bg-[#0a0a0b] border-r border-[#1e1e20] text-gray-400">
       <div className="flex h-20 shrink-0 items-center px-8">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Car className="h-5 w-5 text-white" />
+          <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center overflow-hidden shadow-lg shadow-indigo-500/20">
+            <img src="/logo.jpeg" alt="Logo" className="w-full h-full object-cover" />
           </div>
           <span className="font-bold text-xl tracking-tight text-white font-poppins">Design Online - IA</span>
         </div>
