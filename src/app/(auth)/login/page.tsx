@@ -30,7 +30,7 @@ function LoginForm() {
             <h1 className="text-2xl font-black text-white tracking-tight leading-tight">
               CRM para Concessionárias
             </h1>
-            <p className="text-indigo-300 font-bold text-sm mt-1 tracking-wide">Duo MKT</p>
+            <p className="text-indigo-300 font-bold text-sm mt-1 tracking-wide">Auto Design Online</p>
             <p className="text-white/40 text-xs mt-3 font-medium">
               Entre com suas credenciais para acessar
             </p>
@@ -105,7 +105,7 @@ function LoginForm() {
           </form>
 
           <p className="text-center text-white/20 text-xs mt-8 font-medium">
-            © {new Date().getFullYear()} Duo MKT — Todos os direitos reservados
+            © {new Date().getFullYear()} Auto Design Online — Todos os direitos reservados
           </p>
         </div>
       </div>
