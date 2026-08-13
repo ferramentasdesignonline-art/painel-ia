@@ -1,0 +1,11 @@
+{"time":"2026-04-15T16:39:40.499Z","lead_id":"ia-22","etapa_id":"2284d2a7-c3f6-4587-af09-465878ffd44a","origem":"ia","email":"juanestevam@gmail.com"}
+{"time":"2026-04-15T16:44:28.372Z","lead_id":"22","etapa_id":"2284d2a7-c3f6-4587-af09-465878ffd44a","origem":"ia","email":"juanestevam@gmail.com"}
+{"time":"2026-04-15T16:44:40.632Z","lead_id":"22","etapa_id":"6c1ca1ff-1037-422a-9977-158c6dc88869","origem":"ia","email":"juanestevam@gmail.com"}
+{"time":"2026-04-15T16:44:52.425Z","lead_id":"22","etapa_id":"1a914421-4d1f-4f92-ae09-4f456208aec1","origem":"ia","email":"juanestevam@gmail.com"}
+{"time":"2026-04-15T17:23:16.950Z","lead_id":"89a42f2b-0161-4e0a-ac6d-9ded81e5a141","etapa_id":"6c1ca1ff-1037-422a-9977-158c6dc88869","origem":"manual","email":"juanestevam@gmail.com"}
+{"time":"2026-04-15T17:23:45.037Z","lead_id":"89a42f2b-0161-4e0a-ac6d-9ded81e5a141","etapa_id":"172c8196-a0a3-4468-9f3d-9d17e6f7761c","origem":"manual","email":"juanestevam@gmail.com"}
+{"time":"2026-04-15T17:25:48.947Z","lead_id":"89a42f2b-0161-4e0a-ac6d-9ded81e5a141","etapa_id":"6c1ca1ff-1037-422a-9977-158c6dc88869","origem":"manual","email":"juanestevam@gmail.com"}
+{"time":"2026-04-15T17:26:18.406Z","lead_id":"89a42f2b-0161-4e0a-ac6d-9ded81e5a141","etapa_id":"172c8196-a0a3-4468-9f3d-9d17e6f7761c","origem":"manual","email":"juanestevam@gmail.com"}
+{"time":"2026-04-15T17:30:27.738Z","lead_id":"89a42f2b-0161-4e0a-ac6d-9ded81e5a141","etapa_id":"6c1ca1ff-1037-422a-9977-158c6dc88869","origem":"manual","email":"juanestevam@gmail.com"}
+{"time":"2026-04-15T17:30:37.073Z","lead_id":"89a42f2b-0161-4e0a-ac6d-9ded81e5a141","etapa_id":"172c8196-a0a3-4468-9f3d-9d17e6f7761c","origem":"manual","email":"juanestevam@gmail.com"}
+{"time":"2026-07-27T20:45:53.342Z","lead_id":"38","etapa_id":"c9d79a29-9b46-4f5d-af91-0a56c9c44d24","origem":"ia","email":"juanestevam19@outlook.com"}
