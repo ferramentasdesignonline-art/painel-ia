@@ -68,34 +68,33 @@ export function LeadChat({ messages }: LeadChatProps) {
     });
   };
 
+  const visibleMessages = messages.filter(msg => {
+    const content = msg.data.content || "";
+    if (content.includes("Execute agora o follow-up número")) return false;
+    return true;
+  });
+
+  const finalMessages = visibleMessages.filter((msg, index, arr) => {
+    if (index > 0) {
+      const prev = arr[index - 1];
+      if (prev.data.content === msg.data.content && prev.type === msg.type) {
+        return false;
+      }
+    }
+    return true;
+  });
+
   return (
     <div className="flex flex-col h-full bg-[#E5DDD5] relative" ref={scrollRef}>
       <ScrollArea className="flex-1 p-4 h-full">
         <div className="space-y-4 pb-4">
-          {messages.length === 0 ? (
+          {finalMessages.length === 0 ? (
             <div className="flex items-center justify-center min-h-[200px] text-gray-500 text-sm italic">
               Nenhuma mensagem encontrada nesta conversa.
             </div>
           ) : (
-            (() => {
-              const visibleMessages = messages.filter(msg => {
-                const content = msg.data.content || "";
-                if (content.includes("Execute agora o follow-up número")) return false;
-                return true;
-              });
-
-              const finalMessages = visibleMessages.filter((msg, index, arr) => {
-                if (index > 0) {
-                  const prev = arr[index - 1];
-                  if (prev.data.content === msg.data.content && prev.type === msg.type) {
-                    return false;
-                  }
-                }
-                return true;
-              });
-
-              return finalMessages.map((msg) => {
-                const isAi = msg.type === "ai"
+            finalMessages.map((msg) => {
+              const isAi = msg.type === "ai"
               return (
                 <div
                   key={msg.id}
@@ -122,7 +121,7 @@ export function LeadChat({ messages }: LeadChatProps) {
                 </div>
               )
             })
-          })()}
+          )}
         </div>
       </ScrollArea>
       {/* Rodapé informativo silencioso */}
