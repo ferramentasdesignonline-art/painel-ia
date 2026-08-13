@@ -2,10 +2,10 @@
 
 import { login } from './actions'
 import { useSearchParams } from 'next/navigation'
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { Loader2, Car, KeyRound, Mail } from 'lucide-react'
 
-export default function LoginPage() {
+function LoginForm() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
   const [loading, setLoading] = useState(false)
@@ -110,5 +110,17 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen w-full items-center justify-center bg-gray-950">
+        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }
