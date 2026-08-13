@@ -44,8 +44,6 @@ type LeadDrawerProps = {
 }
 
 export function LeadDrawer({ lead, isOpen, onClose }: LeadDrawerProps) {
-  if (!lead) return null
-
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [history, setHistory] = useState<any[]>([])
   const [loadingChat, setLoadingChat] = useState(false)
@@ -256,6 +254,8 @@ export function LeadDrawer({ lead, isOpen, onClose }: LeadDrawerProps) {
         .catch(console.error)
     }
   }, [isOpen, lead])
+
+  if (!lead) return null
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
