@@ -35,7 +35,7 @@ export function LeadChat({ messages }: LeadChatProps) {
       if (!dateStr) return ""
       const date = new Date(dateStr)
       if (isNaN(date.getTime())) return ""
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     } catch {
       return ""
     }
@@ -77,8 +77,25 @@ export function LeadChat({ messages }: LeadChatProps) {
               Nenhuma mensagem encontrada nesta conversa.
             </div>
           ) : (
-            messages.map((msg) => {
-              const isAi = msg.type === "ai"
+            (() => {
+              const visibleMessages = messages.filter(msg => {
+                const content = msg.data.content || "";
+                if (content.includes("Execute agora o follow-up número")) return false;
+                return true;
+              });
+
+              const finalMessages = visibleMessages.filter((msg, index, arr) => {
+                if (index > 0) {
+                  const prev = arr[index - 1];
+                  if (prev.data.content === msg.data.content && prev.type === msg.type) {
+                    return false;
+                  }
+                }
+                return true;
+              });
+
+              return finalMessages.map((msg) => {
+                const isAi = msg.type === "ai"
               return (
                 <div
                   key={msg.id}
@@ -105,7 +122,7 @@ export function LeadChat({ messages }: LeadChatProps) {
                 </div>
               )
             })
-          )}
+          })()}
         </div>
       </ScrollArea>
       {/* Rodapé informativo silencioso */}
