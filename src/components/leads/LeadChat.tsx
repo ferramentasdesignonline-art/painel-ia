@@ -41,13 +41,17 @@ export function LeadChat({ messages }: LeadChatProps) {
     }
   }
 
-  const formatMessageContent = (content: string) => {
-    if (!content) return null;
-    
-    // Remove os prefixos indesejados
-    let clean = content
+  const cleanMessageContent = (content: string) => {
+    if (!content) return "";
+    return content
       .replace(/Mensagem do cliente:\s*/gi, '')
-      .replace(/Se caso tiver, o cliente pode ter respondido uma mensagem e a mensagem era essa:\s*/gi, '');
+      .replace(/Se caso tiver, o cliente pode ter respondido uma mensagem e a mensagem era essa:\s*/gi, '')
+      .trim();
+  };
+
+  const formatMessageContent = (content: string) => {
+    const clean = cleanMessageContent(content);
+    if (!clean) return null;
       
     // Expressão regular para encontrar URLs
     const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -69,7 +73,8 @@ export function LeadChat({ messages }: LeadChatProps) {
   };
 
   const visibleMessages = messages.filter(msg => {
-    const content = msg.data.content || "";
+    const content = cleanMessageContent(msg.data.content);
+    if (!content) return false;
     if (content.includes("Execute agora o follow-up número")) return false;
     return true;
   });
@@ -77,7 +82,7 @@ export function LeadChat({ messages }: LeadChatProps) {
   const finalMessages = visibleMessages.filter((msg, index, arr) => {
     if (index > 0) {
       const prev = arr[index - 1];
-      if (prev.data.content === msg.data.content && prev.type === msg.type) {
+      if (cleanMessageContent(prev.data.content) === cleanMessageContent(msg.data.content) && prev.type === msg.type) {
         return false;
       }
     }
