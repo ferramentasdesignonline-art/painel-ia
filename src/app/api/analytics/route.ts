@@ -136,10 +136,15 @@ export async function GET(request: Request) {
     const leadsByDay: Record<string, number> = {}
     let allLeads: any[] = []
 
+    let visitasAgendadas = 0
+    let simulacoesAprovadas = 0
+    let simulacoesPreAprovadas = 0
+    let perdas = 0
+
     if (clientConfig.tabela_leads) {
       let leadsQuery = supabaseAdmin
         .from(clientConfig.tabela_leads)
-        .select('id, created_at, lead_finalizado, quantidade_followup, horario_lead_qualificado')
+        .select('id, created_at, lead_finalizado, quantidade_followup, horario_lead_qualificado, lead_visita_confirmada, lead_simulacao_pre_aprovada, lead_simulacao_aprovada, lead_simulacao_reprovada, lead_perda')
 
       if (from) leadsQuery = leadsQuery.gte('created_at', from)
       if (to)   leadsQuery = leadsQuery.lte('created_at', to)
@@ -152,9 +157,13 @@ export async function GET(request: Request) {
       }
     }
 
-    totalFollowups = allLeads.reduce((sum, l) => sum + (l.quantidade_followup || 0), 0)
+    totalFollowups = allLeads.reduce((sum, l) => sum + parseInt(l.quantidade_followup || '0'), 0)
     qualifiedLeads = allLeads.filter(l => l.lead_finalizado === true || l.horario_lead_qualificado != null).length
     totalLeads = allLeads.length
+    visitasAgendadas = allLeads.filter(l => l.lead_visita_confirmada === true).length
+    simulacoesAprovadas = allLeads.filter(l => l.lead_simulacao_aprovada === true).length
+    simulacoesPreAprovadas = allLeads.filter(l => l.lead_simulacao_pre_aprovada === true).length
+    perdas = allLeads.filter(l => l.lead_perda === true).length
 
     // Leads por dia
     for (const lead of allLeads || []) {
@@ -182,7 +191,7 @@ export async function GET(request: Request) {
     }))
 
     return NextResponse.json({
-      kpis: { aiMessages, humanMessages, totalFollowups, qualifiedLeads, totalLeads },
+      kpis: { aiMessages, humanMessages, totalFollowups, qualifiedLeads, totalLeads, visitasAgendadas, simulacoesAprovadas, simulacoesPreAprovadas, perdas },
       chartData,
       pieData: [
         { name: 'Qualificados', value: qualifiedLeads, color: '#22c55e' },
