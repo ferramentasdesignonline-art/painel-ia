@@ -144,7 +144,7 @@ export async function GET(request: Request) {
     if (clientConfig.tabela_leads) {
       let leadsQuery = supabaseAdmin
         .from(clientConfig.tabela_leads)
-        .select('id, created_at, lead_finalizado, quantidade_followup, horario_lead_qualificado, lead_visita_confirmada, lead_simulacao_pre_aprovada, lead_simulacao_aprovada, lead_simulacao_reprovada, lead_perda')
+        .select('*')
 
       if (from) leadsQuery = leadsQuery.gte('created_at', from)
       if (to)   leadsQuery = leadsQuery.lte('created_at', to)
