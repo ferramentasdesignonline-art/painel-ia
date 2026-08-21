@@ -27,7 +27,10 @@ export async function criarFunilPadrao(clienteId: string, supabaseClient: Supaba
     { nome: 'Em andamento', cor: '#6366f1', ordem: 2, tipo: 'ia_em_andamento' },
     { nome: 'Follow-up',    cor: '#f97316', ordem: 3, tipo: 'ia_followup' },
     { nome: 'Qualificado',  cor: '#10b981', ordem: 4, tipo: 'ia_qualificado' },
-    { nome: 'Perda',        cor: '#ef4444', ordem: 5, tipo: 'ia_perda' },
+    { nome: 'Pré-Aprovado', cor: '#eab308', ordem: 5, tipo: 'manual' },
+    { nome: 'Aprovado',     cor: '#22c55e', ordem: 6, tipo: 'manual' },
+    { nome: 'Reprovado',    cor: '#ef4444', ordem: 7, tipo: 'manual' },
+    { nome: 'Perda',        cor: '#9ca3af', ordem: 8, tipo: 'ia_perda' },
   ];
 
   const { error: etapasError } = await supabaseAdmin
