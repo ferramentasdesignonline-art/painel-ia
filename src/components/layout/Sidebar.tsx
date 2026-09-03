@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Users, Calendar, Car, ShieldBan, LogOut, Trophy } from "lucide-react"
+import { LayoutDashboard, Users, Calendar, Car, ShieldBan, LogOut, Trophy, MessageCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { logout } from "@/app/(auth)/logout/actions"
 
@@ -11,6 +11,7 @@ const navigation = [
   { name: "Leads", href: "/leads", icon: Users },
   { name: "Funil de Leads", href: "/funil", icon: Trophy },
   { name: "Bloqueios", href: "/bloqueios", icon: ShieldBan },
+  { name: "Conexão WhatsApp", href: "/whatsapp", icon: MessageCircle },
 ]
 
 export function Sidebar() {

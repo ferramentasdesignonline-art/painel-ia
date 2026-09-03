@@ -30,9 +30,7 @@ export async function GET(request: Request) {
 
     // 3. Instanciamos um client com a SERVICE ROLE KEY, porque as tabelas dinâmicas
     // podem não ter políticas RLS amigáveis configuradas, sendo o backend a ponte segura.
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    const supabaseAdmin = createClient(clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!, clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         auth: {
           autoRefreshToken: false,

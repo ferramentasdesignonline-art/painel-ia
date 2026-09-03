@@ -95,7 +95,11 @@ export default function NovoClientePage() {
     tabela_leads: "",
     tabela_bloqueios: "",
     tabela_memoria: "",
-    tabela_estoque: "", // Novo campo
+    tabela_estoque: "",
+    supabase_url: "",
+    supabase_anon_key: "",
+    supabase_service_role_key: "",
+    whatsapp_token: "",
   })
 
   const fetchTables = async () => {
@@ -250,6 +254,57 @@ export default function NovoClientePage() {
               tables={tables}
               loadingTables={loadingTables}
             />
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+            <div>
+              <h3 className="text-base font-semibold text-gray-900">Configurações Avançadas (Opcional)</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Credenciais para o modelo Multi-Supabase e integração WhatsApp.</p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-y-5 gap-x-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Supabase URL (Cliente)</label>
+              <input
+                type="text" value={formData.supabase_url}
+                onChange={(e) => setFormData({ ...formData, supabase_url: e.target.value })}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border font-mono text-xs"
+                placeholder="https://xxx.supabase.co"
+              />
+            </div>
+            
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Supabase Anon Key</label>
+              <input
+                type="text" value={formData.supabase_anon_key}
+                onChange={(e) => setFormData({ ...formData, supabase_anon_key: e.target.value })}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border font-mono text-xs"
+                placeholder="eyJh..."
+              />
+            </div>
+            
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Supabase Service Role Key</label>
+              <input
+                type="password" value={formData.supabase_service_role_key}
+                onChange={(e) => setFormData({ ...formData, supabase_service_role_key: e.target.value })}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border font-mono text-xs"
+                placeholder="eyJh..."
+              />
+            </div>
+            
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp Token (UAZAPI)</label>
+              <input
+                type="text" value={formData.whatsapp_token}
+                onChange={(e) => setFormData({ ...formData, whatsapp_token: e.target.value })}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border font-mono text-xs"
+                placeholder="Token gerado na UAZAPI"
+              />
+            </div>
           </div>
         </div>
 

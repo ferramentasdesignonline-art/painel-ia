@@ -13,12 +13,14 @@ export async function POST(request: Request) {
       tabela_leads, 
       tabela_bloqueios, 
       tabela_memoria,
-      tabela_estoque // Novo campo
+      tabela_estoque, // Novo campo
+      supabase_url,
+      supabase_anon_key,
+      supabase_service_role_key,
+      whatsapp_token
     } = body
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    const supabaseAdmin = createClient(clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!, clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         auth: {
           autoRefreshToken: false,
@@ -52,6 +54,10 @@ export async function POST(request: Request) {
           tabela_bloqueios,
           tabela_memoria,
           tabela_estoque, // Enviando para o banco
+          supabase_url,
+          supabase_anon_key,
+          supabase_service_role_key,
+          whatsapp_token,
           active: true
         }
       ])
