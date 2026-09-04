@@ -18,6 +18,8 @@ export default function WhatsappPage() {
         setStatus(data)
         if (data.status?.connected) {
           setQrCode(null)
+        } else if (data.instance?.qrcode) {
+          setQrCode(data.instance.qrcode)
         }
       } else {
         setError(data.error || "Erro ao buscar status")
@@ -44,8 +46,11 @@ export default function WhatsappPage() {
       if (res.ok) {
         if (data.base64) {
           setQrCode(data.base64)
-        } else if (data.status?.connected) {
-          fetchStatus()
+        } else if (data.instance?.qrcode) {
+          setQrCode(data.instance.qrcode)
+        } else {
+          // Mesmo que não venha direto, vamos forçar uma atualização de status
+          await fetchStatus()
         }
       } else {
         setError(data.error || "Erro ao conectar")
