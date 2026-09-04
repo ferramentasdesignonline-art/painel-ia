@@ -26,6 +26,12 @@ export async function GET(request: Request) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
+  const supabaseClientDB = createAdminClient(
+    cliente.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    cliente.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+
   let { data: funil } = await supabaseAdmin
     .from('sistema-dash-ia_funis')
     .select('id, meta_followup')
@@ -52,7 +58,7 @@ export async function GET(request: Request) {
   const dataInicioStr = searchParams.get('dataInicio');
   const dataFimStr = searchParams.get('dataFim');
 
-  let queryLeads = supabaseAdmin
+  let queryLeads = supabaseClientDB
     .from(cliente.tabela_leads)
     .select('*');
 
@@ -67,13 +73,14 @@ export async function GET(request: Request) {
     queryLeads = queryLeads.gte('created_at', dataLimite.toISOString());
   }
 
-  const { data: leads } = await queryLeads.order('created_at', { ascending: false });
+  const { data: leads } = await queryLeads.order('created_at', { ascending: false }).limit(10000);
 
   // Buscar bloqueios ativos
-  const { data: bloqueios } = await supabaseAdmin
+  const { data: bloqueios } = await supabaseClientDB
     .from(cliente.tabela_bloqueios)
     .select('numero_cliente')
-    .eq('bloqueio_existe', true);
+    .eq('bloqueio_existe', true)
+    .limit(10000);
 
   const numerosBloqueados = new Set(bloqueios?.map(b => b.numero_cliente) || []);
 

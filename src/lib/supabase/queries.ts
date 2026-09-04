@@ -6,7 +6,7 @@ export async function getClientLeads(supabaseAdmin: SupabaseClient, leadsTableNa
     .select('*')
     // Ajuste essa ordenação com base no schema real dessas tabelas. Ex: order by created_at desc
     .order('id', { ascending: false })
-    .limit(100)
+    .limit(10000)
     
   if (error) {
     console.error(`Error fetching from ${leadsTableName}:`, error)
@@ -19,7 +19,7 @@ export async function getClientBloqueios(supabaseAdmin: SupabaseClient, bloqueio
   const { data, error } = await supabaseAdmin
     .from(bloqueiosTableName)
     .select('*')
-    .limit(100)
+    .limit(10000)
     
   if (error) {
     console.error(`Error fetching from ${bloqueiosTableName}:`, error)
@@ -32,7 +32,7 @@ export async function getClientEstoque(supabaseAdmin: SupabaseClient, estoqueTab
   const { data, error } = await supabaseAdmin
     .from(estoqueTableName)
     .select('*')
-    .limit(100)
+    .limit(10000)
     
   if (error) {
     console.error(`Error fetching from ${estoqueTableName}:`, error)
