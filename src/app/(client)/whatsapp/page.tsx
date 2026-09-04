@@ -33,9 +33,15 @@ export default function WhatsappPage() {
 
   useEffect(() => {
     fetchStatus()
-    const interval = setInterval(fetchStatus, 5 * 60 * 1000) // 5 minutes
+    
+    // Se estiver aguardando o QR Code (conectando), atualiza a cada 10 segundos. 
+    // Se já estiver conectado ou desconectado, a cada 5 minutos.
+    const isConnecting = status?.instance?.status === 'connecting' || qrCode !== null;
+    const intervalTime = isConnecting ? 10 * 1000 : 5 * 60 * 1000;
+    
+    const interval = setInterval(fetchStatus, intervalTime)
     return () => clearInterval(interval)
-  }, [])
+  }, [status?.instance?.status, qrCode])
 
   const handleConnect = async () => {
     setConnecting(true)
@@ -141,11 +147,15 @@ export default function WhatsappPage() {
                     </div>
                     <div>
                       <button
-                        onClick={handleConnect}
+                        onClick={async () => {
+                          setConnecting(true);
+                          await fetchStatus();
+                          setConnecting(false);
+                        }}
                         disabled={connecting}
                         className="text-indigo-400 hover:text-indigo-300 text-sm font-medium"
                       >
-                        Gerar novo QR Code
+                        {connecting ? "Atualizando..." : "Gerar novo QR Code"}
                       </button>
                     </div>
                   </div>
