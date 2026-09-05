@@ -496,25 +496,25 @@ export default function ClientDashboardPage() {
       {/* Seção Visitas / Leads Qualificados */}
       {!loading && qualifiedLeadsList && qualifiedLeadsList.length > 0 && (
         <div className="space-y-6 mt-12 animate-in fade-in zoom-in-95 duration-500">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <h2 className="text-2xl font-bold tracking-tight text-gray-900 font-poppins">Visitas / Leads Qualificados</h2>
               <p className="text-gray-500 mt-1">Gerencie os agendamentos e leads prontos para negociação.</p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-gray-500 uppercase">Filtrar Visitas:</span>
                 <input
                   type="date"
                   value={visitasDate}
                   onChange={e => setVisitasDate(e.target.value)}
-                  className="h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className="h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 max-w-[140px]"
                 />
                 {visitasDate && (
                   <button onClick={() => setVisitasDate('')} className="text-xs text-gray-400 hover:text-red-500 transition-colors">✕</button>
                 )}
               </div>
-              <div className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-bold border border-indigo-100">
+              <div className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-bold border border-indigo-100 whitespace-nowrap">
                 {qualifiedLeadsList.filter(l => !visitasDate || (l.data_agendamento && new Date(l.data_agendamento).toISOString().startsWith(visitasDate))).length} Qualificado{qualifiedLeadsList.length > 1 ? 's' : ''}
               </div>
             </div>
