@@ -11,11 +11,11 @@ const navigation = [
   { name: "Clientes (SaaS)", href: "/admin/clientes", icon: Store },
 ]
 
-export function AdminSidebar() {
+export function AdminSidebar({ className }: { className?: string }) {
   const pathname = usePathname()
 
   return (
-    <div className="flex flex-col w-64 bg-indigo-950 border-r border-indigo-900 text-indigo-100">
+    <div className={cn("flex flex-col bg-indigo-950 border-r border-indigo-900 text-indigo-100 h-full", className || "hidden md:flex w-64")}>
       <div className="flex h-16 shrink-0 items-center px-6 bg-indigo-900 border-b border-indigo-800">
         <Building2 className="w-6 h-6 mr-2 text-indigo-300" />
         <span className="font-bold text-lg text-white">Master Admin</span>

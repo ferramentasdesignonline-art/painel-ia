@@ -183,7 +183,7 @@ export default function LeadsPage() {
       <Card className="border-none shadow-sm bg-white rounded-2xl overflow-hidden">
         <div className="p-4 border-b border-gray-50 bg-gray-50/30 flex flex-wrap gap-3 items-center">
           {/* Busca */}
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <div className="relative w-full sm:flex-1 sm:max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
               placeholder="Buscar por nome ou telefone..."

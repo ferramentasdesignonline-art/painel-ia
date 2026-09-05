@@ -72,7 +72,7 @@ export default function WhatsappPage() {
   const isConnecting = status?.response === "Connecting"
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white mb-2 font-poppins flex items-center gap-3">
           <Smartphone className="h-8 w-8 text-indigo-400" />
@@ -81,7 +81,7 @@ export default function WhatsappPage() {
         <p className="text-gray-400">Gerencie a conexão do seu número de WhatsApp com a inteligência artificial.</p>
       </div>
 
-      <div className="bg-[#0a0a0b] border border-[#1e1e20] rounded-2xl p-8 max-w-2xl">
+      <div className="bg-[#0a0a0b] border border-[#1e1e20] rounded-2xl p-4 sm:p-8 max-w-2xl">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 text-indigo-500 animate-spin" />
@@ -92,7 +92,7 @@ export default function WhatsappPage() {
           </div>
         ) : (
           <div className="space-y-8">
-            <div className="flex items-center justify-between p-6 bg-white/[0.02] rounded-xl border border-white/[0.05]">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 sm:p-6 bg-white/[0.02] rounded-xl border border-white/[0.05]">
               <div className="flex items-center gap-4">
                 <div className={`p-3 rounded-xl ${isConnected ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
                   {isConnected ? <Wifi className="h-6 w-6" /> : <WifiOff className="h-6 w-6" />}
@@ -106,7 +106,7 @@ export default function WhatsappPage() {
               </div>
               <button
                 onClick={fetchStatus}
-                className="p-2 hover:bg-white/[0.05] rounded-lg transition-colors text-gray-400 hover:text-white"
+                className="p-2 hover:bg-white/[0.05] rounded-lg transition-colors text-gray-400 hover:text-white self-end sm:self-auto"
                 title="Atualizar status"
               >
                 <RefreshCcw className="h-5 w-5" />

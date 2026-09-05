@@ -25,22 +25,22 @@ export default async function ClientesPage() {
     .order('created_at', { ascending: false })
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
+    <div className="p-4 sm:p-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900">Clientes</h1>
           <p className="text-gray-500 mt-2">Gerencie todas as concessionárias do sistema.</p>
         </div>
         <Link 
           href="/admin/clientes/novo" 
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md font-medium flex items-center transition-colors"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md font-medium flex items-center transition-colors w-full sm:w-auto justify-center"
         >
           <Plus className="w-5 h-5 mr-2" />
           Novo Cliente
         </Link>
       </div>
 
-      <div className="bg-white shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg overflow-hidden">
+      <div className="bg-white shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-300">
           <thead className="bg-gray-50">
             <tr>

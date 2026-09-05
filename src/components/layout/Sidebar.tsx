@@ -14,11 +14,11 @@ const navigation = [
   { name: "Conexão WhatsApp", href: "/whatsapp", icon: MessageCircle },
 ]
 
-export function Sidebar() {
+export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname()
 
   return (
-    <div className="flex flex-col w-72 bg-[#0a0a0b] border-r border-[#1e1e20] text-gray-400">
+    <div className={cn("flex flex-col bg-[#0a0a0b] border-r border-[#1e1e20] text-gray-400 h-full", className || "hidden md:flex w-72")}>
       <div className="flex h-20 shrink-0 items-center px-8">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center overflow-hidden shadow-lg shadow-indigo-500/20">

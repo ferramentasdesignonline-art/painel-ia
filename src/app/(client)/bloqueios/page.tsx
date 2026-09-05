@@ -148,78 +148,80 @@ export default function BloqueiosPage() {
             </div>
           </div>
         ) : (
-          <div className="divide-y divide-gray-50">
-            {/* Cabeçalho */}
-            <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-4 px-6 py-3 bg-gray-50/70">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Número</span>
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Data do Bloqueio</span>
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</span>
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Ações</span>
-            </div>
+          <div className="divide-y divide-gray-50 overflow-x-auto">
+            <div className="min-w-[800px]">
+              {/* Cabeçalho */}
+              <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-4 px-6 py-3 bg-gray-50/70">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Número</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Data do Bloqueio</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</span>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Ações</span>
+              </div>
 
-            {bloqueios.map((bloqueio) => {
-              const numeroRaw = bloqueio.numero_cliente || ''
-              const numeroFormatado = formatarTelefone(numeroRaw)
-              const dataFormatada = bloqueio.created_at
-                ? new Date(bloqueio.created_at).toLocaleString('pt-BR', {
-                    day: '2-digit', month: '2-digit', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit'
-                  })
-                : '-'
+              {bloqueios.map((bloqueio) => {
+                const numeroRaw = bloqueio.numero_cliente || ''
+                const numeroFormatado = formatarTelefone(numeroRaw)
+                const dataFormatada = bloqueio.created_at
+                  ? new Date(bloqueio.created_at).toLocaleString('pt-BR', {
+                      day: '2-digit', month: '2-digit', year: 'numeric',
+                      hour: '2-digit', minute: '2-digit'
+                    })
+                  : '-'
 
-              return (
-                <div
-                  key={bloqueio.id || bloqueio.numero_cliente}
-                  className="grid grid-cols-[1fr_1fr_1fr_auto] gap-4 items-center px-6 py-4 hover:bg-gray-50/50 transition-colors group"
-                >
-                  {/* Número */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center shrink-0">
-                      <Phone className="w-4 h-4 text-red-500" />
+                return (
+                  <div
+                    key={bloqueio.id || bloqueio.numero_cliente}
+                    className="grid grid-cols-[1fr_1fr_1fr_auto] gap-4 items-center px-6 py-4 hover:bg-gray-50/50 transition-colors group"
+                  >
+                    {/* Número */}
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                        <Phone className="w-4 h-4 text-red-500" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-800">{numeroFormatado}</p>
+                        <p className="text-[10px] text-gray-400 font-medium">WhatsApp</p>
+                      </div>
                     </div>
+
+                    {/* Data */}
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <Clock className="w-3.5 h-3.5 text-gray-300" />
+                      <span className="text-sm font-medium">{dataFormatada}</span>
+                    </div>
+
+                    {/* Status */}
                     <div>
-                      <p className="text-sm font-bold text-gray-800">{numeroFormatado}</p>
-                      <p className="text-[10px] text-gray-400 font-medium">WhatsApp</p>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-100 text-amber-600 text-[10px] font-black uppercase tracking-wider">
+                        <AlertTriangle className="w-3 h-3" />
+                        IA Pausada
+                      </span>
+                    </div>
+
+                    {/* Ação */}
+                    <div className="flex justify-end">
+                      <button
+                        disabled={acting === bloqueio.numero_cliente}
+                        onClick={() => handleUnblock(bloqueio.numero_cliente)}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs font-bold rounded-xl transition-all shadow-sm shadow-indigo-100 hover:-translate-y-0.5 disabled:translate-y-0"
+                      >
+                        {acting === bloqueio.numero_cliente ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            Reativando...
+                          </>
+                        ) : (
+                          <>
+                            <Bot className="w-3.5 h-3.5" />
+                            Reativar IA
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
-
-                  {/* Data */}
-                  <div className="flex items-center gap-2 text-gray-500">
-                    <Clock className="w-3.5 h-3.5 text-gray-300" />
-                    <span className="text-sm font-medium">{dataFormatada}</span>
-                  </div>
-
-                  {/* Status */}
-                  <div>
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-100 text-amber-600 text-[10px] font-black uppercase tracking-wider">
-                      <AlertTriangle className="w-3 h-3" />
-                      IA Pausada
-                    </span>
-                  </div>
-
-                  {/* Ação */}
-                  <div className="flex justify-end">
-                    <button
-                      disabled={acting === bloqueio.numero_cliente}
-                      onClick={() => handleUnblock(bloqueio.numero_cliente)}
-                      className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs font-bold rounded-xl transition-all shadow-sm shadow-indigo-100 hover:-translate-y-0.5 disabled:translate-y-0"
-                    >
-                      {acting === bloqueio.numero_cliente ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          Reativando...
-                        </>
-                      ) : (
-                        <>
-                          <Bot className="w-3.5 h-3.5" />
-                          Reativar IA
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         )}
       </div>

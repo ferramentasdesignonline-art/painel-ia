@@ -1,16 +1,29 @@
 "use client"
 
-import { LogOut } from "lucide-react"
+import { LogOut, Menu } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sidebar } from "@/components/layout/Sidebar"
 import { logout } from "@/app/(auth)/logout/actions"
 
 export function Header({ clientName, clientEmail }: { clientName?: string, clientEmail?: string }) {
   return (
     <header className="sticky top-0 z-40 flex h-20 shrink-0 items-center gap-x-4 border-b border-gray-100 bg-white/80 backdrop-blur-md px-4 sm:gap-x-6 sm:px-6 lg:px-8">
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-        <div className="flex flex-1 items-center">
-          <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
+        <div className="flex flex-1 items-center gap-4">
+          <Sheet>
+            <SheetTrigger asChild>
+              <button className="md:hidden p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-md">
+                <Menu className="h-6 w-6" />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="left" className="p-0 w-72 border-none">
+              <Sidebar className="flex w-full" />
+            </SheetContent>
+          </Sheet>
+          
+          <div className="hidden sm:flex items-center gap-2 text-sm font-medium text-gray-500">
             <span>Portal</span>
             <span className="text-gray-300">/</span>
             <span className="text-gray-900">Dashboard</span>
