@@ -8,9 +8,11 @@ type Props = {
   clientName: string
   clientSlug: string
   active: boolean
+  refreshTrigger?: number
+  onUpdated?: () => void
 }
 
-export function WhatsAppStatusCard({ clientId, clientName, clientSlug, active }: Props) {
+export function WhatsAppStatusCard({ clientId, clientName, clientSlug, active, refreshTrigger, onUpdated }: Props) {
   const [status, setStatus] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -41,8 +43,9 @@ export function WhatsAppStatusCard({ clientId, clientName, clientSlug, active }:
       setError("Erro de Rede")
     } finally {
       setLoading(false)
+      onUpdated?.()
     }
-  }, [clientId, active])
+  }, [clientId, active, onUpdated])
 
   useEffect(() => {
     fetchStatus()
@@ -53,6 +56,12 @@ export function WhatsAppStatusCard({ clientId, clientName, clientSlug, active }:
       return () => clearInterval(interval)
     }
   }, [fetchStatus, active])
+
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      fetchStatus()
+    }
+  }, [refreshTrigger, fetchStatus])
 
   const isConnected = status?.status?.connected || status?.instance?.state === 'open'
   const isConnecting = status?.response === "Connecting" || status?.instance?.state === 'connecting'
