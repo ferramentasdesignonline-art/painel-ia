@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Users, Clock, Calendar, MessageSquare, Trophy, Filter, LayoutDashboard } from "lucide-react"
+import { Users, Clock, Calendar, MessageSquare, Trophy, Filter, LayoutDashboard, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 function KpiCard({ title, value, subtitle, icon: Icon, color }: any) {
@@ -51,14 +51,21 @@ function KpiGrid({ data }: { data: any }) {
           color="bg-amber-500"
         />
       </div>
-      {/* 2 cards bottom */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* 3 cards bottom */}
+      <div className="grid gap-4 md:grid-cols-3">
         <KpiCard
-          title="Simulações"
+          title="Simulações Aprovadas"
           value={data.simulacoesAprovadas.toLocaleString('pt-BR')}
           subtitle="Pré ou Aprovadas"
           icon={Trophy}
           color="bg-emerald-500"
+        />
+        <KpiCard
+          title="Simulações Reprovadas"
+          value={(data.simulacoesReprovadas || 0).toLocaleString('pt-BR')}
+          subtitle="Análise negada"
+          icon={AlertCircle}
+          color="bg-orange-500"
         />
         <KpiCard
           title="Perdidos"
@@ -164,8 +171,8 @@ export function AdminAnalyticsDashboard({ clients }: { clients: any[] }) {
             <div className="grid gap-4 md:grid-cols-3">
               {[...Array(3)].map((_, i) => <div key={`sk-1-${i}`} className="h-28 bg-gray-100 rounded-2xl animate-pulse" />)}
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              {[...Array(2)].map((_, i) => <div key={`sk-2-${i}`} className="h-28 bg-gray-100 rounded-2xl animate-pulse" />)}
+            <div className="grid gap-4 md:grid-cols-3">
+              {[...Array(3)].map((_, i) => <div key={`sk-2-${i}`} className="h-28 bg-gray-100 rounded-2xl animate-pulse" />)}
             </div>
           </div>
         </div>

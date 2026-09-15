@@ -35,6 +35,7 @@ export async function GET(request: Request) {
     let globalVisitasAgendadas = 0
     let globalSimulacoesAprovadas = 0
     let globalSimulacoesPreAprovadas = 0
+    let globalSimulacoesReprovadas = 0
     let globalPerdas = 0
 
     // Fetch leads for each client concurrently
@@ -62,6 +63,7 @@ export async function GET(request: Request) {
       let cVisita = 0
       let cSimA = 0
       let cSimPA = 0
+      let cSimR = 0
       let cPerda = 0
 
       if (!error && leads) {
@@ -70,6 +72,7 @@ export async function GET(request: Request) {
         cVisita = leads.filter((l: any) => l.lead_visita_confirmada === true).length
         cSimA = leads.filter((l: any) => l.lead_simulacao_aprovada === true).length
         cSimPA = leads.filter((l: any) => l.lead_simulacao_pre_aprovada === true).length
+        cSimR = leads.filter((l: any) => l.lead_simulacao_reprovada === true).length
         cPerda = leads.filter((l: any) => l.lead_perda === true).length
 
         globalTotalLeads += cTotal
@@ -77,6 +80,7 @@ export async function GET(request: Request) {
         globalVisitasAgendadas += cVisita
         globalSimulacoesAprovadas += cSimA
         globalSimulacoesPreAprovadas += cSimPA
+        globalSimulacoesReprovadas += cSimR
         globalPerdas += cPerda
       } else {
         console.warn(`Erro ao buscar leads do cliente ${client.nome}:`, error)
@@ -90,6 +94,7 @@ export async function GET(request: Request) {
           visitasAgendadas: cVisita,
           emAndamento: Math.max(0, cTotal - cQuali - cPerda),
           simulacoesAprovadas: cSimA + cSimPA,
+          simulacoesReprovadas: cSimR,
           perdas: cPerda,
           qualifiedLeads: cQuali
         }
@@ -107,6 +112,7 @@ export async function GET(request: Request) {
         visitasAgendadas: globalVisitasAgendadas,
         emAndamento: globalEmAndamento,
         simulacoesAprovadas: globalSimulacoesAprovadas + globalSimulacoesPreAprovadas,
+        simulacoesReprovadas: globalSimulacoesReprovadas,
         perdas: globalPerdas,
         qualifiedLeads: globalQualifiedLeads
       },
