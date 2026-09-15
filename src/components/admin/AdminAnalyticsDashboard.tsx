@@ -80,6 +80,7 @@ function KpiGrid({ data }: { data: any }) {
 }
 
 export function AdminAnalyticsDashboard({ clients }: { clients: any[] }) {
+  const [selectedClient, setSelectedClient] = useState("all")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [loading, setLoading] = useState(true)
@@ -130,9 +131,22 @@ export function AdminAnalyticsDashboard({ clients }: { clients: any[] }) {
           </div>
         </div>
         
-        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-1 shadow-sm">
+        <div className="flex flex-1 items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-1 shadow-sm md:max-w-xs">
           <Filter className="w-4 h-4 text-gray-400 ml-2" />
           <div className="w-px h-6 bg-gray-200 ml-1" />
+          <select 
+            value={selectedClient}
+            onChange={(e) => setSelectedClient(e.target.value)}
+            className="w-full h-8 px-2 text-xs font-medium text-gray-700 bg-transparent focus:outline-none"
+          >
+            <option value="all">Todos os Clientes</option>
+            {clients.map(c => (
+              <option key={c.id} value={c.id}>{c.nome}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-1 shadow-sm">
           <div className="flex flex-col ml-2">
             <span className="text-[9px] font-bold text-gray-400 uppercase leading-none mt-1">Início</span>
             <input
@@ -178,17 +192,21 @@ export function AdminAnalyticsDashboard({ clients }: { clients: any[] }) {
         </div>
       ) : globalData ? (
         <div className="space-y-12">
-          {/* Total Global */}
-          <section className="space-y-4">
-            <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-              <h3 className="text-xl font-bold tracking-tight text-gray-900">Resumo Global</h3>
-              <span className="px-2.5 py-0.5 rounded-full bg-gray-100 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Todos</span>
-            </div>
-            <KpiGrid data={globalData} />
-          </section>
+          {/* Total Global (só exibe se "Todos os Clientes" estiver selecionado) */}
+          {selectedClient === "all" && (
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                <h3 className="text-xl font-bold tracking-tight text-gray-900">Resumo Global</h3>
+                <span className="px-2.5 py-0.5 rounded-full bg-gray-100 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Todos</span>
+              </div>
+              <KpiGrid data={globalData} />
+            </section>
+          )}
 
           {/* Por Cliente */}
-          {clientsData.map((client) => (
+          {clientsData
+            .filter(client => selectedClient === "all" || client.id === selectedClient)
+            .map((client) => (
             <section key={client.id} className="space-y-4">
               <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
                 <h3 className="text-lg font-bold tracking-tight text-gray-800">{client.nome}</h3>
@@ -198,7 +216,7 @@ export function AdminAnalyticsDashboard({ clients }: { clients: any[] }) {
             </section>
           ))}
           
-          {clientsData.length === 0 && (
+          {clientsData.filter(client => selectedClient === "all" || client.id === selectedClient).length === 0 && (
             <div className="p-8 text-center text-gray-500 bg-white rounded-2xl border border-gray-100">
               Nenhum cliente com dados encontrados.
             </div>
