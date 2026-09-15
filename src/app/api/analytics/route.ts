@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { createClient } from "@supabase/supabase-js"
 import { getActiveClientConfig } from "@/lib/auth/helpers"
+import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -160,13 +161,24 @@ export async function GET(request: Request) {
       }
     }
 
-    totalFollowups = allLeads.reduce((sum, l) => sum + parseInt(l.quantidade_followup || '0'), 0)
-    qualifiedLeads = allLeads.filter(l => l.lead_finalizado === true || l.horario_lead_qualificado != null).length
-    totalLeads = allLeads.length
-    visitasAgendadas = allLeads.filter(l => l.lead_visita_confirmada === true).length
-    simulacoesAprovadas = allLeads.filter(l => l.lead_simulacao_aprovada === true).length
-    simulacoesPreAprovadas = allLeads.filter(l => l.lead_simulacao_pre_aprovada === true).length
-    perdas = allLeads.filter(l => l.lead_perda === true).length
+    let emAndamento = 0
+
+    totalTotalLeads = allLeads.length
+    for (const lead of allLeads) {
+      totalFollowups += parseInt(lead.quantidade_followup || '0')
+      
+      const etapa = lead.lead_perda === true ? 'ia_perda' : calcularEtapaIA(lead, 5)
+      
+      if (etapa === 'ia_qualificado' || lead.horario_lead_qualificado != null) qualifiedLeads++
+      else if (etapa === 'visita_confirmada') visitasAgendadas++
+      else if (etapa === 'simulacao_aprovada') simulacoesAprovadas++
+      else if (etapa === 'simulacao_pre_aprovada') simulacoesPreAprovadas++
+      else if (etapa === 'simulacao_reprovada') { /* ignorado no dashboard original? (ou nao tem) */ }
+      else if (etapa === 'ia_perda') perdas++
+      else emAndamento++
+    }
+    
+    totalLeads = totalTotalLeads
 
     // Leads por dia
     for (const lead of allLeads || []) {
@@ -198,7 +210,7 @@ export async function GET(request: Request) {
       chartData,
       pieData: [
         { name: 'Qualificados', value: qualifiedLeads, color: '#22c55e' },
-        { name: 'Em Andamento', value: Math.max(0, totalLeads - qualifiedLeads), color: '#f59e0b' },
+        { name: 'Em Andamento', value: emAndamento, color: '#f59e0b' },
       ]
     }, { status: 200 })
 

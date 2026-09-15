@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -68,12 +69,19 @@ export async function GET(request: Request) {
 
       if (!error && leads) {
         cTotal = leads.length
-        cQuali = leads.filter((l: any) => l.lead_finalizado === true || l.horario_lead_qualificado != null).length
-        cVisita = leads.filter((l: any) => l.lead_visita_confirmada === true).length
-        cSimA = leads.filter((l: any) => l.lead_simulacao_aprovada === true).length
-        cSimPA = leads.filter((l: any) => l.lead_simulacao_pre_aprovada === true).length
-        cSimR = leads.filter((l: any) => l.lead_simulacao_reprovada === true).length
-        cPerda = leads.filter((l: any) => l.lead_perda === true).length
+        
+        for (const lead of leads) {
+          // If the lead was manually marked as lost via UI, we might have lead_perda = true
+          // Wait, calcularEtapaIA doesn't check lead_perda boolean explicitly, but we can check it first
+          const etapa = lead.lead_perda === true ? 'ia_perda' : calcularEtapaIA(lead, 5)
+          
+          if (etapa === 'ia_qualificado') cQuali++
+          else if (etapa === 'visita_confirmada') cVisita++
+          else if (etapa === 'simulacao_aprovada') cSimA++
+          else if (etapa === 'simulacao_pre_aprovada') cSimPA++
+          else if (etapa === 'simulacao_reprovada') cSimR++
+          else if (etapa === 'ia_perda') cPerda++
+        }
 
         globalTotalLeads += cTotal
         globalQualifiedLeads += cQuali
@@ -92,7 +100,7 @@ export async function GET(request: Request) {
         kpis: {
           totalLeads: cTotal,
           visitasAgendadas: cVisita,
-          emAndamento: Math.max(0, cTotal - cQuali - cPerda),
+          emAndamento: Math.max(0, cTotal - cQuali - cVisita - cSimA - cSimPA - cSimR - cPerda),
           simulacoesAprovadas: cSimA + cSimPA,
           simulacoesReprovadas: cSimR,
           perdas: cPerda,
@@ -101,7 +109,7 @@ export async function GET(request: Request) {
       })
     }))
 
-    const globalEmAndamento = Math.max(0, globalTotalLeads - globalQualifiedLeads - globalPerdas)
+    const globalEmAndamento = Math.max(0, globalTotalLeads - globalQualifiedLeads - globalVisitasAgendadas - globalSimulacoesAprovadas - globalSimulacoesPreAprovadas - globalSimulacoesReprovadas - globalPerdas)
 
     // Sort clientKpis alphabetically by nome
     clientsKpis.sort((a, b) => a.nome.localeCompare(b.nome))
