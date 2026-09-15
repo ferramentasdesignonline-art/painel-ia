@@ -140,7 +140,7 @@ export function AdminAnalyticsDashboard({ clients }: { clients: any[] }) {
             className="w-full h-8 px-2 text-xs font-medium text-gray-700 bg-transparent focus:outline-none"
           >
             <option value="all">Todos os Clientes</option>
-            {clients.map(c => (
+            {clients.slice().sort((a, b) => a.nome.localeCompare(b.nome)).map(c => (
               <option key={c.id} value={c.id}>{c.nome}</option>
             ))}
           </select>
