@@ -1,40 +1,89 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Users, Clock, Calendar, MessageSquare, Trophy, AlertCircle, TrendingUp, Filter } from "lucide-react"
+import { Users, Clock, Calendar, MessageSquare, Trophy, Filter, LayoutDashboard } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-function KpiCard({ title, value, subtitle, icon: Icon, color, trend }: any) {
+function KpiCard({ title, value, subtitle, icon: Icon, color }: any) {
   return (
     <div className="relative overflow-hidden rounded-2xl border bg-white p-5 soft-shadow transition-all hover:-translate-y-1 hover:shadow-lg font-poppins">
       <div className="flex items-center gap-4">
         <div className={cn("flex h-12 w-12 items-center justify-center rounded-xl text-white shadow-inner", color)}>
-          <Icon className="h-6 w-6" />
+          <Icon className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-sm font-bold text-gray-500">{title}</p>
-          <div className="flex items-baseline gap-2 mt-1">
-            <h3 className="text-2xl font-black text-gray-900 tracking-tight">{value}</h3>
+          <p className="text-[13px] font-bold text-gray-500">{title}</p>
+          <div className="flex items-baseline gap-2 mt-0.5">
+            <h3 className="text-xl font-black text-gray-900 tracking-tight">{value}</h3>
           </div>
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mt-1">{subtitle}</p>
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mt-0.5 line-clamp-1" title={subtitle}>{subtitle}</p>
         </div>
       </div>
     </div>
   )
 }
 
+function KpiGrid({ data }: { data: any }) {
+  if (!data) return null;
+  return (
+    <div className="grid gap-4 w-full">
+      {/* 3 cards top */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <KpiCard
+          title="Total de Leads"
+          value={data.totalLeads.toLocaleString('pt-BR')}
+          subtitle="Captação Geral"
+          icon={Users}
+          color="bg-indigo-500"
+        />
+        <KpiCard
+          title="Visitas Agendadas"
+          value={data.visitasAgendadas.toLocaleString('pt-BR')}
+          subtitle="Agendamentos Realizados"
+          icon={Calendar}
+          color="bg-blue-500"
+        />
+        <KpiCard
+          title="Em Andamento"
+          value={data.emAndamento.toLocaleString('pt-BR')}
+          subtitle="Leads Ativos no Funil"
+          icon={Clock}
+          color="bg-amber-500"
+        />
+      </div>
+      {/* 2 cards bottom */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <KpiCard
+          title="Simulações"
+          value={data.simulacoesAprovadas.toLocaleString('pt-BR')}
+          subtitle="Pré ou Aprovadas"
+          icon={Trophy}
+          color="bg-emerald-500"
+        />
+        <KpiCard
+          title="Perdidos"
+          value={data.perdas.toLocaleString('pt-BR')}
+          subtitle="Follow-up esgotado"
+          icon={MessageSquare}
+          color="bg-red-500"
+        />
+      </div>
+    </div>
+  )
+}
+
 export function AdminAnalyticsDashboard({ clients }: { clients: any[] }) {
-  const [selectedClient, setSelectedClient] = useState("all")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [loading, setLoading] = useState(true)
-  const [data, setData] = useState<any>(null)
+  const [globalData, setGlobalData] = useState<any>(null)
+  const [clientsData, setClientsData] = useState<any[]>([])
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
       try {
-        let url = `/api/admin/analytics?clientId=${selectedClient}`
+        let url = `/api/admin/analytics?t=${Date.now()}` // bypass cache just in case
         if (startDate) {
           const s = new Date(startDate)
           url += `&from=${s.toISOString()}`
@@ -47,8 +96,9 @@ export function AdminAnalyticsDashboard({ clients }: { clients: any[] }) {
 
         const res = await fetch(url)
         const json = await res.json()
-        if (json.kpis) {
-          setData(json)
+        if (json.global) {
+          setGlobalData(json.global)
+          setClientsData(json.clients || [])
         }
       } catch (err) {
         console.error(err)
@@ -57,33 +107,27 @@ export function AdminAnalyticsDashboard({ clients }: { clients: any[] }) {
       }
     }
     fetchData()
-  }, [selectedClient, startDate, endDate])
+  }, [startDate, endDate])
 
   return (
-    <div className="space-y-6">
-      {/* Filtros */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm flex flex-wrap gap-4 items-center">
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400" />
-          <span className="text-sm font-bold text-gray-600">Filtros:</span>
+    <div className="space-y-10">
+      {/* Header com Filtros Globais */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+            <LayoutDashboard className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Dashboard Master</h2>
+            <p className="text-xs text-gray-500 font-medium">Visão global e por cliente</p>
+          </div>
         </div>
         
-        <div className="flex-1 min-w-[200px]">
-          <select 
-            value={selectedClient}
-            onChange={(e) => setSelectedClient(e.target.value)}
-            className="w-full h-10 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all"
-          >
-            <option value="all">Todos os Clientes</option>
-            {clients.map(c => (
-              <option key={c.id} value={c.id}>{c.nome}</option>
-            ))}
-          </select>
-        </div>
-
         <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-1 shadow-sm">
-          <div className="flex flex-col">
-            <span className="text-[9px] font-bold text-gray-400 uppercase leading-none ml-2 mt-1">Início</span>
+          <Filter className="w-4 h-4 text-gray-400 ml-2" />
+          <div className="w-px h-6 bg-gray-200 ml-1" />
+          <div className="flex flex-col ml-2">
+            <span className="text-[9px] font-bold text-gray-400 uppercase leading-none mt-1">Início</span>
             <input
               type="date"
               value={startDate}
@@ -113,54 +157,49 @@ export function AdminAnalyticsDashboard({ clients }: { clients: any[] }) {
         </div>
       </div>
 
-      {/* Grid de KPIs */}
       {loading ? (
-        <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-5">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-28 bg-gray-100 rounded-2xl animate-pulse soft-shadow" />
-          ))}
+        <div className="space-y-10">
+          <div className="space-y-4">
+            <div className="h-6 w-48 bg-gray-200 rounded animate-pulse" />
+            <div className="grid gap-4 md:grid-cols-3">
+              {[...Array(3)].map((_, i) => <div key={`sk-1-${i}`} className="h-28 bg-gray-100 rounded-2xl animate-pulse" />)}
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              {[...Array(2)].map((_, i) => <div key={`sk-2-${i}`} className="h-28 bg-gray-100 rounded-2xl animate-pulse" />)}
+            </div>
+          </div>
         </div>
-      ) : data ? (
-        <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-5">
-          <KpiCard
-            title="Total de Leads"
-            value={data.kpis.totalLeads.toLocaleString('pt-BR')}
-            subtitle="Captação Geral"
-            icon={Users}
-            color="bg-indigo-500"
-          />
-          <KpiCard
-            title="Visitas Agendadas"
-            value={data.kpis.visitasAgendadas.toLocaleString('pt-BR')}
-            subtitle="Agendamentos Realizados"
-            icon={Calendar}
-            color="bg-blue-500"
-          />
-          <KpiCard
-            title="Em Andamento"
-            value={data.kpis.emAndamento.toLocaleString('pt-BR')}
-            subtitle="Leads Ativos"
-            icon={Clock}
-            color="bg-amber-500"
-          />
-          <KpiCard
-            title="Simulações"
-            value={data.kpis.simulacoesAprovadas.toLocaleString('pt-BR')}
-            subtitle="Pré / Aprovadas"
-            icon={Trophy}
-            color="bg-emerald-500"
-          />
-          <KpiCard
-            title="Perdidos"
-            value={data.kpis.perdas.toLocaleString('pt-BR')}
-            subtitle="Follow-up esgotado"
-            icon={MessageSquare}
-            color="bg-red-500"
-          />
+      ) : globalData ? (
+        <div className="space-y-12">
+          {/* Total Global */}
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+              <h3 className="text-xl font-bold tracking-tight text-gray-900">Resumo Global</h3>
+              <span className="px-2.5 py-0.5 rounded-full bg-gray-100 text-[10px] font-bold text-gray-500 uppercase tracking-wider">Todos</span>
+            </div>
+            <KpiGrid data={globalData} />
+          </section>
+
+          {/* Por Cliente */}
+          {clientsData.map((client) => (
+            <section key={client.id} className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                <h3 className="text-lg font-bold tracking-tight text-gray-800">{client.nome}</h3>
+                <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Cliente</span>
+              </div>
+              <KpiGrid data={client.kpis} />
+            </section>
+          ))}
+          
+          {clientsData.length === 0 && (
+            <div className="p-8 text-center text-gray-500 bg-white rounded-2xl border border-gray-100">
+              Nenhum cliente com dados encontrados.
+            </div>
+          )}
         </div>
       ) : (
         <div className="p-8 text-center text-gray-500 bg-white rounded-2xl border border-gray-100">
-          Nenhum dado encontrado para o período.
+          Nenhum dado encontrado.
         </div>
       )}
     </div>
