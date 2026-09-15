@@ -45,7 +45,8 @@ export default function LeadsPage() {
   const [filterStatus, setFilterStatus] = useState('')
   const [sortBy, setSortBy] = useState<'ultima_mensagem' | 'created_at'>('ultima_mensagem')
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
-  const [filterData, setFilterData] = useState('')
+  const [filterDataInicio, setFilterDataInicio] = useState('')
+  const [filterDataFim, setFilterDataFim] = useState('')
 
   useEffect(() => { fetchLeads() }, [])
 
@@ -136,9 +137,12 @@ export default function LeadsPage() {
 
       const matchStatus = !filterStatus || getStageKey(l) === filterStatus;
 
-      const matchData = !filterData || (() => {
+      const matchData = (() => {
         const d = new Date(sortBy === 'ultima_mensagem' ? (l.ultima_mensagem || l.created_at) : l.created_at);
-        return d.toISOString().startsWith(filterData);
+        const iso = d.toISOString();
+        if (filterDataInicio && iso < filterDataInicio) return false;
+        if (filterDataFim && iso > filterDataFim + 'T23:59:59.999Z') return false;
+        return true;
       })();
 
       return matchSearch && matchStatus && matchData;
@@ -155,7 +159,7 @@ export default function LeadsPage() {
     });
 
     return result;
-  }, [leads, search, filterStatus, filterData, sortBy, sortDir]);
+  }, [leads, search, filterStatus, filterDataInicio, filterDataFim, sortBy, sortDir]);
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 font-poppins pb-10">
@@ -205,16 +209,35 @@ export default function LeadsPage() {
           </select>
 
           {/* Filtro por data */}
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-gray-400" />
-            <input
-              type="date"
-              value={filterData}
-              onChange={e => setFilterData(e.target.value)}
-              className="h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            />
-            {filterData && (
-              <button onClick={() => setFilterData('')} className="text-xs text-gray-400 hover:text-red-500 transition-colors">✕</button>
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
+            <Filter className="h-4 w-4 text-gray-400 ml-2" />
+            <div className="flex flex-col">
+              <span className="text-[9px] font-bold text-gray-400 uppercase leading-none ml-1">Início</span>
+              <input
+                type="date"
+                value={filterDataInicio}
+                onChange={e => setFilterDataInicio(e.target.value)}
+                className="h-7 px-1 text-xs text-gray-600 focus:outline-none bg-transparent"
+              />
+            </div>
+            <div className="w-px h-6 bg-gray-200 mx-1" />
+            <div className="flex flex-col">
+              <span className="text-[9px] font-bold text-gray-400 uppercase leading-none ml-1">Fim</span>
+              <input
+                type="date"
+                value={filterDataFim}
+                onChange={e => setFilterDataFim(e.target.value)}
+                className="h-7 px-1 text-xs text-gray-600 focus:outline-none bg-transparent"
+              />
+            </div>
+            {(filterDataInicio || filterDataFim) && (
+              <button 
+                onClick={() => { setFilterDataInicio(''); setFilterDataFim(''); }} 
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors mr-2"
+                title="Limpar datas"
+              >
+                ✕
+              </button>
             )}
           </div>
 

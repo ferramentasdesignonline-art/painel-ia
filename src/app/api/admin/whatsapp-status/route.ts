@@ -28,7 +28,8 @@ export async function GET(request: Request) {
       .single()
 
     if (error || !client) {
-      return NextResponse.json({ error: "Client not found" }, { status: 404 })
+      console.error("Supabase Error:", error);
+      return NextResponse.json({ error: "Client not found", details: error }, { status: 404 })
     }
 
     if (!client.whatsapp_token) {

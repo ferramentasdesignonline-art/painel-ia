@@ -271,29 +271,14 @@ export default function ClientDashboardPage() {
         </Card>
 
         {loading ? (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {[...Array(8)].map((_, i) => (
+          <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-3">
+            {[...Array(6)].map((_, i) => (
               <div key={i} className="h-32 bg-gray-100 rounded-2xl animate-pulse soft-shadow" />
             ))}
           </div>
         ) : data ? (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 font-poppins">
-            <KpiCard
-              title="Msgs Enviadas p/ IA"
-              value={data.kpis.aiMessages.toLocaleString('pt-BR')}
-              subtitle="Respostas automáticas"
-              icon={Bot}
-              color="bg-indigo-500"
-              trend={12}
-            />
-            <KpiCard
-              title="Msgs dos Clientes"
-              value={data.kpis.humanMessages.toLocaleString('pt-BR')}
-              subtitle="Perguntas recebidas"
-              icon={MessageSquare}
-              color="bg-blue-500"
-              trend={8}
-            />
+          <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-3 font-poppins">
+            {/* Linha 1 */}
             <KpiCard
               title="Novos Leads"
               value={data.kpis.totalLeads.toLocaleString('pt-BR')}
@@ -316,6 +301,7 @@ export default function ClientDashboardPage() {
               color="bg-emerald-500"
               trend={5}
             />
+            {/* Linha 2 */}
             <KpiCard
               title="Visitas Agendadas"
               value={data.kpis.visitasAgendadas.toLocaleString('pt-BR')}
@@ -344,36 +330,15 @@ export default function ClientDashboardPage() {
       {!loading && data && (
         <div className="grid gap-6 lg:grid-cols-3 font-poppins">
           <Card className="lg:col-span-2 border-none soft-shadow p-6 rounded-3xl bg-white overflow-hidden">
-            <div className="flex items-center justify-between mb-8">
+             <div className="flex items-center justify-between mb-8">
               <div>
-                <CardTitle className="text-lg font-bold text-gray-900 font-poppins">Atividade de Conversas</CardTitle>
-                <CardDescription className="text-sm font-medium font-poppins">Volume diário de interações</CardDescription>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
-                  <div className="w-3 h-3 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
-                  IA
-                </div>
-                <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
-                  <div className="w-3 h-3 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.5)]" />
-                  Cliente
-                </div>
+                <CardTitle className="text-lg font-bold text-gray-900 font-poppins">Captação de Leads</CardTitle>
+                <CardDescription className="text-sm font-medium font-poppins">Novos leads identificados pela IA ao longo do tempo</CardDescription>
               </div>
             </div>
-            
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data.chartData}>
-                  <defs>
-                    <linearGradient id="colorIA" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorHuman" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.1}/>
-                      <stop offset="95%" stopColor="#60a5fa" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
+                <BarChart data={data.chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                   <XAxis 
                     dataKey="day" 
@@ -386,27 +351,17 @@ export default function ClientDashboardPage() {
                     axisLine={false} 
                     tickLine={false} 
                     tick={{ fontSize: 10, fontWeight: 700, fill: '#9ca3af', fontFamily: 'Poppins' }}
+                    allowDecimals={false}
                   />
                   <Tooltip content={<CustomTooltip />} />
-                  <Area 
-                    type="monotone" 
-                    dataKey="mensagensIA" 
-                    stroke="#6366f1" 
-                    strokeWidth={3} 
-                    fillOpacity={1} 
-                    fill="url(#colorIA)" 
-                    name="IA"
+                  <Bar 
+                    dataKey="leads" 
+                    fill="#8b5cf6" 
+                    radius={[10, 10, 0, 0]} 
+                    barSize={32}
+                    name="Novos Leads" 
                   />
-                  <Area 
-                    type="monotone" 
-                    dataKey="mensagensCliente" 
-                    stroke="#60a5fa" 
-                    strokeWidth={3} 
-                    fillOpacity={1} 
-                    fill="url(#colorHuman)" 
-                    name="Cliente"
-                  />
-                </AreaChart>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </Card>
@@ -454,42 +409,6 @@ export default function ClientDashboardPage() {
             </div>
           </Card>
 
-          <Card className="lg:col-span-3 border-none soft-shadow p-6 rounded-3xl bg-white overflow-hidden">
-             <div className="flex items-center justify-between mb-8">
-              <div>
-                <CardTitle className="text-lg font-bold text-gray-900 font-poppins">Captação de Leads</CardTitle>
-                <CardDescription className="text-sm font-medium font-poppins">Novos leads identificados pela IA ao longo do tempo</CardDescription>
-              </div>
-            </div>
-            <div className="h-[200px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis 
-                    dataKey="day" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fontSize: 10, fontWeight: 700, fill: '#9ca3af', fontFamily: 'Poppins' }}
-                    dy={10}
-                  />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fontSize: 10, fontWeight: 700, fill: '#9ca3af', fontFamily: 'Poppins' }}
-                    allowDecimals={false}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar 
-                    dataKey="leads" 
-                    fill="#8b5cf6" 
-                    radius={[10, 10, 0, 0]} 
-                    barSize={32}
-                    name="Novos Leads" 
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
         </div>
       )}
 

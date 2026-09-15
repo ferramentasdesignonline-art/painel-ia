@@ -32,6 +32,10 @@ export type Lead = {
   observacao_lead_qualificado?: string | null;
   horario_lead_qualificado?: string | null;
   lead_finalizado?: boolean;
+  lead_visita_confirmada?: boolean;
+  lead_simulacao_aprovada?: boolean;
+  lead_simulacao_pre_aprovada?: boolean;
+  lead_simulacao_reprovada?: boolean;
 };
 
 type Props = {
