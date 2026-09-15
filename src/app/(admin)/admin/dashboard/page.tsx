@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import Link from "next/link"
+import { AdminAnalyticsDashboard } from "@/components/admin/AdminAnalyticsDashboard"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -22,27 +23,15 @@ export default async function AdminDashboardPage() {
     .select('*')
     .order('created_at', { ascending: false })
 
-  const totalClients = clients?.length || 0
-  const activeClients = clients?.filter(c => c.active).length || 0
-
   return (
-    <div className="flex h-full flex-col sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold tracking-tight text-gray-900 mb-8">Visão Geral</h1>
-      
-      <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-4 w-full mb-8">
-        <div className="rounded-xl border bg-white text-gray-900 shadow-sm p-6 border-l-4 border-l-indigo-600">
-          <div className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium text-gray-500">Total de Clientes (SaaS)</h3>
-          </div>
-          <div className="text-3xl font-bold">{totalClients}</div>
-        </div>
-        <div className="rounded-xl border bg-white text-gray-900 shadow-sm p-6 border-l-4 border-l-emerald-500">
-          <div className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium text-gray-500">Clientes Ativos</h3>
-          </div>
-          <div className="text-3xl font-bold">{activeClients}</div>
-        </div>
+    <div className="flex h-full flex-col sm:px-6 lg:px-8 py-8 space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Visão Geral</h1>
+        <p className="text-sm font-medium text-gray-500 mt-1">Acompanhamento consolidado de todos os clientes</p>
       </div>
+      
+      {/* Dashboard de Analytics Geral */}
+      <AdminAnalyticsDashboard clients={clients || []} />
 
       <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-xl md:col-span-2">
         <div className="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200">
