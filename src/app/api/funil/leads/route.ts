@@ -42,7 +42,7 @@ export async function GET(request: Request) {
 
   if (!funil) {
     const criado = await criarFunilPadrao(cliente.id, supabaseAdmin);
-    funil = criado ? { id: criado.id, meta_followup: 3 } : null;
+    funil = criado ? { id: criado.id, meta_followup: 5 } : null;
   }
 
   if (!funil) {
@@ -181,7 +181,7 @@ export async function GET(request: Request) {
 
     // Verificar se tem posição manual recente (30 dias)
     const etapaManualId = mapaPosicoesManuais.get(String(lead.id));
-    const etapaIdCalculada = etapaPorTipo.get(calcularEtapaIA({ ...lead, data_agendamento }, funil.meta_followup || 3));
+    const etapaIdCalculada = etapaPorTipo.get(calcularEtapaIA({ ...lead, data_agendamento }, funil.meta_followup || 5));
     
     // Se foi movido manualmente, respeita. Caso contrário, lógica da IA.
     const etapaIdFinal = etapaManualId || etapaIdCalculada;
@@ -214,7 +214,7 @@ export async function GET(request: Request) {
   return NextResponse.json({ 
     colunas, 
     config: { 
-      meta_followup: funil.meta_followup || 3 
+      meta_followup: funil.meta_followup || 5 
     } 
   });
 }

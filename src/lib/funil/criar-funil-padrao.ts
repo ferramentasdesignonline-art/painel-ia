@@ -12,7 +12,7 @@ export async function criarFunilPadrao(clienteId: string, supabaseClient: Supaba
   // 1. Criar o funil principal
   const { data: funil, error: funilError } = await supabaseAdmin
     .from('sistema-dash-ia_funis')
-    .insert({ cliente_id: clienteId, nome: 'Funil Principal' })
+    .insert({ cliente_id: clienteId, nome: 'Funil Principal', meta_followup: 5 })
     .select()
     .single();
 

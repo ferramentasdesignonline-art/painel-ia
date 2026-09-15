@@ -40,7 +40,7 @@ export type TipoEtapaIA =
  * 8. Sem contato: created_at === ultima_mensagem (ou sem ultima_mensagem)
  * 9. Em andamento: qualquer outra situação (está conversando)
  */
-export function calcularEtapaIA(lead: Lead, meta_followup = 3): TipoEtapaIA {
+export function calcularEtapaIA(lead: Lead, meta_followup = 5): TipoEtapaIA {
   // Novas etapas de simulação e visita (ordem de prioridade ajustada)
   if (lead.lead_simulacao_aprovada === true) {
     return 'simulacao_aprovada';

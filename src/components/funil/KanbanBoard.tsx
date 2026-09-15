@@ -51,7 +51,7 @@ export function KanbanBoard() {
   const [novoLeadAberto, setNovoLeadAberto] = useState(false);
   const [leadSelecionado, setLeadSelecionado] = useState<LeadType | null>(null);
   const [colunaPreId, setColunaPreId] = useState<string | undefined>();
-  const [config, setConfig] = useState<{ meta_followup: number }>({ meta_followup: 3 });
+  const [config, setConfig] = useState<{ meta_followup: number }>({ meta_followup: 5 });
 
   // DnD state
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
@@ -84,7 +84,7 @@ export function KanbanBoard() {
       const dataFunil = await resFunil.json();
       if (dataFunil.funil) {
         setNomeFunil(dataFunil.funil.nome || 'Funil de Leads');
-        setConfig({ meta_followup: dataFunil.funil.meta_followup || 3 });
+        setConfig({ meta_followup: dataFunil.funil.meta_followup || 5 });
       }
     } catch (err) {
       console.error('Erro ao carregar funil:', err);

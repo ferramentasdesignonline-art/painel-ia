@@ -129,7 +129,7 @@ export default function ConfigurarFunilPage() {
       const dataFunil = await resFunil.json();
       if (dataFunil.funil) {
         setNomeFunil(dataFunil.funil.nome || 'Funil Principal');
-        setMetaFollowup(dataFunil.funil.meta_followup || 3);
+        setMetaFollowup(dataFunil.funil.meta_followup || 5);
       }
     } catch (err) {
       console.error(err);
