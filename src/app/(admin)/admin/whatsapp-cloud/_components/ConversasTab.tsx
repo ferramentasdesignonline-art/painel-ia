@@ -193,13 +193,34 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
     }
   }, [mensagens])
 
+  // Ref para sempre ter o selectedContato mais atual dentro do interval (evita stale closure)
+  const selectedContatoRef = useRef<Contato | null>(null)
+  const [countdown, setCountdown] = useState(60)
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchContatos()
-      if (selectedContato) fetchMensagens(selectedContato)
-    }, 30000)
-    return () => clearInterval(interval)
+    selectedContatoRef.current = selectedContato
   }, [selectedContato])
+
+  // Auto-refresh a cada 60 segundos com countdown visível
+  useEffect(() => {
+    setCountdown(60)
+
+    const timer = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          // Hora de atualizar
+          fetchContatos()
+          if (selectedContatoRef.current) {
+            fetchMensagens(selectedContatoRef.current)
+          }
+          return 60
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, []) // Roda só uma vez — o ref garante acesso ao estado mais atual
 
   return (
     <div className="flex flex-col h-[calc(100vh-240px)] min-h-[500px]">
@@ -226,7 +247,16 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
           <div className="px-3 py-3 border-b border-gray-100 bg-gray-50">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Contatos</span>
-              <button onClick={fetchContatos} className="p-1 hover:bg-gray-200 rounded text-gray-400 transition-colors">
+              <button
+                onClick={() => {
+                  fetchContatos()
+                  if (selectedContatoRef.current) fetchMensagens(selectedContatoRef.current)
+                  setCountdown(60)
+                }}
+                className="flex items-center gap-1 p-1 hover:bg-gray-200 rounded text-gray-400 transition-colors"
+                title="Atualizar agora"
+              >
+                <span className="text-[10px] font-mono text-gray-400">{countdown}s</span>
                 <RefreshCcw className="w-3.5 h-3.5" />
               </button>
             </div>
