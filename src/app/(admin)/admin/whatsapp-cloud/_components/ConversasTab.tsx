@@ -144,7 +144,11 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
 
   const fetchContatos = async () => {
     try {
-      const res = await fetch(`/api/wacloud/conversas?instancia=${encodeURIComponent(instancia.nome_instancia)}`)
+      // O cache: 'no-store' e o timestamp forçam o navegador a buscar os dados frescos no banco
+      const res = await fetch(
+        `/api/wacloud/conversas?instancia=${encodeURIComponent(instancia.nome_instancia)}&_t=${Date.now()}`, 
+        { cache: 'no-store' }
+      )
       const data = await res.json()
       const lista: Contato[] = data.contatos || []
       setContatos(lista)
@@ -160,7 +164,8 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
     setLoadingMsgs(true)
     try {
       const res = await fetch(
-        `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}`
+        `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}&_t=${Date.now()}`,
+        { cache: 'no-store' }
       )
       const data = await res.json()
       setMensagens(data.mensagens || [])
