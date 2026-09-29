@@ -1,7 +1,14 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Loader2, RefreshCcw, MessageSquare, User, FileText, Mic, Image, Video, Phone, Search } from "lucide-react"
+import { Loader2, RefreshCcw, MessageSquare, FileText, Mic, Image, Video, Phone, Search, ChevronLeft, Smartphone } from "lucide-react"
+
+interface Instancia {
+  id: string
+  nome_instancia: string
+  status: string
+  token: string | null
+}
 
 interface Contato {
   telefone_contato: string
@@ -26,16 +33,6 @@ interface Mensagem {
   created_at: string
 }
 
-function getTypeIcon(tipo: string) {
-  switch (tipo) {
-    case 'audio': return <Mic className="w-3 h-3 inline-block mr-1" />
-    case 'image': return <Image className="w-3 h-3 inline-block mr-1" />
-    case 'video': return <Video className="w-3 h-3 inline-block mr-1" />
-    case 'document': return <FileText className="w-3 h-3 inline-block mr-1" />
-    default: return null
-  }
-}
-
 function getTypeLabel(tipo: string, mensagem: string | null) {
   if (mensagem) return mensagem
   switch (tipo) {
@@ -43,6 +40,7 @@ function getTypeLabel(tipo: string, mensagem: string | null) {
     case 'image': return '📷 Imagem'
     case 'video': return '🎥 Vídeo'
     case 'document': return '📄 Documento'
+    case 'sticker': return '😄 Figurinha'
     default: return '(mensagem)'
   }
 }
@@ -74,7 +72,67 @@ function getAvatarColor(str: string) {
   return colors[Math.abs(hash) % colors.length]
 }
 
-export function ConversasTab() {
+// ==========================================
+// PASSO 1 — Seleção de Instância
+// ==========================================
+function SelecionarInstancia({ onSelecionar }: { onSelecionar: (instancia: Instancia) => void }) {
+  const [instancias, setInstancias] = useState<Instancia[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/wacloud/instances')
+      .then(r => r.json())
+      .then(d => setInstancias(d.instances || []))
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <div className="flex flex-col items-center justify-center h-[calc(100vh-240px)] min-h-[400px]">
+      <div className="text-center mb-8">
+        <Smartphone className="w-12 h-12 text-indigo-500 mx-auto mb-3" />
+        <h3 className="text-xl font-black text-gray-900">Selecione um Cliente</h3>
+        <p className="text-gray-500 text-sm mt-1">Escolha qual instância você quer visualizar as conversas</p>
+      </div>
+
+      {loading ? (
+        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+      ) : instancias.length === 0 ? (
+        <div className="text-gray-400 text-center">
+          <p>Nenhuma instância cadastrada.</p>
+          <p className="text-sm mt-1">Crie um cliente na aba "Gerenciar Clientes".</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full max-w-2xl">
+          {instancias.map(inst => (
+            <button
+              key={inst.id}
+              onClick={() => onSelecionar(inst)}
+              className="bg-white border-2 border-gray-200 hover:border-indigo-500 hover:shadow-md rounded-2xl p-5 text-left transition-all group"
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-sm mb-3 ${getAvatarColor(inst.nome_instancia)}`}>
+                {inst.nome_instancia.slice(0, 2).toUpperCase()}
+              </div>
+              <p className="font-bold text-gray-900 group-hover:text-indigo-700 transition-colors">{inst.nome_instancia}</p>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full mt-1 inline-block ${
+                inst.status === 'conectado' || inst.status === 'criada'
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-gray-100 text-gray-500'
+              }`}>
+                {inst.status}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ==========================================
+// PASSO 2 — Chat da Instância Selecionada
+// ==========================================
+function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar: () => void }) {
   const [contatos, setContatos] = useState<Contato[]>([])
   const [contatosFiltrados, setContatosFiltrados] = useState<Contato[]>([])
   const [selectedContato, setSelectedContato] = useState<Contato | null>(null)
@@ -82,24 +140,15 @@ export function ConversasTab() {
   const [loading, setLoading] = useState(true)
   const [loadingMsgs, setLoadingMsgs] = useState(false)
   const [busca, setBusca] = useState("")
-  const [filtroInstancia, setFiltroInstancia] = useState("")
-  const [instancias, setInstancias] = useState<string[]>([])
   const chatRef = useRef<HTMLDivElement>(null)
 
   const fetchContatos = async () => {
     try {
-      const url = filtroInstancia
-        ? `/api/wacloud/conversas?instancia=${encodeURIComponent(filtroInstancia)}`
-        : '/api/wacloud/conversas'
-      const res = await fetch(url)
+      const res = await fetch(`/api/wacloud/conversas?instancia=${encodeURIComponent(instancia.nome_instancia)}`)
       const data = await res.json()
       const lista: Contato[] = data.contatos || []
       setContatos(lista)
       setContatosFiltrados(lista)
-
-      // Extrair instancias únicas
-      const uniqueInstancias = [...new Set(lista.map(c => c.nome_instancia))]
-      setInstancias(uniqueInstancias)
     } catch (err) {
       console.error('Erro ao buscar contatos', err)
     } finally {
@@ -109,10 +158,9 @@ export function ConversasTab() {
 
   const fetchMensagens = async (contato: Contato) => {
     setLoadingMsgs(true)
-    setMensagens([])
     try {
       const res = await fetch(
-        `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(contato.nome_instancia)}`
+        `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}`
       )
       const data = await res.json()
       setMensagens(data.mensagens || [])
@@ -123,7 +171,7 @@ export function ConversasTab() {
     }
   }
 
-  useEffect(() => { fetchContatos() }, [filtroInstancia])
+  useEffect(() => { fetchContatos() }, [])
 
   useEffect(() => {
     if (!busca.trim()) {
@@ -145,239 +193,234 @@ export function ConversasTab() {
     }
   }, [mensagens])
 
-  const handleSelectContato = (contato: Contato) => {
-    setSelectedContato(contato)
-    fetchMensagens(contato)
-  }
-
-  // Auto-refresh a cada 30s se uma conversa estiver aberta
   useEffect(() => {
     const interval = setInterval(() => {
-      if (selectedContato) fetchMensagens(selectedContato)
       fetchContatos()
+      if (selectedContato) fetchMensagens(selectedContato)
     }, 30000)
     return () => clearInterval(interval)
-  }, [selectedContato, filtroInstancia])
+  }, [selectedContato])
 
   return (
-    <div className="flex h-[calc(100vh-240px)] min-h-[500px] overflow-hidden rounded-xl border border-gray-200">
-      {/* ===== PAINEL ESQUERDO - Lista de Contatos ===== */}
-      <div className="w-80 flex-shrink-0 border-r border-gray-200 flex flex-col bg-white">
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-gray-900 text-sm">Conversas</h3>
-            <button
-              onClick={fetchContatos}
-              className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors text-gray-500"
-              title="Atualizar"
-            >
-              <RefreshCcw className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          {/* Busca */}
-          <div className="relative mb-2">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <input
-              type="text"
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              placeholder="Buscar contato..."
-              className="w-full pl-8 pr-3 py-1.5 text-sm bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-            />
-          </div>
-          {/* Filtro instância */}
-          {instancias.length > 1 && (
-            <select
-              value={filtroInstancia}
-              onChange={e => setFiltroInstancia(e.target.value)}
-              className="w-full text-xs py-1.5 px-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-gray-600"
-            >
-              <option value="">Todas as instâncias</option>
-              {instancias.map(i => <option key={i} value={i}>{i}</option>)}
-            </select>
-          )}
+    <div className="flex flex-col h-[calc(100vh-240px)] min-h-[500px]">
+      {/* Barra superior com instância selecionada */}
+      <div className="flex items-center gap-3 mb-3">
+        <button
+          onClick={onVoltar}
+          className="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          Trocar cliente
+        </button>
+        <div className="h-5 w-px bg-gray-200" />
+        <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-black ${getAvatarColor(instancia.nome_instancia)}`}>
+          {instancia.nome_instancia.slice(0, 2).toUpperCase()}
         </div>
-
-        {/* Lista */}
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex justify-center items-center h-32">
-              <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
-            </div>
-          ) : contatosFiltrados.length === 0 ? (
-            <div className="p-6 text-center text-gray-400 text-sm">
-              <MessageSquare className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-              Nenhuma conversa ainda
-            </div>
-          ) : (
-            contatosFiltrados.map((contato) => {
-              const key = `${contato.nome_instancia}:${contato.telefone_contato}`
-              const selectedKey = selectedContato
-                ? `${selectedContato.nome_instancia}:${selectedContato.telefone_contato}`
-                : ''
-              const isSelected = key === selectedKey
-              const initials = getInitials(contato.nome_contato, contato.telefone_contato)
-              const avatarColor = getAvatarColor(contato.telefone_contato)
-
-              return (
-                <button
-                  key={key}
-                  onClick={() => handleSelectContato(contato)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left border-b border-gray-50 ${
-                    isSelected ? 'bg-indigo-50 border-l-2 border-l-indigo-600' : ''
-                  }`}
-                >
-                  {/* Avatar */}
-                  <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white text-sm font-bold ${avatarColor}`}>
-                    {initials}
-                  </div>
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-baseline mb-0.5">
-                      <p className="font-semibold text-gray-900 text-sm truncate pr-2">
-                        {contato.nome_contato || contato.telefone_contato}
-                      </p>
-                      <span className="text-[10px] text-gray-400 flex-shrink-0">
-                        {formatTime(contato.ultimo_timestamp)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 truncate">
-                      {getTypeIcon(contato.ultimo_tipo)}
-                      {getTypeLabel(contato.ultimo_tipo, contato.ultima_mensagem)}
-                    </p>
-                    <span className="text-[10px] text-indigo-400 font-medium">{contato.nome_instancia}</span>
-                  </div>
-                </button>
-              )
-            })
-          )}
-        </div>
+        <span className="font-bold text-gray-900">{instancia.nome_instancia}</span>
       </div>
 
-      {/* ===== PAINEL DIREITO - Chat ===== */}
-      <div className="flex-1 flex flex-col bg-[#efeae2]">
-        {!selectedContato ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-            <MessageSquare className="w-16 h-16 mb-4 text-gray-300" />
-            <p className="font-semibold text-gray-500">Selecione uma conversa</p>
-            <p className="text-sm mt-1">Escolha um contato na lista ao lado</p>
-          </div>
-        ) : (
-          <>
-            {/* Header do chat */}
-            <div className="bg-[#f0f2f5] px-4 py-3 border-b border-gray-200 flex items-center gap-3 shadow-sm">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold ${getAvatarColor(selectedContato.telefone_contato)}`}>
-                {getInitials(selectedContato.nome_contato, selectedContato.telefone_contato)}
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-gray-900 text-sm">
-                  {selectedContato.nome_contato || selectedContato.telefone_contato}
-                </p>
-                <p className="text-xs text-gray-500 flex items-center gap-1">
-                  <Phone className="w-3 h-3" />
-                  {selectedContato.telefone_contato} · <span className="text-indigo-500 font-medium">{selectedContato.nome_instancia}</span>
-                </p>
-              </div>
-              <button
-                onClick={() => selectedContato && fetchMensagens(selectedContato)}
-                className="p-2 hover:bg-gray-200 rounded-lg transition-colors text-gray-500"
-                title="Atualizar conversa"
-              >
-                <RefreshCcw className="w-4 h-4" />
+      {/* Chat Container */}
+      <div className="flex flex-1 overflow-hidden rounded-xl border border-gray-200">
+        {/* Painel esquerdo */}
+        <div className="w-72 flex-shrink-0 border-r border-gray-200 flex flex-col bg-white">
+          <div className="px-3 py-3 border-b border-gray-100 bg-gray-50">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Contatos</span>
+              <button onClick={fetchContatos} className="p-1 hover:bg-gray-200 rounded text-gray-400 transition-colors">
+                <RefreshCcw className="w-3.5 h-3.5" />
               </button>
             </div>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+              <input
+                type="text"
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                placeholder="Buscar..."
+                className="w-full pl-7 pr-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+            </div>
+          </div>
 
-            {/* Mensagens */}
-            <div ref={chatRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
-              {loadingMsgs ? (
-                <div className="flex justify-center items-center h-32">
-                  <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="flex justify-center items-center h-24"><Loader2 className="w-5 h-5 text-indigo-500 animate-spin" /></div>
+            ) : contatosFiltrados.length === 0 ? (
+              <div className="p-6 text-center text-gray-400 text-xs">
+                <MessageSquare className="w-6 h-6 mx-auto mb-2 text-gray-300" />
+                Nenhuma conversa
+              </div>
+            ) : (
+              contatosFiltrados.map((contato) => {
+                const isSelected = selectedContato?.telefone_contato === contato.telefone_contato
+                return (
+                  <button
+                    key={contato.telefone_contato}
+                    onClick={() => { setSelectedContato(contato); fetchMensagens(contato) }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left border-b border-gray-50 ${
+                      isSelected ? 'bg-indigo-50 border-l-2 border-l-indigo-600' : ''
+                    }`}
+                  >
+                    <div className={`w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-bold ${getAvatarColor(contato.telefone_contato)}`}>
+                      {getInitials(contato.nome_contato, contato.telefone_contato)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-baseline">
+                        <p className="font-semibold text-gray-900 text-xs truncate pr-1">
+                          {contato.nome_contato || contato.telefone_contato}
+                        </p>
+                        <span className="text-[10px] text-gray-400 flex-shrink-0">{formatTime(contato.ultimo_timestamp)}</span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 truncate">
+                        {getTypeLabel(contato.ultimo_tipo, contato.ultima_mensagem)}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Painel direito — mensagens */}
+        <div className="flex-1 flex flex-col bg-[#efeae2]">
+          {!selectedContato ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+              <MessageSquare className="w-12 h-12 mb-3 text-gray-300" />
+              <p className="font-semibold text-gray-500 text-sm">Selecione uma conversa</p>
+            </div>
+          ) : (
+            <>
+              {/* Header */}
+              <div className="bg-[#f0f2f5] px-4 py-2.5 border-b border-gray-200 flex items-center gap-3 shadow-sm">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold ${getAvatarColor(selectedContato.telefone_contato)}`}>
+                  {getInitials(selectedContato.nome_contato, selectedContato.telefone_contato)}
                 </div>
-              ) : mensagens.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm py-8">Nenhuma mensagem encontrada</div>
-              ) : (
-                mensagens.map((msg, idx) => {
-                  const isMe = msg.enviado_por_mim
-                  const showDate = idx === 0 || (
-                    new Date(msg.timestamp_whatsapp).toDateString() !==
-                    new Date(mensagens[idx - 1].timestamp_whatsapp).toDateString()
-                  )
+                <div className="flex-1">
+                  <p className="font-bold text-gray-900 text-sm">{selectedContato.nome_contato || selectedContato.telefone_contato}</p>
+                  <p className="text-xs text-gray-500 flex items-center gap-1">
+                    <Phone className="w-3 h-3" />
+                    {selectedContato.telefone_contato}
+                  </p>
+                </div>
+                <button
+                  onClick={() => fetchMensagens(selectedContato)}
+                  className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-500 transition-colors"
+                  title="Atualizar"
+                >
+                  <RefreshCcw className="w-4 h-4" />
+                </button>
+              </div>
 
-                  return (
-                    <div key={msg.id}>
-                      {showDate && (
-                        <div className="flex justify-center my-3">
-                          <span className="bg-white/80 text-gray-500 text-[11px] px-3 py-1 rounded-full shadow-sm">
-                            {new Date(msg.timestamp_whatsapp).toLocaleDateString('pt-BR', {
-                              weekday: 'long', day: '2-digit', month: 'long'
-                            })}
-                          </span>
-                        </div>
-                      )}
-                      <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-0.5`}>
-                        <div
-                          className={`max-w-[70%] rounded-2xl px-3 py-2 shadow-sm relative ${
-                            isMe
-                              ? 'bg-[#d9fdd3] rounded-br-sm'
-                              : 'bg-white rounded-bl-sm'
-                          }`}
-                        >
-                          {/* Mídia */}
-                          {msg.tipo_mensagem === 'image' && msg.url_midia && (
-                            <img
-                              src={msg.url_midia}
-                              alt="Imagem"
-                              className="rounded-xl mb-1 max-w-full max-h-48 object-cover cursor-pointer"
-                              onClick={() => window.open(msg.url_midia!, '_blank')}
-                            />
+              {/* Mensagens */}
+              <div ref={chatRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+                {loadingMsgs ? (
+                  <div className="flex justify-center items-center h-32"><Loader2 className="w-6 h-6 text-indigo-500 animate-spin" /></div>
+                ) : mensagens.length === 0 ? (
+                  <div className="text-center text-gray-400 text-sm py-8">Nenhuma mensagem encontrada</div>
+                ) : (
+                  mensagens.map((msg, idx) => {
+                    const isMe = msg.enviado_por_mim
+                    const showDate = idx === 0 || (
+                      new Date(msg.timestamp_whatsapp).toDateString() !==
+                      new Date(mensagens[idx - 1].timestamp_whatsapp).toDateString()
+                    )
+                    const isSticker = msg.tipo_mensagem === 'sticker'
+                    const isMedia = ['image', 'sticker'].includes(msg.tipo_mensagem) && msg.url_midia
+
+                    return (
+                      <div key={msg.id}>
+                        {showDate && (
+                          <div className="flex justify-center my-3">
+                            <span className="bg-white/80 text-gray-500 text-[11px] px-3 py-1 rounded-full shadow-sm">
+                              {new Date(msg.timestamp_whatsapp).toLocaleDateString('pt-BR', {
+                                weekday: 'long', day: '2-digit', month: 'long'
+                              })}
+                            </span>
+                          </div>
+                        )}
+                        <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-0.5`}>
+                          {/* Figurinha: sem balão */}
+                          {isSticker && msg.url_midia ? (
+                            <div className="max-w-[150px]">
+                              <img
+                                src={msg.url_midia}
+                                alt="Figurinha"
+                                className="w-28 h-28 object-contain rounded-xl cursor-pointer"
+                                onClick={() => window.open(msg.url_midia!, '_blank')}
+                              />
+                              <p className={`text-[10px] mt-0.5 ${isMe ? 'text-right' : 'text-left'} text-gray-400`}>
+                                {formatFullTime(msg.timestamp_whatsapp)}
+                              </p>
+                            </div>
+                          ) : (
+                            <div className={`max-w-[70%] rounded-2xl px-3 py-2 shadow-sm ${
+                              isMe ? 'bg-[#d9fdd3] rounded-br-sm' : 'bg-white rounded-bl-sm'
+                            }`}>
+                              {msg.tipo_mensagem === 'image' && msg.url_midia && (
+                                <img
+                                  src={msg.url_midia}
+                                  alt="Imagem"
+                                  className="rounded-xl mb-1 max-w-full max-h-48 object-cover cursor-pointer"
+                                  onClick={() => window.open(msg.url_midia!, '_blank')}
+                                />
+                              )}
+                              {msg.tipo_mensagem === 'video' && msg.url_midia && (
+                                <video src={msg.url_midia} controls className="rounded-xl mb-1 max-w-full max-h-48" />
+                              )}
+                              {msg.tipo_mensagem === 'audio' && msg.url_midia && (
+                                <audio src={msg.url_midia} controls className="w-full mb-1" />
+                              )}
+                              {msg.tipo_mensagem === 'document' && msg.url_midia && (
+                                <a
+                                  href={msg.url_midia}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2 mb-1 hover:bg-gray-200 text-sm text-gray-700"
+                                >
+                                  <FileText className="w-4 h-4 text-indigo-500" />
+                                  Abrir documento
+                                </a>
+                              )}
+                              {msg.mensagem && (
+                                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{msg.mensagem}</p>
+                              )}
+                              {!msg.mensagem && !msg.url_midia && (
+                                <p className="text-sm text-gray-400 italic">{getTypeLabel(msg.tipo_mensagem, null)}</p>
+                              )}
+                              <p className={`text-[10px] mt-1 ${isMe ? 'text-green-700 text-right' : 'text-gray-400'}`}>
+                                {formatFullTime(msg.timestamp_whatsapp)}
+                              </p>
+                            </div>
                           )}
-                          {msg.tipo_mensagem === 'video' && msg.url_midia && (
-                            <video
-                              src={msg.url_midia}
-                              controls
-                              className="rounded-xl mb-1 max-w-full max-h-48"
-                            />
-                          )}
-                          {msg.tipo_mensagem === 'audio' && msg.url_midia && (
-                            <audio src={msg.url_midia} controls className="w-full mb-1" />
-                          )}
-                          {msg.tipo_mensagem === 'document' && msg.url_midia && (
-                            <a
-                              href={msg.url_midia}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2 mb-1 hover:bg-gray-200 transition-colors text-sm text-gray-700"
-                            >
-                              <FileText className="w-4 h-4 text-indigo-500" />
-                              Abrir documento
-                            </a>
-                          )}
-                          {/* Texto */}
-                          {msg.mensagem && (
-                            <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap break-words">
-                              {msg.mensagem}
-                            </p>
-                          )}
-                          {!msg.mensagem && !msg.url_midia && (
-                            <p className="text-sm text-gray-400 italic">
-                              {getTypeLabel(msg.tipo_mensagem, null)}
-                            </p>
-                          )}
-                          {/* Horário */}
-                          <p className={`text-[10px] mt-1 ${isMe ? 'text-green-700 text-right' : 'text-gray-400'}`}>
-                            {formatFullTime(msg.timestamp_whatsapp)}
-                          </p>
                         </div>
                       </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </>
-        )}
+                    )
+                  })
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
+  )
+}
+
+// ==========================================
+// COMPONENTE PRINCIPAL
+// ==========================================
+export function ConversasTab() {
+  const [instanciaSelecionada, setInstanciaSelecionada] = useState<Instancia | null>(null)
+
+  if (!instanciaSelecionada) {
+    return <SelecionarInstancia onSelecionar={setInstanciaSelecionada} />
+  }
+
+  return (
+    <ChatInstancia
+      instancia={instanciaSelecionada}
+      onVoltar={() => setInstanciaSelecionada(null)}
+    />
   )
 }
