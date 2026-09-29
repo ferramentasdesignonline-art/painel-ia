@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Store, Building2, Settings, LogOut, Smartphone } from "lucide-react"
+import { LayoutDashboard, Store, Building2, Settings, LogOut, Smartphone, Cloud } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { logout } from "@/app/(auth)/logout/actions"
 
@@ -10,6 +10,7 @@ const navigation = [
   { name: "Overview", href: "/admin/dashboard", icon: LayoutDashboard },
   { name: "Clientes (SaaS)", href: "/admin/clientes", icon: Store },
   { name: "Monitor WhatsApp", href: "/admin/whatsapp", icon: Smartphone },
+  { name: "WhatsApp Cloud", href: "/admin/whatsapp-cloud", icon: Cloud },
 ]
 
 export function AdminSidebar({ className }: { className?: string }) {
