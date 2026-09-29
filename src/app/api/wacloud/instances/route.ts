@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': WACLOUD_CONFIG.uazapiAdminToken
+        'admintoken': WACLOUD_CONFIG.uazapiAdminToken
       },
       body: JSON.stringify({ name: nome_instancia })
     });
