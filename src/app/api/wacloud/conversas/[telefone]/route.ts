@@ -12,17 +12,20 @@ export async function GET(request: Request, { params }: { params: { telefone: st
   try {
     const supabase = getWacloudSupabaseAdmin();
 
-    let query = supabase
-      .from('wacloud_mensagens')
-      .select('*')
-      .eq('telefone_contato', telefone)
-      .order('timestamp_whatsapp', { ascending: true });
-
-    if (instancia) {
-      query = query.eq('nome_instancia', instancia);
-    }
-
-    const { data, error } = await query.limit(200);
+    const { data, error } = instancia
+      ? await supabase
+          .from('wacloud_mensagens')
+          .select('*')
+          .eq('telefone_contato', telefone)
+          .eq('nome_instancia', instancia)
+          .order('timestamp_whatsapp', { ascending: true })
+          .limit(300)
+      : await supabase
+          .from('wacloud_mensagens')
+          .select('*')
+          .eq('telefone_contato', telefone)
+          .order('timestamp_whatsapp', { ascending: true })
+          .limit(300);
 
     if (error) throw error;
 
