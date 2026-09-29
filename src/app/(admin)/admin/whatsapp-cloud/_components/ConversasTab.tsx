@@ -193,34 +193,34 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
     }
   }, [mensagens])
 
-  // Ref para sempre ter o selectedContato mais atual dentro do interval (evita stale closure)
+  // Refs para evitar stale closure dentro do setInterval
   const selectedContatoRef = useRef<Contato | null>(null)
+  const countdownRef = useRef(60)
   const [countdown, setCountdown] = useState(60)
 
   useEffect(() => {
     selectedContatoRef.current = selectedContato
   }, [selectedContato])
 
-  // Auto-refresh a cada 60 segundos com countdown visível
+  // Auto-refresh a cada 60 segundos — usa refs para evitar stale closure
   useEffect(() => {
-    setCountdown(60)
-
     const timer = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          // Hora de atualizar
-          fetchContatos()
-          if (selectedContatoRef.current) {
-            fetchMensagens(selectedContatoRef.current)
-          }
-          return 60
+      countdownRef.current -= 1
+      setCountdown(countdownRef.current)
+
+      if (countdownRef.current <= 0) {
+        // Hora de atualizar
+        countdownRef.current = 60
+        setCountdown(60)
+        fetchContatos()
+        if (selectedContatoRef.current) {
+          fetchMensagens(selectedContatoRef.current)
         }
-        return prev - 1
-      })
+      }
     }, 1000)
 
     return () => clearInterval(timer)
-  }, []) // Roda só uma vez — o ref garante acesso ao estado mais atual
+  }, []) // Roda só uma vez — refs garantem acesso ao estado mais atual
 
   return (
     <div className="flex flex-col h-[calc(100vh-240px)] min-h-[500px]">
