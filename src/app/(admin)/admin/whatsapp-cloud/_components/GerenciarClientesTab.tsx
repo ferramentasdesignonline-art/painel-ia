@@ -75,7 +75,7 @@ export function GerenciarClientesTab() {
       } else if (res.ok && data.instance?.qrcode) {
          setQrCodeData({ id, base64: data.instance.qrcode, name })
       } else {
-        alert(data.error || "Erro ao conectar e buscar QR Code")
+        alert("Erro. Resposta: " + JSON.stringify(data))
       }
     } catch (error) {
       alert("Erro de rede ao conectar")
