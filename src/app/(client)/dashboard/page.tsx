@@ -22,6 +22,7 @@ type AnalyticsData = {
     simulacoesAprovadas: number
     simulacoesPreAprovadas: number
     perdas: number
+    emAndamento: number
   }
   chartData: Array<{ day: string; mensagensIA: number; mensagensCliente: number; leads: number }>
   pieData: Array<{ name: string; value: number; color: string }>
@@ -277,31 +278,28 @@ export default function ClientDashboardPage() {
             ))}
           </div>
         ) : data ? (
-          <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-3 font-poppins">
-            {/* Linha 1 */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 font-poppins">
             <KpiCard
-              title="Novos Leads"
+              title="Total de Leads"
               value={data.kpis.totalLeads.toLocaleString('pt-BR')}
               subtitle="Captados pela IA"
               icon={Users}
               color="bg-purple-500"
             />
             <KpiCard
-              title="Follow-ups Feitos"
-              value={data.kpis.totalFollowups.toLocaleString('pt-BR')}
-              subtitle="Reativações pela IA"
-              icon={TrendingUp}
+              title="Em Andamento"
+              value={data.kpis.emAndamento.toLocaleString('pt-BR')}
+              subtitle="Leads sendo nutridos"
+              icon={RefreshCw}
               color="bg-amber-500"
             />
             <KpiCard
               title="Leads Qualificados"
               value={data.kpis.qualifiedLeads.toLocaleString('pt-BR')}
-              subtitle={`De ${data.kpis.totalLeads} no total`}
+              subtitle={`Aguardando equipe`}
               icon={Trophy}
               color="bg-emerald-500"
-              trend={5}
             />
-            {/* Linha 2 */}
             <KpiCard
               title="Visitas Agendadas"
               value={data.kpis.visitasAgendadas.toLocaleString('pt-BR')}
@@ -322,6 +320,20 @@ export default function ClientDashboardPage() {
               subtitle="Finalizados sem sucesso"
               icon={MessageSquare}
               color="bg-red-500"
+            />
+            <KpiCard
+              title="Follow-ups Feitos"
+              value={data.kpis.totalFollowups.toLocaleString('pt-BR')}
+              subtitle="Reativações pela IA"
+              icon={TrendingUp}
+              color="bg-indigo-500"
+            />
+            <KpiCard
+              title="Mensagens Trocadas"
+              value={(data.kpis.aiMessages + data.kpis.humanMessages).toLocaleString('pt-BR')}
+              subtitle="IA + Cliente"
+              icon={Bot}
+              color="bg-blue-500"
             />
           </div>
         ) : null}

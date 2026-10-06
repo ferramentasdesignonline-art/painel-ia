@@ -163,7 +163,7 @@ export async function GET(request: Request) {
 
     let emAndamento = 0
 
-    totalTotalLeads = allLeads.length
+    totalLeads = allLeads.length
     for (const lead of allLeads) {
       totalFollowups += parseInt(lead.quantidade_followup || '0')
       
@@ -173,12 +173,10 @@ export async function GET(request: Request) {
       else if (etapa === 'visita_confirmada') visitasAgendadas++
       else if (etapa === 'simulacao_aprovada') simulacoesAprovadas++
       else if (etapa === 'simulacao_pre_aprovada') simulacoesPreAprovadas++
-      else if (etapa === 'simulacao_reprovada') { /* ignorado no dashboard original? (ou nao tem) */ }
+      else if (etapa === 'simulacao_reprovada') { /* ignorado */ }
       else if (etapa === 'ia_perda') perdas++
       else emAndamento++
     }
-    
-    totalLeads = totalTotalLeads
 
     // Leads por dia
     for (const lead of allLeads || []) {
@@ -206,7 +204,7 @@ export async function GET(request: Request) {
     }))
 
     return NextResponse.json({
-      kpis: { aiMessages, humanMessages, totalFollowups, qualifiedLeads, totalLeads, visitasAgendadas, simulacoesAprovadas, simulacoesPreAprovadas, perdas },
+      kpis: { aiMessages, humanMessages, totalFollowups, qualifiedLeads, totalLeads, visitasAgendadas, simulacoesAprovadas, simulacoesPreAprovadas, perdas, emAndamento },
       chartData,
       pieData: [
         { name: 'Qualificados', value: qualifiedLeads, color: '#22c55e' },
