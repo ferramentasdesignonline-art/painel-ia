@@ -8,7 +8,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area
 } from "recharts"
-import { Users, Bot, MessageSquare, Trophy, RefreshCw, Calendar, TrendingUp } from "lucide-react"
+import { Users, Bot, MessageSquare, Trophy, RefreshCw, Calendar, TrendingUp, ShieldBan } from "lucide-react"
 import { LeadDrawer, LeadType } from "@/components/leads/LeadDrawer"
 
 type AnalyticsData = {
@@ -23,6 +23,7 @@ type AnalyticsData = {
     simulacoesPreAprovadas: number
     perdas: number
     emAndamento: number
+    atendimentoHumano: number
   }
   chartData: Array<{ day: string; mensagensIA: number; mensagensCliente: number; leads: number }>
   pieData: Array<{ name: string; value: number; color: string }>
@@ -278,7 +279,7 @@ export default function ClientDashboardPage() {
             ))}
           </div>
         ) : data ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 font-poppins">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 font-poppins">
             <KpiCard
               title="Total de Leads"
               value={data.kpis.totalLeads.toLocaleString('pt-BR')}
@@ -292,6 +293,13 @@ export default function ClientDashboardPage() {
               subtitle="Leads sendo nutridos"
               icon={RefreshCw}
               color="bg-amber-500"
+            />
+            <KpiCard
+              title="Atendimento Humano"
+              value={data.kpis.atendimentoHumano.toLocaleString('pt-BR')}
+              subtitle="IA pausada"
+              icon={ShieldBan}
+              color="bg-orange-500"
             />
             <KpiCard
               title="Leads Qualificados"

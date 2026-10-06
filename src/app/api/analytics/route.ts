@@ -162,10 +162,29 @@ export async function GET(request: Request) {
     }
 
     let emAndamento = 0
+    let atendimentoHumano = 0
+
+    // Busca os bloqueios para nao contar como em andamento nem somar followups
+    const blockedNumbers = new Set<string>()
+    if (clientConfig.tabela_bloqueios) {
+      const { data: bData } = await supabaseAdmin.from(clientConfig.tabela_bloqueios).select('numero_cliente').neq('bloqueio_existe', false)
+      if (bData) {
+        for (const b of bData) {
+          if (b.numero_cliente) blockedNumbers.add(b.numero_cliente.replace(/\D/g, ''))
+        }
+      }
+    }
 
     totalLeads = allLeads.length
     for (const lead of allLeads) {
-      totalFollowups += parseInt(lead.quantidade_followup || '0')
+      const rawPhone = lead.telefone || lead.phone || ''
+      const phoneClean = rawPhone.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '')
+      const isBlocked = blockedNumbers.has(phoneClean)
+
+      // Nao soma followup se estiver bloqueado
+      if (!isBlocked) {
+        totalFollowups += parseInt(lead.quantidade_followup || '0')
+      }
       
       const etapa = lead.lead_perda === true ? 'ia_perda' : calcularEtapaIA(lead, 5)
       
@@ -175,7 +194,15 @@ export async function GET(request: Request) {
       else if (etapa === 'simulacao_pre_aprovada') simulacoesPreAprovadas++
       else if (etapa === 'simulacao_reprovada') { /* ignorado */ }
       else if (etapa === 'ia_perda') perdas++
-      else emAndamento++
+      else {
+        // Se sobrou aqui, estaria "Em Andamento". 
+        // Mas se estiver bloqueado, vai para Atendimento Humano.
+        if (isBlocked) {
+          atendimentoHumano++
+        } else {
+          emAndamento++
+        }
+      }
     }
 
     // Leads por dia
@@ -204,11 +231,12 @@ export async function GET(request: Request) {
     }))
 
     return NextResponse.json({
-      kpis: { aiMessages, humanMessages, totalFollowups, qualifiedLeads, totalLeads, visitasAgendadas, simulacoesAprovadas, simulacoesPreAprovadas, perdas, emAndamento },
+      kpis: { aiMessages, humanMessages, totalFollowups, qualifiedLeads, totalLeads, visitasAgendadas, simulacoesAprovadas, simulacoesPreAprovadas, perdas, emAndamento, atendimentoHumano },
       chartData,
       pieData: [
         { name: 'Qualificados', value: qualifiedLeads, color: '#22c55e' },
         { name: 'Em Andamento', value: emAndamento, color: '#f59e0b' },
+        { name: 'Em Atendimento', value: atendimentoHumano, color: '#ef4444' },
       ]
     }, { status: 200 })
 
