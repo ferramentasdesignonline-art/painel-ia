@@ -89,6 +89,31 @@ export function LeadChat({ messages }: LeadChatProps) {
     return true;
   });
 
+  const getDateLabel = (dateStr: string) => {
+    if (!dateStr) return "";
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return "";
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const targetDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+    const diffTime = today.getTime() - targetDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return "Hoje";
+    if (diffDays === 1) return "Ontem";
+    
+    if (diffDays < 7 && diffDays > 1) {
+      const weekdays = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
+      return weekdays[targetDate.getDay()];
+    }
+
+    return targetDate.toLocaleDateString('pt-BR');
+  };
+
+  let lastDateLabel = "";
+
   return (
     <div className="flex flex-col h-full bg-[#E5DDD5] relative" ref={scrollRef}>
       <ScrollArea className="flex-1 p-4 h-full">
@@ -99,29 +124,71 @@ export function LeadChat({ messages }: LeadChatProps) {
             </div>
           ) : (
             finalMessages.map((msg) => {
-              const isAi = msg.type === "ai"
+              const contentRaw = cleanMessageContent(msg.data.content);
+              const isAi = msg.type === "ai";
+              
+              let isHumanSeller = false;
+              let displayContent = contentRaw;
+
+              if (isAi && contentRaw.startsWith("[ATENDIMENTO HUMANO]")) {
+                isHumanSeller = true;
+                displayContent = contentRaw.replace("[ATENDIMENTO HUMANO]", "").trim();
+              }
+
+              const isClient = !isAi;
+              const dateLabel = getDateLabel(msg.created_at);
+              const showDateSeparator = dateLabel !== lastDateLabel;
+              lastDateLabel = dateLabel;
+
               return (
-                <div
-                  key={msg.id}
-                  className={cn(
-                    "flex w-max max-w-[85%] flex-col gap-1 text-sm",
-                    isAi ? "ml-auto items-end" : "mr-auto items-start"
+                <div key={msg.id} className="flex flex-col gap-4">
+                  {showDateSeparator && (
+                    <div className="flex justify-center my-2">
+                      <span className="bg-white/90 text-gray-500 text-[11px] font-bold px-3 py-1 rounded-lg shadow-sm uppercase tracking-wider">
+                        {dateLabel}
+                      </span>
+                    </div>
                   )}
-                >
                   <div
                     className={cn(
-                      "flex flex-col rounded-lg px-3 py-2 shadow-sm text-gray-900 border",
-                      isAi
-                        ? "bg-[#D9FDD3] border-transparent rounded-tr-none"
-                        : "bg-white border-transparent rounded-tl-none"
+                      "flex w-max max-w-[85%] flex-col gap-1 text-sm",
+                      !isClient ? "ml-auto items-end" : "mr-auto items-start"
                     )}
                   >
-                    <div className="break-words">
-                      {formatMessageContent(msg.data.content)}
+                    <div
+                      className={cn(
+                        "flex flex-col rounded-lg px-3 py-2 shadow-sm text-gray-900 border relative",
+                        isAi && !isHumanSeller
+                          ? "bg-[#D9FDD3] border-transparent rounded-tr-none"
+                          : "",
+                        isHumanSeller
+                          ? "bg-[#E2F0CB] border-green-200 rounded-tr-none shadow-md"
+                          : "",
+                        isClient
+                          ? "bg-white border-transparent rounded-tl-none"
+                          : ""
+                      )}
+                    >
+                      {/* Indicador de Remetente */}
+                      {isHumanSeller && (
+                        <div className="flex items-center gap-1 mb-1 border-b border-green-200/50 pb-1">
+                          <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">👤 Vendedor</span>
+                        </div>
+                      )}
+                      {isAi && !isHumanSeller && (
+                        <div className="flex items-center gap-1 mb-1 border-b border-green-200/50 pb-1 opacity-70">
+                          <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">🤖 IA Automática</span>
+                        </div>
+                      )}
+                      
+                      <div className="break-words mt-0.5">
+                        {formatMessageContent(displayContent)}
+                      </div>
+                      
+                      <span className="text-[10px] text-gray-500 text-right mt-1 font-medium">
+                        {formatTime(msg.created_at).split(' ')[1] || formatTime(msg.created_at)}
+                      </span>
                     </div>
-                    <span className="text-[10px] text-gray-500 text-right mt-1 font-medium">
-                      {formatTime(msg.created_at)}
-                    </span>
                   </div>
                 </div>
               )
@@ -132,7 +199,7 @@ export function LeadChat({ messages }: LeadChatProps) {
       {/* Rodapé informativo silencioso */}
       <div className="bg-[#F0F2F5] p-2 border-t flex items-center justify-center shrink-0">
          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-           Histórico da IA (Apenas Visualização)
+           Histórico de Conversas (IA & Vendedor)
          </span>
       </div>
     </div>
