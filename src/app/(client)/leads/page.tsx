@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Eye, Plus, ArrowUpDown, Filter } from "lucide-react"
+import { Search, Eye, Plus, ArrowUpDown, Filter, ShieldBan } from "lucide-react"
 import { LeadDrawer, LeadType } from "@/components/leads/LeadDrawer"
 import { AddLeadModal } from "@/components/leads/AddLeadModal"
 import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
@@ -342,9 +342,14 @@ export default function LeadsPage() {
                           )}>
                             {getStageName(lead)}
                           </span>
-                          {(lead.quantidade_followup || 0) > 0 && (
+                          {(lead.quantidade_followup || 0) > 0 && !lead.is_blocked && (
                             <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100">
                               {lead.quantidade_followup}× FU
+                            </span>
+                          )}
+                          {lead.is_blocked && (
+                            <span className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-lg border border-red-100 uppercase tracking-wider">
+                              <ShieldBan className="w-3 h-3" /> Humano
                             </span>
                           )}
                         </div>

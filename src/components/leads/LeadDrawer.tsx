@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { RefreshCw, Pencil, Check, X } from "lucide-react"
+import { RefreshCw, Pencil, Check, X, ShieldBan } from "lucide-react"
 import { LeadChat, ChatMessage } from "./LeadChat"
 import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
@@ -35,6 +35,7 @@ export type LeadType = {
   endereco?: string | null
   possuiCnh?: boolean | null
   genero?: string | null
+  is_blocked?: boolean
 }
 
 type LeadDrawerProps = {
@@ -286,6 +287,11 @@ export function LeadDrawer({ lead, isOpen, onClose }: LeadDrawerProps) {
           </DialogTitle>
           <div className="text-xs text-gray-400 mt-1 flex gap-3 items-center">
             <span>{formatarTelefone(lead.telefone)}</span>
+            {lead.is_blocked && (
+              <span className="inline-flex items-center gap-1 whitespace-nowrap text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 uppercase tracking-wider">
+                <ShieldBan className="w-2.5 h-2.5" /> Atendimento Humano
+              </span>
+            )}
           </div>
 
         </DialogHeader>

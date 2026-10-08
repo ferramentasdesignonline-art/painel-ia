@@ -79,10 +79,12 @@ export async function GET(request: Request) {
   const { data: bloqueios } = await supabaseClientDB
     .from(cliente.tabela_bloqueios)
     .select('numero_cliente')
-    .eq('bloqueio_existe', true)
+    .neq('bloqueio_existe', false)
     .limit(10000);
 
-  const numerosBloqueados = new Set(bloqueios?.map(b => b.numero_cliente) || []);
+  const numerosBloqueados = new Set(
+    bloqueios?.map(b => b.numero_cliente ? b.numero_cliente.replace(/\D/g, '') : '').filter(Boolean) || []
+  );
 
   // Buscar posições manuais salvas
   const limite30d = new Date();
@@ -116,7 +118,9 @@ export async function GET(request: Request) {
   // 8. Distribuir leads pelas etapas
   for (const lead of leads || []) {
     // IA Leads
-    const bloqueado = numerosBloqueados.has(lead.telefone);
+    const rawPhone = lead.telefone || lead.phone || '';
+    const phoneClean = rawPhone.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
+    const bloqueado = numerosBloqueados.has(phoneClean);
 
     // Construct data_agendamento from database columns
     let data_agendamento = lead.data_agendamento || null;

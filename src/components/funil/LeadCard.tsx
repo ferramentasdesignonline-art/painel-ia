@@ -12,7 +12,8 @@ import {
   Clock,
   RefreshCw,
   Users,
-  GripVertical
+  GripVertical,
+  ShieldBan
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -108,7 +109,6 @@ export function LeadCard({ lead, onClick, formatarTelefone, metaFollowup, nomeEt
       onClick={onClick}
       className={cn(
         "group bg-white rounded-xl border border-gray-100 p-3.5 transition-all duration-200 hover:shadow-md hover:border-indigo-200 cursor-pointer relative",
-        lead.bloqueado && "opacity-70",
         isDragging && "opacity-40 scale-95",
         isDragOverlay && "shadow-2xl rotate-1 scale-105 border-indigo-300 cursor-grabbing ring-2 ring-indigo-200"
       )}
@@ -138,7 +138,13 @@ export function LeadCard({ lead, onClick, formatarTelefone, metaFollowup, nomeEt
 
           {/* Pills Labels */}
           <div className="flex items-center gap-2 mt-1 flex-wrap">
-            {lead.origem === 'ia' && (
+            {lead.bloqueado && (
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-50 border border-red-100">
+                <ShieldBan className="w-2.5 h-2.5 text-red-600" />
+                <span className="text-[10px] font-bold text-red-600 uppercase tracking-tighter">Humano</span>
+              </div>
+            )}
+            {lead.origem === 'ia' && !lead.bloqueado && (
               <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100/50">
                 <BotIcon className="w-2.5 h-2.5 text-indigo-500" />
                 <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-tighter">IA ativa</span>

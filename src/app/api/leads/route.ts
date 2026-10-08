@@ -42,6 +42,17 @@ export async function GET(request: Request) {
     // 4. Busca os dados IA
     const leadsIA = await getClientLeads(supabaseAdmin, clientConfig.tabela_leads)
 
+    // Busca bloqueios ativos para o cliente atual
+    const blockedNumbers = new Set<string>()
+    if (clientConfig.tabela_bloqueios) {
+      const { data: bData } = await supabaseAdmin.from(clientConfig.tabela_bloqueios).select('numero_cliente').neq('bloqueio_existe', false)
+      if (bData) {
+        for (const b of bData) {
+          if (b.numero_cliente) blockedNumbers.add(b.numero_cliente.replace(/\D/g, ''))
+        }
+      }
+    }
+
     // 5. Busca leads manuais
     const { data: leadsManuais } = await supabaseAdmin
       .from('sistema-dash-ia_leads_manuais')
@@ -52,6 +63,11 @@ export async function GET(request: Request) {
     const manuaisFormatados = (leadsManuais || []).map(lead => {
       const etapaNome = lead.etapa?.nome || 'Lead Manual';
       const isQualificado = etapaNome.toLowerCase() === 'qualificado';
+      
+      const rawPhone = lead.telefone || '';
+      const phoneClean = rawPhone.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
+      const isBlocked = blockedNumbers.has(phoneClean);
+
       return {
         ...lead,
         // Se tivermos um identificador especial como 'manual-', ele será util na UI
@@ -60,6 +76,7 @@ export async function GET(request: Request) {
         origem: 'manual',
         etapa_manual_nome: etapaNome,
         lead_finalizado: isQualificado ? true : lead.lead_finalizado,
+        is_blocked: isBlocked
       };
     });
 
@@ -124,12 +141,18 @@ export async function GET(request: Request) {
           }
         }
       }
+      
+      const rawPhone = lead.telefone || lead.phone || '';
+      const phoneClean = rawPhone.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
+      const isBlocked = blockedNumbers.has(phoneClean);
+
       return {
         ...lead,
         data_agendamento,
         original_id: lead.id,
         id: `ia-${lead.id}`,
-        origem: 'ia'
+        origem: 'ia',
+        is_blocked: isBlocked
       };
     });
 
