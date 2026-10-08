@@ -76,6 +76,8 @@ export function LeadChat({ messages }: LeadChatProps) {
     const content = cleanMessageContent(msg.data.content);
     if (!content) return false;
     if (content.includes("Execute agora o follow-up número")) return false;
+    if (content.includes("Execute o follow-up número")) return false;
+    if (content.includes("Analise primeiro todo o histórico da conversa e continue naturalmente")) return false;
     return true;
   });
 
