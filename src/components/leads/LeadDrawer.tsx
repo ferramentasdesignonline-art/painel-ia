@@ -36,6 +36,7 @@ export type LeadType = {
   possuiCnh?: boolean | null
   genero?: string | null
   is_blocked?: boolean
+  tags?: { id: string, nome: string, cor: string }[]
 }
 
 type LeadDrawerProps = {
@@ -348,6 +349,28 @@ export function LeadDrawer({ lead, isOpen, onClose }: LeadDrawerProps) {
                    <p className="text-gray-400 text-[11px] uppercase tracking-wider font-medium mb-1">Follow-ups</p>
                    <p className="font-bold text-lg text-gray-900">{lead.quantidadeFollowup ?? '-'}</p>
                  </div>
+               </div>
+             </div>
+
+             {/* Etiquetas (Tags) */}
+             <div className="space-y-2">
+               <div className="flex items-center justify-between border-b pb-2">
+                 <h3 className="font-semibold text-base text-gray-900">Etiquetas (Tags)</h3>
+                 {/* Por enquanto apenas um botão visual que podemos expandir depois com um Popover de seleção */}
+                 <Button variant="ghost" size="sm" className="h-6 text-[10px] uppercase font-bold text-indigo-600 hover:bg-indigo-50 px-2" onClick={() => alert('Em breve! O gestor precisa rodar o script SQL para ativarmos o painel de criação de Tags.')}>
+                   + Adicionar
+                 </Button>
+               </div>
+               <div className="flex flex-wrap gap-2 pt-1">
+                 {lead.tags && lead.tags.length > 0 ? (
+                   lead.tags.map(tag => (
+                     <span key={tag.id} className={cn("px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border", tag.cor)}>
+                       {tag.nome}
+                     </span>
+                   ))
+                 ) : (
+                   <p className="text-xs text-gray-400 italic">Nenhuma etiqueta adicionada.</p>
+                 )}
                </div>
              </div>
 

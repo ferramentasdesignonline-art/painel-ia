@@ -158,6 +158,28 @@ export async function GET(request: Request) {
 
     const todosLeads = [...iaFormatados, ...manuaisFormatados];
 
+    // Busca tags
+    const { data: allTags } = await supabaseAdmin.from('sistema-dash-ia_tags').select('*').eq('cliente_id', clientConfig.id);
+    const { data: leadTagsMap } = await supabaseAdmin.from('sistema-dash-ia_lead_tags').select('*').eq('cliente_id', clientConfig.id);
+    
+    if (allTags && leadTagsMap) {
+      const tagsById = new Map(allTags.map((t: any) => [t.id, t]));
+      const tagsByLeadId = new Map();
+      for (const lt of leadTagsMap) {
+        if (!tagsByLeadId.has(lt.lead_id)) tagsByLeadId.set(lt.lead_id, []);
+        const tagObj = tagsById.get(lt.tag_id);
+        if (tagObj) tagsByLeadId.get(lt.lead_id).push(tagObj);
+      }
+      
+      for (const lead of todosLeads) {
+        lead.tags = tagsByLeadId.get(lead.id) || [];
+      }
+    } else {
+      for (const lead of todosLeads) {
+        lead.tags = [];
+      }
+    }
+
     // Ordena todos por data de criação mais recente
     todosLeads.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 

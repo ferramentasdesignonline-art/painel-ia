@@ -215,6 +215,32 @@ export async function GET(request: Request) {
     }
   }
 
+  // Busca tags
+  const { data: allTags } = await supabaseAdmin.from('sistema-dash-ia_tags').select('*').eq('cliente_id', cliente.id);
+  const { data: leadTagsMap } = await supabaseAdmin.from('sistema-dash-ia_lead_tags').select('*').eq('cliente_id', cliente.id);
+  
+  if (allTags && leadTagsMap) {
+    const tagsById = new Map(allTags.map((t: any) => [t.id, t]));
+    const tagsByLeadId = new Map();
+    for (const lt of leadTagsMap) {
+      if (!tagsByLeadId.has(lt.lead_id)) tagsByLeadId.set(lt.lead_id, []);
+      const tagObj = tagsById.get(lt.tag_id);
+      if (tagObj) tagsByLeadId.get(lt.lead_id).push(tagObj);
+    }
+    
+    for (const col of colunas) {
+      for (const lead of col.leads) {
+        lead.tags = tagsByLeadId.get(lead.id) || [];
+      }
+    }
+  } else {
+    for (const col of colunas) {
+      for (const lead of col.leads) {
+        lead.tags = [];
+      }
+    }
+  }
+
   return NextResponse.json({ 
     colunas, 
     config: { 

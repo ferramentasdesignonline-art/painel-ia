@@ -299,9 +299,18 @@ export default function LeadsPage() {
                       onClick={() => handleRowClick(lead)}
                     >
                       <td className="px-6 py-4">
-                        <div className="flex flex-col">
+                        <div className="flex flex-col gap-1">
                           <span className="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{lead.nome || 'Cliente S/ Nome'}</span>
-                          <span className="text-xs font-medium text-gray-400 mt-0.5 whitespace-nowrap">{formatarTelefone(lead.telefone || lead.phone)}</span>
+                          <span className="text-xs font-medium text-gray-400 whitespace-nowrap">{formatarTelefone(lead.telefone || lead.phone)}</span>
+                          {lead.tags && lead.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {lead.tags.map((tag: any) => (
+                                <span key={tag.id} className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", tag.cor)}>
+                                  {tag.nome}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4">

@@ -37,6 +37,7 @@ export type Lead = {
   lead_simulacao_aprovada?: boolean;
   lead_simulacao_pre_aprovada?: boolean;
   lead_simulacao_reprovada?: boolean;
+  tags?: { id: string, nome: string, cor: string }[];
 };
 
 type Props = {
@@ -136,7 +137,7 @@ export function LeadCard({ lead, onClick, formatarTelefone, metaFollowup, nomeEt
             </span>
           </div>
 
-          {/* Pills Labels */}
+          {/* Pills Labels & Tags */}
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {lead.bloqueado && (
               <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-50 border border-red-100">
@@ -156,6 +157,12 @@ export function LeadCard({ lead, onClick, formatarTelefone, metaFollowup, nomeEt
                 <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter">Manual</span>
               </div>
             )}
+            {/* Tags do Banco */}
+            {lead.tags && lead.tags.map(tag => (
+              <div key={tag.id} className={cn("flex items-center gap-1 px-2 py-0.5 rounded-md border", tag.cor)}>
+                <span className="text-[10px] font-bold uppercase tracking-tighter">{tag.nome}</span>
+              </div>
+            ))}
             <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 border border-gray-100">
               <Phone className="w-2.5 h-2.5 text-gray-400" />
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">
