@@ -149,6 +149,38 @@ export default function EditarClientePage() {
     fetchTables()
   }, [])
 
+  const [wacloudInstance, setWacloudInstance] = useState<any>(null)
+  const [wacloudLoading, setWacloudLoading] = useState(false)
+  const [wacloudError, setWacloudError] = useState("")
+  const wacloudAtivo = !!wacloudInstance?.ativo
+
+  useEffect(() => {
+    fetch(`/api/wacloud/clientes/${id}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setWacloudInstance(d.instance || null))
+      .catch(() => {})
+  }, [id])
+
+  const toggleWacloud = async (ativo: boolean) => {
+    setWacloudLoading(true)
+    setWacloudError("")
+    try {
+      const nome = (formData.slug || formData.nome).replace(/[^a-zA-Z0-9_-]/g, "")
+      const res = await fetch(`/api/wacloud/clientes/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ativo, nome }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Erro ao atualizar integração")
+      setWacloudInstance(data.instance || null)
+    } catch (e: any) {
+      setWacloudError(e.message)
+    } finally {
+      setWacloudLoading(false)
+    }
+  }
+
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const nome = e.target.value
     const slug = nome.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
@@ -270,6 +302,34 @@ export default function EditarClientePage() {
               loadingTables={loadingTables}
             />
           </div>
+        </div>
+
+        <div>
+          <div className="pb-3 border-b border-gray-100 mb-4">
+            <h3 className="text-base font-semibold text-gray-900">WhatsApp Cloud</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Integra este cliente com uma instância Uazapi para centralizar as conversas.</p>
+          </div>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={wacloudAtivo}
+              disabled={wacloudLoading}
+              onChange={(e) => toggleWacloud(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <span className="text-sm text-gray-700">
+              Integrar com WhatsApp Cloud
+              {wacloudLoading && <span className="ml-2 text-xs text-gray-400">processando...</span>}
+              {wacloudInstance && (
+                <span className="block text-xs text-gray-500 mt-1">
+                  Instância: <span className="font-mono">{wacloudInstance.nome_instancia}</span> · status: {wacloudInstance.status}
+                  {" · "}
+                  <a href="/admin/whatsapp-cloud" className="text-indigo-600 hover:underline">gerenciar / QR Code</a>
+                </span>
+              )}
+              {wacloudError && <span className="block text-xs text-red-600 mt-1">{wacloudError}</span>}
+            </span>
+          </label>
         </div>
 
         <div className="flex items-center justify-end gap-x-4 pt-4 border-t border-gray-200">

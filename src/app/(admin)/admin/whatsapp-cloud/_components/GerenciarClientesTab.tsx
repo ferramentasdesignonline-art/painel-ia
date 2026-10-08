@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Loader2, QrCode, RefreshCcw, Wifi, WifiOff } from "lucide-react"
+import { Plus, Loader2, QrCode, RefreshCcw, Wifi, WifiOff, Download } from "lucide-react"
 
 export function GerenciarClientesTab() {
   const [instances, setInstances] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
   const [newInstanceName, setNewInstanceName] = useState("")
+  const [syncing, setSyncing] = useState<Record<string, string>>({})
   const [qrCodeData, setQrCodeData] = useState<{ id: string, base64: string, name: string } | null>(null)
 
   const fetchInstances = async () => {
@@ -94,6 +95,37 @@ export function GerenciarClientesTab() {
     }
   }
 
+  const handleSyncChats = async (id: string) => {
+    setSyncing((s) => ({ ...s, [id]: "Iniciando..." }))
+    try {
+      let offset: number | null = 0
+      let imported = 0
+      let total = 0
+      while (offset !== null) {
+        const res: Response = await fetch(`/api/wacloud/instances/${id}/sync-chats`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ offset }),
+        })
+        const data: any = await res.json()
+        if (!res.ok) throw new Error(data.error || "Erro ao sincronizar")
+        imported += data.processed || 0
+        total = data.total || total
+        setSyncing((s) => ({ ...s, [id]: `${imported}/${total} conversas...` }))
+        offset = data.next_offset
+      }
+      alert(`Importação concluída: ${imported} conversas.`)
+    } catch (e: any) {
+      alert("Erro ao importar conversas: " + e.message)
+    } finally {
+      setSyncing((s) => {
+        const copy = { ...s }
+        delete copy[id]
+        return copy
+      })
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Formulário de Criação */}
@@ -166,6 +198,17 @@ export function GerenciarClientesTab() {
                     <RefreshCcw className="w-4 h-4" /> Status
                   </button>
                 </div>
+                <button
+                  onClick={() => handleSyncChats(instance.id)}
+                  disabled={syncing[instance.id] !== undefined}
+                  className="mt-2 w-full py-2 px-3 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1 border border-emerald-100 disabled:opacity-60"
+                >
+                  {syncing[instance.id] !== undefined ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> {syncing[instance.id] || "Sincronizando..."}</>
+                  ) : (
+                    <><Download className="w-4 h-4" /> Importar conversas</>
+                  )}
+                </button>
               </div>
             ))}
           </div>
