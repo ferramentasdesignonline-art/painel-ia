@@ -452,7 +452,11 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
                       {contato.whatsapp_labels && contato.whatsapp_labels.length > 0 && (
                         <div className="flex flex-wrap gap-1 mb-1">
                           {contato.whatsapp_labels.map(labelId => {
-                            const lbl = uazapiLabels.find(l => String(l.labelid) === String(labelId));
+                            const lbl = uazapiLabels.find(l => 
+                              String(l.id) === String(labelId) || 
+                              String(l.labelid) === String(labelId) ||
+                              String(labelId).endsWith(`:${l.labelid}`)
+                            );
                             if (!lbl) return null;
                             return (
                               <span
