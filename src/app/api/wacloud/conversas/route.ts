@@ -49,7 +49,7 @@ export async function GET(request: Request) {
     }
 
     // Contatos importados via /chat/find (wacloud_contatos)
-    const { data: importados } = instancia
+    const { data: importados, error: impError } = instancia
       ? await supabase
           .from('wacloud_contatos')
           .select('telefone_contato, nome_contato, nome_instancia, ultima_mensagem, ultimo_tipo, ultimo_timestamp, imagem_preview, nao_lidas, is_group, created_at')
@@ -63,6 +63,10 @@ export async function GET(request: Request) {
           .eq('is_group', false)
           .order('ultimo_timestamp', { ascending: false, nullsFirst: false })
           .limit(5000);
+
+    if (impError) {
+      return NextResponse.json({ debug_error: impError });
+    }
 
     for (const c of importados || []) {
       const key = `${c.nome_instancia}:${c.telefone_contato}`;
