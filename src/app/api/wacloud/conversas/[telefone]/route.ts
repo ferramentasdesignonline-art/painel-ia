@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
 
 export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
 
 // GET /api/wacloud/conversas/[telefone]?instancia=xxx - busca mensagens de um contato
 export async function GET(request: Request, { params }: { params: { telefone: string } }) {

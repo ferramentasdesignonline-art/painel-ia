@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
 
 export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
 
 // GET /api/wacloud/conversas - lista contatos (último registro por contato)
 export async function GET(request: Request) {
@@ -65,11 +67,7 @@ export async function GET(request: Request) {
           .limit(5000);
 
     if (impError) {
-      return NextResponse.json({ debug_error: impError });
-    }
-
-    if (!importados || importados.length === 0) {
-      return NextResponse.json({ debug: true, instancia, importados_length: importados?.length, type: typeof importados });
+      console.error('wacloud_contatos error:', impError);
     }
 
     for (const c of importados || []) {
