@@ -375,27 +375,12 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
       const data = await res.json()
       let msgs = data.mensagens || []
       
-      // Se não tiver mensagens no banco, puxa automaticamente da Uazapi (até 500 para ser rápido)
-      if (msgs.length === 0) {
-        setSyncingMsgs(true)
-        const chatid = contato.telefone_contato.includes('@') ? contato.telefone_contato : `${contato.telefone_contato}@s.whatsapp.net`;
-        await fetch(`/api/wacloud/instances/${instancia.id}/sync-messages`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chatid, offset: 0 }),
-        });
-        
-        // Busca de novo após sincronizar
-        const resNovo = await fetch(
-          `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}&_t=${Date.now()}`,
-          { cache: 'no-store' }
-        )
-        const dataNovo = await resNovo.json()
-        msgs = dataNovo.mensagens || []
-        setSyncingMsgs(false)
-      }
-      
       setMensagens(msgs)
+
+      // Se não tiver mensagens no banco, puxa automaticamente da Uazapi
+      if (msgs.length === 0) {
+        await syncMensagens(contato, false)
+      }
     } catch (err) {
       console.error('Erro ao buscar mensagens', err)
       setSyncingMsgs(false)
@@ -404,14 +389,12 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
     }
   }
 
-  const syncHistorico = async () => {
-    if (!selectedContato) return;
+  const syncMensagens = async (contato: Contato, isFull: boolean = false) => {
     setSyncingMsgs(true);
     try {
       let offset: number | null = 0;
       let imported = 0;
-      // wa_chatid usually is phone@s.whatsapp.net for individuals
-      const chatid = selectedContato.telefone_contato.includes('@') ? selectedContato.telefone_contato : `${selectedContato.telefone_contato}@s.whatsapp.net`;
+      const chatid = contato.telefone_contato.includes('@') ? contato.telefone_contato : `${contato.telefone_contato}@s.whatsapp.net`;
       
       while (offset !== null) {
         const res = await fetch(`/api/wacloud/instances/${instancia.id}/sync-messages`, {
@@ -423,12 +406,24 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
         if (!res.ok) throw new Error(data.error || "Erro ao sincronizar mensagens");
         
         imported += data.processed || 0;
+        
+        if (!isFull) break;
         offset = data.next_offset;
       }
-      alert(`Histórico sincronizado: ${imported} mensagens importadas.`);
-      await fetchMensagens(selectedContato);
+      if (isFull) alert(`Histórico sincronizado: ${imported} mensagens importadas.`);
+      
+      // Update view
+      const resNovo = await fetch(
+        `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}&_t=${Date.now()}`,
+        { cache: 'no-store' }
+      )
+      const dataNovo = await resNovo.json()
+      if (selectedContatoRef.current?.telefone_contato === contato.telefone_contato) {
+        setMensagens(dataNovo.mensagens || []);
+      }
     } catch (err: any) {
-      alert("Erro ao sincronizar: " + err.message);
+      if (isFull) alert("Erro ao sincronizar: " + err.message);
+      else console.error("Auto sync msgs error:", err.message);
     } finally {
       setSyncingMsgs(false);
     }
@@ -457,26 +452,25 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
 
   // Refs para evitar stale closure dentro do setInterval
   const selectedContatoRef = useRef<Contato | null>(null)
-  const countdownRef = useRef(60)
-  const [countdown, setCountdown] = useState(60)
+  const countdownRef = useRef(30)
+  const [countdown, setCountdown] = useState(30)
 
   useEffect(() => {
     selectedContatoRef.current = selectedContato
   }, [selectedContato])
 
-  // Auto-refresh a cada 60 segundos — usa refs para evitar stale closure
+  // Auto-refresh a cada 30 segundos
   useEffect(() => {
     const timer = setInterval(() => {
       countdownRef.current -= 1
       setCountdown(countdownRef.current)
 
       if (countdownRef.current <= 0) {
-        // Hora de atualizar
-        countdownRef.current = 60
-        setCountdown(60)
+        countdownRef.current = 30
+        setCountdown(30)
         syncContatos(false)
         if (selectedContatoRef.current) {
-          fetchMensagens(selectedContatoRef.current)
+          syncMensagens(selectedContatoRef.current, false)
         }
       }
     }, 1000)
@@ -514,8 +508,8 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
               <button
                 onClick={() => {
                   syncContatos(false)
-                  if (selectedContatoRef.current) fetchMensagens(selectedContatoRef.current)
-                  setCountdown(60)
+                  if (selectedContatoRef.current) syncMensagens(selectedContatoRef.current, false)
+                  setCountdown(30)
                 }}
                 disabled={!!syncProgress}
                 className="flex items-center gap-1 p-1 hover:bg-gray-200 rounded text-gray-400 transition-colors disabled:opacity-50"
@@ -672,7 +666,7 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
                   </button>
 
                   <button
-                    onClick={syncHistorico}
+                    onClick={() => syncMensagens(selectedContato, true)}
                     disabled={syncingMsgs}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:text-indigo-600 hover:border-indigo-200 transition-colors disabled:opacity-50"
                     title="Sincronizar todo o histórico do WhatsApp para este contato"
