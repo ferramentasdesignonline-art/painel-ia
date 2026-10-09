@@ -68,6 +68,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ debug_error: impError });
     }
 
+    if (!importados || importados.length === 0) {
+      return NextResponse.json({ debug: true, instancia, importados_length: importados?.length, type: typeof importados });
+    }
+
     for (const c of importados || []) {
       const key = `${c.nome_instancia}:${c.telefone_contato}`;
       const ts = c.ultimo_timestamp || c.created_at;
