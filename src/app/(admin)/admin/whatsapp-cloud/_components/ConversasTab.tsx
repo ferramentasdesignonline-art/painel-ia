@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Loader2, RefreshCcw, MessageSquare, FileText, Mic, Image, Video, Phone, Search, ChevronLeft, Smartphone } from "lucide-react"
+import { Loader2, RefreshCcw, MessageSquare, FileText, Mic, Image, Video, Phone, Search, ChevronLeft, Smartphone, Tag, X } from "lucide-react"
 
 interface Instancia {
   id: string
@@ -146,6 +146,9 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
   const [loadingMsgs, setLoadingMsgs] = useState(false)
   const [busca, setBusca] = useState("")
   const [uazapiLabels, setUazapiLabels] = useState<any[]>([])
+  const [showLabelsModal, setShowLabelsModal] = useState(false)
+  const [editingLabels, setEditingLabels] = useState<string[]>([])
+  const [savingLabels, setSavingLabels] = useState(false)
   const chatRef = useRef<HTMLDivElement>(null)
 
   const [syncProgress, setSyncProgress] = useState<{ imported: number; total: number; label: string } | null>(null)
@@ -218,6 +221,33 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
     loadInitial()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const saveLabels = async () => {
+    if (!selectedContato) return;
+    setSavingLabels(true);
+    try {
+      const chatid = selectedContato.telefone_contato.includes('@') ? selectedContato.telefone_contato : `${selectedContato.telefone_contato}@s.whatsapp.net`;
+      const number = chatid.split('@')[0];
+      const res = await fetch(`/api/wacloud/instances/${instancia.id}/chat-labels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number, labelids: editingLabels }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar etiquetas');
+      
+      // Update local state
+      const updatedContato = { ...selectedContato, whatsapp_labels: editingLabels };
+      setSelectedContato(updatedContato);
+      setContatos(contatos.map(c => c.telefone_contato === selectedContato.telefone_contato ? updatedContato : c));
+      setContatosFiltrados(contatosFiltrados.map(c => c.telefone_contato === selectedContato.telefone_contato ? updatedContato : c));
+      setShowLabelsModal(false);
+    } catch (err: any) {
+      alert("Erro ao salvar etiquetas: " + err.message);
+    } finally {
+      setSavingLabels(false);
+    }
+  }
 
   const [syncingMsgs, setSyncingMsgs] = useState(false)
 
@@ -510,15 +540,34 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
                     {selectedContato.telefone_contato}
                   </p>
                 </div>
-                <button
-                  onClick={syncHistorico}
-                  disabled={syncingMsgs}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:text-indigo-600 hover:border-indigo-200 transition-colors disabled:opacity-50"
-                  title="Sincronizar todo o histórico do WhatsApp para este contato"
-                >
-                  {syncingMsgs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
-                  {syncingMsgs ? "Baixando..." : "Sincronizar Histórico"}
-                </button>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const currentIds = (selectedContato.whatsapp_labels || []).map(l => {
+                        const strL = String(l);
+                        return strL.includes(':') ? strL.split(':')[1] : strL;
+                      });
+                      setEditingLabels(currentIds);
+                      setShowLabelsModal(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+                    title="Gerenciar etiquetas deste contato"
+                  >
+                    <Tag className="w-3.5 h-3.5" />
+                    Etiquetas
+                  </button>
+
+                  <button
+                    onClick={syncHistorico}
+                    disabled={syncingMsgs}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:text-indigo-600 hover:border-indigo-200 transition-colors disabled:opacity-50"
+                    title="Sincronizar todo o histórico do WhatsApp para este contato"
+                  >
+                    {syncingMsgs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
+                    {syncingMsgs ? "Baixando..." : "Sincronizar Histórico"}
+                  </button>
+                </div>
               </div>
 
               {/* Mensagens */}
@@ -613,6 +662,78 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
           )}
         </div>
       </div>
+
+      {/* MODAL DE ETIQUETAS */}
+      {showLabelsModal && selectedContato && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                <Tag className="w-4 h-4 text-indigo-500" />
+                Etiquetas
+              </h3>
+              <button onClick={() => setShowLabelsModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="px-5 py-4 max-h-[60vh] overflow-y-auto flex flex-col gap-3">
+              {uazapiLabels.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">Nenhuma etiqueta encontrada na instância.</p>
+              ) : (
+                uazapiLabels.map(lbl => {
+                  const idStr = String(lbl.labelid || lbl.id);
+                  const isChecked = editingLabels.includes(idStr);
+                  
+                  return (
+                    <label key={idStr} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-gray-100">
+                      <div className="relative flex items-center">
+                        <input
+                          type="checkbox"
+                          className="peer sr-only"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setEditingLabels([...editingLabels, idStr]);
+                            } else {
+                              setEditingLabels(editingLabels.filter(l => l !== idStr));
+                            }
+                          }}
+                        />
+                        <div className={`w-5 h-5 rounded border ${isChecked ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-gray-300'} flex items-center justify-center transition-colors`}>
+                          {isChecked && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ backgroundColor: lbl.colorHex || '#ccc' }}></span>
+                        <span className="text-sm font-medium text-gray-700">{lbl.name}</span>
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="px-5 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+              <button
+                onClick={() => setShowLabelsModal(false)}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveLabels}
+                disabled={savingLabels}
+                className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              >
+                {savingLabels ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Salvar Etiquetas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
