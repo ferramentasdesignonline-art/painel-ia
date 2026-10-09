@@ -162,23 +162,48 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
     }
   }
 
+  const [syncingMsgs, setSyncingMsgs] = useState(false)
+
   const fetchMensagens = async (contato: Contato) => {
     setLoadingMsgs(true)
     try {
+      // Tenta buscar no banco primeiro
       const res = await fetch(
         `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}&_t=${Date.now()}`,
         { cache: 'no-store' }
       )
       const data = await res.json()
-      setMensagens(data.mensagens || [])
+      let msgs = data.mensagens || []
+      
+      // Se não tiver mensagens no banco, puxa automaticamente da Uazapi (até 500 para ser rápido)
+      if (msgs.length === 0) {
+        setSyncingMsgs(true)
+        const chatid = contato.telefone_contato.includes('@') ? contato.telefone_contato : `${contato.telefone_contato}@s.whatsapp.net`;
+        await fetch(`/api/wacloud/instances/${instancia.id}/sync-messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chatid, offset: 0 }),
+        });
+        
+        // Busca de novo após sincronizar
+        const resNovo = await fetch(
+          `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}&_t=${Date.now()}`,
+          { cache: 'no-store' }
+        )
+        const dataNovo = await resNovo.json()
+        msgs = dataNovo.mensagens || []
+        setSyncingMsgs(false)
+      }
+      
+      setMensagens(msgs)
     } catch (err) {
       console.error('Erro ao buscar mensagens', err)
+      setSyncingMsgs(false)
     } finally {
       setLoadingMsgs(false)
     }
   }
 
-  const [syncingMsgs, setSyncingMsgs] = useState(false)
   const syncHistorico = async () => {
     if (!selectedContato) return;
     setSyncingMsgs(true);
