@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Loader2, RefreshCcw, MessageSquare, FileText, Mic, Image, Video, Phone, Search, ChevronLeft, Smartphone, Tag, X } from "lucide-react"
+import { Loader2, RefreshCcw, MessageSquare, FileText, Mic, Image, Video, Phone, Search, ChevronLeft, Smartphone, Tag, X, Paperclip, Send } from "lucide-react"
 
 interface Instancia {
   id: string
@@ -149,6 +149,12 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
   const [showLabelsModal, setShowLabelsModal] = useState(false)
   const [editingLabels, setEditingLabels] = useState<string[]>([])
   const [savingLabels, setSavingLabels] = useState(false)
+  
+  const [msgText, setMsgText] = useState('')
+  const [sendingMsg, setSendingMsg] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
   const chatRef = useRef<HTMLDivElement>(null)
 
   const [syncProgress, setSyncProgress] = useState<{ imported: number; total: number; label: string } | null>(null)
@@ -221,6 +227,113 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
     loadInitial()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const handleSendMessage = async () => {
+    if (!msgText.trim() || !selectedContato || sendingMsg) return;
+    setSendingMsg(true);
+    try {
+      const chatid = selectedContato.telefone_contato.includes('@') ? selectedContato.telefone_contato : `${selectedContato.telefone_contato}@s.whatsapp.net`;
+      const number = chatid.split('@')[0];
+      
+      const res = await fetch(`/api/wacloud/instances/${instancia.id}/send-text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number, text: msgText.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao enviar mensagem');
+      
+      // Optimistic add
+      const novaMsg: Mensagem = {
+        id: `temp-${Date.now()}`,
+        nome_instancia: instancia.nome_instancia,
+        telefone_contato: selectedContato.telefone_contato,
+        nome_contato: 'Eu',
+        mensagem: msgText.trim(),
+        enviado_por_mim: true,
+        tipo_mensagem: 'ExtendedTextMessage',
+        url_midia: null,
+        mimetype: null,
+        timestamp_whatsapp: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      };
+      setMensagens([...mensagens, novaMsg]);
+      setMsgText('');
+    } catch (err: any) {
+      alert("Erro ao enviar: " + err.message);
+    } finally {
+      setSendingMsg(false);
+    }
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedContato) return;
+    
+    // We import supabase-js dynamically or use config
+    setSendingMsg(true);
+    setUploadProgress(10);
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const { WACLOUD_CONFIG } = await import('@/lib/wacloud/config');
+      const supabase = createClient(WACLOUD_CONFIG.supabaseUrl, WACLOUD_CONFIG.supabaseAnonKey);
+      
+      const ext = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+      
+      setUploadProgress(40);
+      const { error: uploadError } = await supabase.storage
+        .from('wacloud_midias')
+        .upload(fileName, file, { cacheControl: '3600', upsert: false });
+        
+      if (uploadError) throw new Error("Erro no upload do Supabase: " + uploadError.message);
+      
+      setUploadProgress(70);
+      const { data: { publicUrl } } = supabase.storage
+        .from('wacloud_midias')
+        .getPublicUrl(fileName);
+        
+      let type = 'document';
+      if (file.type.startsWith('image/')) type = 'image';
+      else if (file.type.startsWith('video/')) type = 'video';
+      else if (file.type.startsWith('audio/')) type = 'audio';
+
+      const chatid = selectedContato.telefone_contato.includes('@') ? selectedContato.telefone_contato : `${selectedContato.telefone_contato}@s.whatsapp.net`;
+      const number = chatid.split('@')[0];
+
+      setUploadProgress(90);
+      const res = await fetch(`/api/wacloud/instances/${instancia.id}/send-media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number, type, file: publicUrl, text: file.name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao enviar mídia');
+      
+      // Optimistic add
+      const novaMsg: Mensagem = {
+        id: `temp-${Date.now()}`,
+        nome_instancia: instancia.nome_instancia,
+        telefone_contato: selectedContato.telefone_contato,
+        nome_contato: 'Eu',
+        mensagem: null,
+        enviado_por_mim: true,
+        tipo_mensagem: type,
+        url_midia: publicUrl,
+        mimetype: file.type,
+        timestamp_whatsapp: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      };
+      setMensagens([...mensagens, novaMsg]);
+      
+    } catch (err: any) {
+      alert("Erro ao enviar arquivo: " + err.message);
+    } finally {
+      setSendingMsg(false);
+      setUploadProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
 
   const saveLabels = async () => {
     if (!selectedContato) return;
@@ -657,6 +770,58 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
                     )
                   })
                 )}
+              </div>
+              
+              {/* Message Input Area */}
+              <div className="bg-[#f0f2f5] px-4 py-3 flex items-end gap-2 relative">
+                {uploadProgress > 0 && (
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gray-200">
+                    <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                )}
+                
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={sendingMsg}
+                  className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors disabled:opacity-50 flex-shrink-0"
+                >
+                  <Paperclip className="w-5 h-5" />
+                </button>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  onChange={handleFileChange}
+                />
+
+                <div className="flex-1 bg-white rounded-xl overflow-hidden border border-gray-300 shadow-sm">
+                  <textarea
+                    value={msgText}
+                    onChange={(e) => setMsgText(e.target.value)}
+                    placeholder="Digite uma mensagem..."
+                    rows={1}
+                    className="w-full px-4 py-3 text-sm text-gray-800 outline-none resize-none max-h-32"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    style={{ minHeight: '44px' }}
+                  />
+                </div>
+
+                <button 
+                  onClick={handleSendMessage}
+                  disabled={!msgText.trim() || sendingMsg}
+                  className="p-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-full transition-colors disabled:opacity-50 disabled:bg-indigo-400 flex-shrink-0"
+                >
+                  {sendingMsg && uploadProgress === 0 ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Send className="w-5 h-5 ml-0.5" />
+                  )}
+                </button>
               </div>
             </>
           )}
