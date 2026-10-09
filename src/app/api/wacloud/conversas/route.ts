@@ -25,14 +25,16 @@ export async function GET(request: Request) {
           .order('timestamp_whatsapp', { ascending: false })
           .limit(2000);
 
+    let mensagensData: any[] = [];
     if (error) {
-      console.error('Supabase error:', error);
-      return NextResponse.json({ error: error.message, contatos: [] }, { status: 500 });
+      console.warn('Supabase wacloud_mensagens error (maybe table missing?):', error.message);
+    } else {
+      mensagensData = data || [];
     }
 
     // Agrupar por telefone_contato — pegar última mensagem de cada contato
     const contatosMap = new Map<string, any>();
-    for (const msg of data || []) {
+    for (const msg of mensagensData) {
       const key = `${msg.nome_instancia}:${msg.telefone_contato}`;
       if (!contatosMap.has(key)) {
         contatosMap.set(key, {

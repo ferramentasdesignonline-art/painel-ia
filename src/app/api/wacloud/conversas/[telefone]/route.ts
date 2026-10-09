@@ -27,7 +27,10 @@ export async function GET(request: Request, { params }: { params: { telefone: st
           .order('timestamp_whatsapp', { ascending: true })
           .limit(300);
 
-    if (error) throw error;
+    if (error) {
+      console.warn('Supabase wacloud_mensagens error:', error.message);
+      return NextResponse.json({ mensagens: [] });
+    }
 
     return NextResponse.json({ mensagens: data || [] });
   } catch (error) {

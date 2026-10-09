@@ -17,6 +17,8 @@ interface Contato {
   ultima_mensagem: string | null
   ultimo_tipo: string
   ultimo_timestamp: string
+  imagem_preview?: string | null
+  nao_lidas?: number
 }
 
 interface Mensagem {
@@ -296,19 +298,32 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
                       isSelected ? 'bg-indigo-50 border-l-2 border-l-indigo-600' : ''
                     }`}
                   >
-                    <div className={`w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-bold ${getAvatarColor(contato.telefone_contato)}`}>
-                      {getInitials(contato.nome_contato, contato.telefone_contato)}
+                    <div className={`w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-bold overflow-hidden ${getAvatarColor(contato.telefone_contato)}`}>
+                      {contato.imagem_preview ? (
+                        <img src={contato.imagem_preview} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        getInitials(contato.nome_contato, contato.telefone_contato)
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-baseline">
+                      <div className="flex justify-between items-center mb-0.5">
                         <p className="font-semibold text-gray-900 text-xs truncate pr-1">
                           {contato.nome_contato || contato.telefone_contato}
                         </p>
-                        <span className="text-[10px] text-gray-400 flex-shrink-0">{formatTime(contato.ultimo_timestamp)}</span>
+                        <span className={`text-[10px] flex-shrink-0 ${contato.nao_lidas ? 'text-green-600 font-bold' : 'text-gray-400'}`}>
+                          {formatTime(contato.ultimo_timestamp)}
+                        </span>
                       </div>
-                      <p className="text-[11px] text-gray-500 truncate">
-                        {getTypeLabel(contato.ultimo_tipo, contato.ultima_mensagem)}
-                      </p>
+                      <div className="flex justify-between items-center">
+                        <p className="text-[11px] text-gray-500 truncate pr-2">
+                          {getTypeLabel(contato.ultimo_tipo, contato.ultima_mensagem)}
+                        </p>
+                        {!!contato.nao_lidas && contato.nao_lidas > 0 && (
+                          <span className="bg-green-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] text-center leading-none">
+                            {contato.nao_lidas}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </button>
                 )
