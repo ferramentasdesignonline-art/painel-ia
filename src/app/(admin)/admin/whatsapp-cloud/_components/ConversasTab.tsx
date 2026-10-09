@@ -36,15 +36,17 @@ interface Mensagem {
 }
 
 function getTypeLabel(tipo: string, mensagem: string | null) {
-  if (mensagem) return mensagem
-  switch (tipo) {
-    case 'audio': return '🎵 Áudio'
-    case 'image': return '📷 Imagem'
-    case 'video': return '🎥 Vídeo'
-    case 'document': return '📄 Documento'
-    case 'sticker': return '😄 Figurinha'
-    default: return '(mensagem)'
-  }
+  if (mensagem && mensagem.trim() !== '') return mensagem;
+  const t = tipo?.toLowerCase() || '';
+  if (t.includes('audio')) return '🎵 Áudio';
+  if (t.includes('image')) return '📷 Imagem';
+  if (t.includes('video')) return '🎥 Vídeo';
+  if (t.includes('document')) return '📄 Documento';
+  if (t.includes('sticker')) return '😄 Figurinha';
+  if (t.includes('location')) return '📍 Localização';
+  if (t.includes('contact')) return '👤 Contato';
+  if (t.includes('reaction')) return '👍 Reação';
+  return '(mensagem)';
 }
 
 function formatTime(ts: string) {
@@ -433,8 +435,9 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
                       new Date(msg.timestamp_whatsapp).toDateString() !==
                       new Date(mensagens[idx - 1].timestamp_whatsapp).toDateString()
                     )
-                    const isSticker = msg.tipo_mensagem === 'sticker'
-                    const isMedia = ['image', 'sticker'].includes(msg.tipo_mensagem) && msg.url_midia
+                    const tLower = msg.tipo_mensagem?.toLowerCase() || '';
+                    const isSticker = tLower.includes('sticker')
+                    const isMedia = (tLower.includes('image') || tLower.includes('sticker')) && msg.url_midia
 
                     return (
                       <div key={msg.id}>
@@ -465,7 +468,7 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
                             <div className={`max-w-[70%] rounded-2xl px-3 py-2 shadow-sm ${
                               isMe ? 'bg-[#d9fdd3] rounded-br-sm' : 'bg-white rounded-bl-sm'
                             }`}>
-                              {msg.tipo_mensagem === 'image' && msg.url_midia && (
+                              {msg.tipo_mensagem?.toLowerCase().includes('image') && msg.url_midia && (
                                 <img
                                   src={msg.url_midia}
                                   alt="Imagem"
@@ -473,13 +476,13 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
                                   onClick={() => window.open(msg.url_midia!, '_blank')}
                                 />
                               )}
-                              {msg.tipo_mensagem === 'video' && msg.url_midia && (
+                              {msg.tipo_mensagem?.toLowerCase().includes('video') && msg.url_midia && (
                                 <video src={msg.url_midia} controls className="rounded-xl mb-1 max-w-full max-h-48" />
                               )}
-                              {msg.tipo_mensagem === 'audio' && msg.url_midia && (
+                              {msg.tipo_mensagem?.toLowerCase().includes('audio') && msg.url_midia && (
                                 <audio src={msg.url_midia} controls className="w-full mb-1" />
                               )}
-                              {msg.tipo_mensagem === 'document' && msg.url_midia && (
+                              {msg.tipo_mensagem?.toLowerCase().includes('document') && msg.url_midia && (
                                 <a
                                   href={msg.url_midia}
                                   target="_blank"
