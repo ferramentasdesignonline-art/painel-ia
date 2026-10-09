@@ -735,7 +735,7 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
                                 <video src={msg.url_midia} controls className="rounded-xl mb-1 max-w-full max-h-48" />
                               )}
                               {msg.tipo_mensagem?.toLowerCase().includes('audio') && msg.url_midia && (
-                                <audio src={msg.url_midia} controls className="w-full mb-1" />
+                                <audio src={msg.url_midia} controls className="w-full min-w-[260px] mb-1" />
                               )}
                               {msg.tipo_mensagem?.toLowerCase().includes('document') && msg.url_midia && (
                                 <a
