@@ -75,3 +75,29 @@ export async function fetchUazapiChats(token: string, offset: number, limit = 50
     pagination?: { limit: number; offset: number; totalRecords: number };
   };
 }
+
+/** Busca uma página de mensagens de um chat na Uazapi */
+export async function fetchUazapiMessages(token: string, chatid: string, offset: number, limit = 50) {
+  const res = await fetch(`${WACLOUD_CONFIG.uazapiBaseUrl}/message/find`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      token,
+    },
+    body: JSON.stringify({ chatid, limit, offset }),
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(`Uazapi message/find falhou (${res.status}): ${JSON.stringify(data)}`);
+  }
+  return data as {
+    messages: any[];
+    hasMore: boolean;
+    limit: number;
+    offset: number;
+    nextOffset: number | null;
+    returnedMessages: number;
+  };
+}

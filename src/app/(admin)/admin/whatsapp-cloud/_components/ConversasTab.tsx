@@ -178,6 +178,37 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
     }
   }
 
+  const [syncingMsgs, setSyncingMsgs] = useState(false)
+  const syncHistorico = async () => {
+    if (!selectedContato) return;
+    setSyncingMsgs(true);
+    try {
+      let offset: number | null = 0;
+      let imported = 0;
+      // wa_chatid usually is phone@s.whatsapp.net for individuals
+      const chatid = selectedContato.telefone_contato.includes('@') ? selectedContato.telefone_contato : `${selectedContato.telefone_contato}@s.whatsapp.net`;
+      
+      while (offset !== null) {
+        const res = await fetch(`/api/wacloud/instances/${instancia.id}/sync-messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chatid, offset }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Erro ao sincronizar mensagens");
+        
+        imported += data.processed || 0;
+        offset = data.next_offset;
+      }
+      alert(`Histórico sincronizado: ${imported} mensagens importadas.`);
+      await fetchMensagens(selectedContato);
+    } catch (err: any) {
+      alert("Erro ao sincronizar: " + err.message);
+    } finally {
+      setSyncingMsgs(false);
+    }
+  }
+
   useEffect(() => { fetchContatos() }, [])
 
   useEffect(() => {
@@ -354,11 +385,13 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
                   </p>
                 </div>
                 <button
-                  onClick={() => fetchMensagens(selectedContato)}
-                  className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-500 transition-colors"
-                  title="Atualizar"
+                  onClick={syncHistorico}
+                  disabled={syncingMsgs}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:text-indigo-600 hover:border-indigo-200 transition-colors disabled:opacity-50"
+                  title="Sincronizar todo o histórico do WhatsApp para este contato"
                 >
-                  <RefreshCcw className="w-4 h-4" />
+                  {syncingMsgs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
+                  {syncingMsgs ? "Baixando..." : "Sincronizar Histórico"}
                 </button>
               </div>
 
