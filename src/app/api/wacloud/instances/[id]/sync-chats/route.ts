@@ -45,6 +45,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         ultimo_timestamp: c.wa_lastMsgTimestamp ? new Date(Number(c.wa_lastMsgTimestamp)).toISOString() : null,
         nao_lidas: c.wa_unreadCount || 0,
         atualizado_em: new Date().toISOString(),
+        whatsapp_labels: Array.isArray(c.wa_label) ? c.wa_label : [],
       }));
 
     if (rows.length > 0) {

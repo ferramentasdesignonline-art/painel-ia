@@ -101,3 +101,19 @@ export async function fetchUazapiMessages(token: string, chatid: string, offset:
     returnedMessages: number;
   };
 }
+export async function fetchUazapiLabels(token: string) {
+  const res = await fetch(`${WACLOUD_CONFIG.uazapiBaseUrl}/labels`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      token,
+    },
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    console.warn(`Uazapi labels falhou (${res.status})`);
+    return [];
+  }
+  const data = await res.json().catch(() => []);
+  return data as any[];
+}

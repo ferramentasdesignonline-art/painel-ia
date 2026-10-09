@@ -54,14 +54,14 @@ export async function GET(request: Request) {
     const { data: importados, error: impError } = instancia
       ? await supabase
           .from('wacloud_contatos')
-          .select('telefone_contato, nome_contato, nome_instancia, ultima_mensagem, ultimo_tipo, ultimo_timestamp, imagem_preview, nao_lidas, is_group, created_at')
+          .select('telefone_contato, nome_contato, nome_instancia, ultima_mensagem, ultimo_tipo, ultimo_timestamp, imagem_preview, nao_lidas, is_group, created_at, whatsapp_labels')
           .eq('nome_instancia', instancia)
           .eq('is_group', false)
           .order('ultimo_timestamp', { ascending: false, nullsFirst: false })
           .limit(5000)
       : await supabase
           .from('wacloud_contatos')
-          .select('telefone_contato, nome_contato, nome_instancia, ultima_mensagem, ultimo_tipo, ultimo_timestamp, imagem_preview, nao_lidas, is_group, created_at')
+          .select('telefone_contato, nome_contato, nome_instancia, ultima_mensagem, ultimo_tipo, ultimo_timestamp, imagem_preview, nao_lidas, is_group, created_at, whatsapp_labels')
           .eq('is_group', false)
           .order('ultimo_timestamp', { ascending: false, nullsFirst: false })
           .limit(5000);
@@ -84,12 +84,14 @@ export async function GET(request: Request) {
           ultimo_timestamp: ts,
           imagem_preview: c.imagem_preview || null,
           nao_lidas: c.nao_lidas || 0,
+          whatsapp_labels: c.whatsapp_labels || [],
         });
       } else {
         // Já existe via mensagens: completa nome/foto/não lidas
         existing.nome_contato = existing.nome_contato || c.nome_contato;
         existing.imagem_preview = c.imagem_preview || null;
         existing.nao_lidas = c.nao_lidas || 0;
+        existing.whatsapp_labels = c.whatsapp_labels || [];
         if (ts && new Date(ts).getTime() > new Date(existing.ultimo_timestamp).getTime()) {
           existing.ultima_mensagem = c.ultima_mensagem || existing.ultima_mensagem;
           existing.ultimo_tipo = c.ultimo_tipo || existing.ultimo_tipo;
@@ -102,7 +104,20 @@ export async function GET(request: Request) {
       (a, b) => new Date(b.ultimo_timestamp).getTime() - new Date(a.ultimo_timestamp).getTime()
     );
 
-    return NextResponse.json({ contatos, total_msgs: data?.length || 0 });
+    let labels = [];
+    if (instancia) {
+      const { data: instData } = await supabase
+        .from('wacloud_instancias')
+        .select('token')
+        .eq('nome_instancia', instancia)
+        .single();
+      if (instData?.token) {
+        const { fetchUazapiLabels } = await import('@/lib/wacloud/uazapi');
+        labels = await fetchUazapiLabels(instData.token);
+      }
+    }
+
+    return NextResponse.json({ contatos, total_msgs: data?.length || 0, labels });
   } catch (err: any) {
     console.error('API conversas GET error:', err);
     return NextResponse.json({ error: err.message || 'Internal Server Error', contatos: [] }, { status: 500 });

@@ -19,6 +19,7 @@ interface Contato {
   ultimo_timestamp: string
   imagem_preview?: string | null
   nao_lidas?: number
+  whatsapp_labels?: string[]
 }
 
 interface Mensagem {
@@ -144,6 +145,7 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
   const [loading, setLoading] = useState(true)
   const [loadingMsgs, setLoadingMsgs] = useState(false)
   const [busca, setBusca] = useState("")
+  const [uazapiLabels, setUazapiLabels] = useState<any[]>([])
   const chatRef = useRef<HTMLDivElement>(null)
 
   const fetchContatos = async () => {
@@ -157,6 +159,9 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
       const lista: Contato[] = data.contatos || []
       setContatos(lista)
       setContatosFiltrados(lista)
+      if (data.labels) {
+        setUazapiLabels(data.labels)
+      }
     } catch (err) {
       console.error('Erro ao buscar contatos', err)
     } finally {
@@ -372,6 +377,26 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
                           {formatTime(contato.ultimo_timestamp)}
                         </span>
                       </div>
+                      
+                      {/* WhatsApp Labels */}
+                      {contato.whatsapp_labels && contato.whatsapp_labels.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-1">
+                          {contato.whatsapp_labels.map(labelId => {
+                            const lbl = uazapiLabels.find(l => String(l.labelid) === String(labelId));
+                            if (!lbl) return null;
+                            return (
+                              <span
+                                key={labelId}
+                                className="text-[9px] px-1.5 py-0.5 rounded text-white font-medium"
+                                style={{ backgroundColor: lbl.colorHex || '#ccc' }}
+                                title={lbl.name}
+                              >
+                                {lbl.name}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                       <div className="flex justify-between items-center">
                         <p className="text-[11px] text-gray-500 truncate pr-2">
                           {getTypeLabel(contato.ultimo_tipo, contato.ultima_mensagem)}
