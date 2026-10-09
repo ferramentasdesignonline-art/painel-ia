@@ -148,9 +148,10 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
   const [uazapiLabels, setUazapiLabels] = useState<any[]>([])
   const chatRef = useRef<HTMLDivElement>(null)
 
-  const fetchContatos = async () => {
+  const [syncProgress, setSyncProgress] = useState<{ imported: number; total: number; label: string } | null>(null)
+
+  const fetchContatosDB = async () => {
     try {
-      // O cache: 'no-store' e o timestamp forçam o navegador a buscar os dados frescos no banco
       const res = await fetch(
         `/api/wacloud/conversas?instancia=${encodeURIComponent(instancia.nome_instancia)}&_t=${Date.now()}`, 
         { cache: 'no-store' }
@@ -162,12 +163,61 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
       if (data.labels) {
         setUazapiLabels(data.labels)
       }
+      return lista
     } catch (err) {
       console.error('Erro ao buscar contatos', err)
-    } finally {
-      setLoading(false)
+      return []
     }
   }
+
+  const syncContatos = async (isFull: boolean) => {
+    setSyncProgress({ imported: 0, total: 0, label: isFull ? 'Sincronizando todo o histórico...' : 'Atualizando conversas...' })
+    try {
+      let offset: number | null = 0;
+      let imported = 0;
+      let total = 0;
+      
+      while (offset !== null) {
+        const res = await fetch(`/api/wacloud/instances/${instancia.id}/sync-chats`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ offset }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || "Erro ao sincronizar")
+        
+        imported += data.processed || 0
+        total = data.total || total
+        setSyncProgress({ imported, total, label: `Sincronizando ${imported} de ${total}...` })
+        
+        if (!isFull) break; // Quick sync (apenas offset 0)
+        offset = data.next_offset
+      }
+    } catch (err) {
+      console.error("Sync error:", err)
+    } finally {
+      setSyncProgress(null)
+      await fetchContatosDB()
+    }
+  }
+
+  useEffect(() => {
+    const loadInitial = async () => {
+      setLoading(true)
+      const lista = await fetchContatosDB()
+      setLoading(false)
+      
+      // Auto-sync
+      if (lista.length === 0) {
+        await syncContatos(true)
+      } else {
+        // roda em background pra não travar a UI
+        syncContatos(false)
+      }
+    }
+    loadInitial()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [syncingMsgs, setSyncingMsgs] = useState(false)
 
@@ -241,7 +291,6 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
     }
   }
 
-  useEffect(() => { fetchContatos() }, [])
 
   useEffect(() => {
     if (!busca.trim()) {
@@ -282,7 +331,7 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
         // Hora de atualizar
         countdownRef.current = 60
         setCountdown(60)
-        fetchContatos()
+        syncContatos(false)
         if (selectedContatoRef.current) {
           fetchMensagens(selectedContatoRef.current)
         }
@@ -314,22 +363,43 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
       <div className="flex flex-1 overflow-hidden rounded-xl border border-gray-200">
         {/* Painel esquerdo */}
         <div className="w-72 flex-shrink-0 border-r border-gray-200 flex flex-col bg-white">
-          <div className="px-3 py-3 border-b border-gray-100 bg-gray-50">
-            <div className="flex items-center justify-between mb-2">
+          <div className="px-3 py-3 border-b border-gray-100 bg-gray-50 flex flex-col gap-2">
+            
+            {/* Título e Botão de Atualizar */}
+            <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Contatos</span>
               <button
                 onClick={() => {
-                  fetchContatos()
+                  syncContatos(false)
                   if (selectedContatoRef.current) fetchMensagens(selectedContatoRef.current)
                   setCountdown(60)
                 }}
-                className="flex items-center gap-1 p-1 hover:bg-gray-200 rounded text-gray-400 transition-colors"
+                disabled={!!syncProgress}
+                className="flex items-center gap-1 p-1 hover:bg-gray-200 rounded text-gray-400 transition-colors disabled:opacity-50"
                 title="Atualizar agora"
               >
                 <span className="text-[10px] font-mono text-gray-400">{countdown}s</span>
-                <RefreshCcw className="w-3.5 h-3.5" />
+                <RefreshCcw className={`w-3.5 h-3.5 ${syncProgress ? 'animate-spin' : ''}`} />
               </button>
             </div>
+
+            {/* Progress Bar (se estiver sincronizando) */}
+            {syncProgress && (
+              <div className="w-full bg-indigo-50 border border-indigo-100 rounded-md p-2">
+                <div className="flex justify-between text-[9px] font-bold text-indigo-700 mb-1.5">
+                  <span className="truncate pr-2">{syncProgress.label}</span>
+                  {syncProgress.total > 0 && <span>{Math.round((syncProgress.imported / syncProgress.total) * 100)}%</span>}
+                </div>
+                <div className="w-full bg-indigo-200 rounded-full h-1">
+                  <div 
+                    className="bg-indigo-600 h-1 rounded-full transition-all duration-300" 
+                    style={{ width: syncProgress.total > 0 ? `${Math.min((syncProgress.imported / syncProgress.total) * 100, 100)}%` : '0%' }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Busca */}
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
               <input
