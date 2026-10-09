@@ -62,6 +62,10 @@ export async function middleware(request: NextRequest) {
 
   const isAuthPage = request.nextUrl.pathname.startsWith('/login')
   
+  if (request.nextUrl.pathname.startsWith('/api/wacloud')) {
+    return response;
+  }
+
   // Log para sabermos o que está acontecendo no terminal
   console.log(`[Middleware] Rota: ${request.nextUrl.pathname} | Logado: ${!!user}`)
 
