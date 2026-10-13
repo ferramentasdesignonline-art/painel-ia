@@ -45,7 +45,7 @@ export default function WhatsappCloudPage() {
         </button>
       </div>
 
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+      <div className={`bg-white border border-gray-100 rounded-2xl shadow-sm ${activeTab === 'conversas' ? 'p-3 sm:p-5' : 'p-6'}`}>
         {activeTab === 'gerenciar' && <GerenciarClientesTab />}
         {activeTab === 'conversas' && <ConversasTab />}
       </div>

@@ -83,6 +83,7 @@ function getAvatarColor(str: string) {
 function SelecionarInstancia({ onSelecionar }: { onSelecionar: (instancia: Instancia) => void }) {
   const [instancias, setInstancias] = useState<Instancia[]>([])
   const [loading, setLoading] = useState(true)
+  const [filtro, setFiltro] = useState('')
 
   useEffect(() => {
     fetch('/api/wacloud/instances')
@@ -92,40 +93,75 @@ function SelecionarInstancia({ onSelecionar }: { onSelecionar: (instancia: Insta
       .finally(() => setLoading(false))
   }, [])
 
+  const filtradas = instancias.filter(i => 
+    i.nome_instancia.toLowerCase().includes(filtro.toLowerCase())
+  )
+
   return (
-    <div className="flex flex-col items-center justify-center h-[calc(100vh-240px)] min-h-[400px]">
+    <div className="flex flex-col py-6 px-2 sm:px-4 max-w-5xl mx-auto w-full">
+      {/* Cabeçalho de Seleção */}
       <div className="text-center mb-8">
-        <Smartphone className="w-12 h-12 text-indigo-500 mx-auto mb-3" />
-        <h3 className="text-xl font-black text-gray-900">Selecione um Cliente</h3>
-        <p className="text-gray-500 text-sm mt-1">Escolha qual instância você quer visualizar as conversas</p>
+        <div className="inline-flex p-3 rounded-2xl bg-indigo-50 text-indigo-600 mb-3">
+          <Smartphone className="w-8 h-8" />
+        </div>
+        <h3 className="text-2xl font-black text-gray-900 tracking-tight">Selecione uma Instância</h3>
+        <p className="text-gray-500 text-sm mt-1 max-w-md mx-auto">
+          Escolha qual cliente ou número você deseja abrir para visualizar e responder as conversas.
+        </p>
+
+        {instancias.length > 4 && (
+          <div className="max-w-xs mx-auto mt-5 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={filtro}
+              onChange={e => setFiltro(e.target.value)}
+              placeholder="Buscar cliente..."
+              className="w-full pl-9 pr-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+            />
+          </div>
+        )}
       </div>
 
       {loading ? (
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+          <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-3" />
+          <p className="text-xs font-medium">Carregando instâncias...</p>
+        </div>
       ) : instancias.length === 0 ? (
-        <div className="text-gray-400 text-center">
-          <p>Nenhuma instância cadastrada.</p>
-          <p className="text-sm mt-1">Crie um cliente na aba "Gerenciar Clientes".</p>
+        <div className="text-gray-400 text-center py-16 bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
+          <Smartphone className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+          <p className="font-semibold text-gray-700">Nenhuma instância cadastrada.</p>
+          <p className="text-xs text-gray-400 mt-1">Crie um cliente na aba "Gerenciar Clientes".</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full max-w-2xl">
-          {instancias.map(inst => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
+          {filtradas.map(inst => (
             <button
               key={inst.id}
               onClick={() => onSelecionar(inst)}
-              className="bg-white border-2 border-gray-200 hover:border-indigo-500 hover:shadow-md rounded-2xl p-5 text-left transition-all group"
+              className="bg-white border border-gray-200/80 hover:border-indigo-500 hover:shadow-lg hover:shadow-indigo-50 rounded-2xl p-5 text-left transition-all duration-200 group flex flex-col justify-between"
             >
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-sm mb-3 ${getAvatarColor(inst.nome_instancia)}`}>
-                {inst.nome_instancia.slice(0, 2).toUpperCase()}
+              <div className="flex items-center justify-between mb-4">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-sm ${getAvatarColor(inst.nome_instancia)}`}>
+                  {inst.nome_instancia.slice(0, 2).toUpperCase()}
+                </div>
+                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                  inst.status === 'conectado' || inst.status === 'criada'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {inst.status === 'conectado' ? 'Online' : inst.status}
+                </span>
               </div>
-              <p className="font-bold text-gray-900 group-hover:text-indigo-700 transition-colors">{inst.nome_instancia}</p>
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full mt-1 inline-block ${
-                inst.status === 'conectado' || inst.status === 'criada'
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-gray-100 text-gray-500'
-              }`}>
-                {inst.status}
-              </span>
+              <div>
+                <p className="font-bold text-gray-900 group-hover:text-indigo-600 transition-colors text-base truncate">
+                  {inst.nome_instancia}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1 group-hover:text-indigo-400 transition-colors">
+                  Clique para abrir conversas &rarr;
+                </p>
+              </div>
             </button>
           ))}
         </div>
@@ -479,25 +515,32 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
   }, []) // Roda só uma vez — refs garantem acesso ao estado mais atual
 
   return (
-    <div className="flex flex-col h-[calc(100vh-240px)] min-h-[500px]">
+    <div className="flex flex-col h-[750px] max-h-[calc(100vh-210px)] min-h-[580px]">
       {/* Barra superior com instância selecionada */}
-      <div className="flex items-center gap-3 mb-3">
-        <button
-          onClick={onVoltar}
-          className="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Trocar cliente
-        </button>
-        <div className="h-5 w-px bg-gray-200" />
-        <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-black ${getAvatarColor(instancia.nome_instancia)}`}>
-          {instancia.nome_instancia.slice(0, 2).toUpperCase()}
+      <div className="flex items-center justify-between pb-3 mb-2 border-b border-gray-100">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onVoltar}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Trocar cliente
+          </button>
+          <div className="h-5 w-px bg-gray-200" />
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-black shadow-sm ${getAvatarColor(instancia.nome_instancia)}`}>
+            {instancia.nome_instancia.slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <span className="font-bold text-gray-900 text-sm block leading-none">{instancia.nome_instancia}</span>
+            <span className="text-[10px] text-emerald-600 font-semibold inline-flex items-center gap-1 mt-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Conectado
+            </span>
+          </div>
         </div>
-        <span className="font-bold text-gray-900">{instancia.nome_instancia}</span>
       </div>
 
       {/* Chat Container */}
-      <div className="flex flex-1 overflow-hidden rounded-xl border border-gray-200">
+      <div className="flex flex-1 overflow-hidden rounded-2xl border border-gray-200/90 shadow-sm bg-white">
         {/* Painel esquerdo */}
         <div className="w-72 flex-shrink-0 border-r border-gray-200 flex flex-col bg-white">
           <div className="px-3 py-3 border-b border-gray-100 bg-gray-50 flex flex-col gap-2">
