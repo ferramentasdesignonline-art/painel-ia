@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Loader2, RefreshCcw, MessageSquare, FileText, Mic, Image, Video, Phone, Search, ChevronLeft, Smartphone, Tag, X, Paperclip, Send } from "lucide-react"
+import { Loader2, RefreshCcw, MessageSquare, FileText, Mic, Image, Video, Phone, Search, ChevronLeft, Smartphone, Tag, X, Paperclip, Send, Edit2, Trash2, Plus, Settings } from "lucide-react"
 
 interface Instancia {
   id: string
@@ -185,6 +185,13 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
   const [showLabelsModal, setShowLabelsModal] = useState(false)
   const [editingLabels, setEditingLabels] = useState<string[]>([])
   const [savingLabels, setSavingLabels] = useState(false)
+  
+  // Modal de Gerenciamento Geral de Etiquetas (Criar / Editar / Deletar)
+  const [showManageLabelsModal, setShowManageLabelsModal] = useState(false)
+  const [editingLabelItem, setEditingLabelItem] = useState<{ labelid: string; name: string; color: number } | null>(null)
+  const [isLabelFormOpen, setIsLabelFormOpen] = useState(false)
+  const [isSavingLabelAction, setIsSavingLabelAction] = useState(false)
+  const [deletingLabelId, setDeletingLabelId] = useState<string | null>(null)
   
   const [msgText, setMsgText] = useState('')
   const [sendingMsg, setSendingMsg] = useState(false)
@@ -398,6 +405,75 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
     }
   }
 
+  // Ações de criação / edição / exclusão de etiquetas na Uazapi
+  const handleSaveLabelDefinition = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLabelItem || !editingLabelItem.name.trim()) return;
+
+    setIsSavingLabelAction(true);
+    try {
+      const res = await fetch(`/api/wacloud/instances/${instancia.id}/labels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          labelid: editingLabelItem.labelid,
+          name: editingLabelItem.name.trim(),
+          color: editingLabelItem.color,
+          delete: false,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao salvar etiqueta');
+
+      if (data.labels) {
+        setUazapiLabels(data.labels);
+      } else {
+        // Recarregar labels
+        const r = await fetch(`/api/wacloud/instances/${instancia.id}/labels`);
+        const d = await r.json();
+        if (d.labels) setUazapiLabels(d.labels);
+      }
+      setIsLabelFormOpen(false);
+      setEditingLabelItem(null);
+    } catch (err: any) {
+      alert('Erro: ' + err.message);
+    } finally {
+      setIsSavingLabelAction(false);
+    }
+  };
+
+  const handleDeleteLabelDefinition = async (labelid: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta etiqueta? Ela será removida de todos os chats no WhatsApp.')) return;
+
+    setDeletingLabelId(labelid);
+    try {
+      const res = await fetch(`/api/wacloud/instances/${instancia.id}/labels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          labelid: String(labelid),
+          delete: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao deletar etiqueta');
+
+      if (data.labels) {
+        setUazapiLabels(data.labels);
+      } else {
+        const r = await fetch(`/api/wacloud/instances/${instancia.id}/labels`);
+        const d = await r.json();
+        if (d.labels) setUazapiLabels(d.labels);
+      }
+      // Se a etiqueta deletada estava em editingLabels, remove
+      setEditingLabels(prev => prev.filter(id => id !== String(labelid)));
+    } catch (err: any) {
+      alert('Erro ao excluir etiqueta: ' + err.message);
+    } finally {
+      setDeletingLabelId(null);
+    }
+  };
+
   const [syncingMsgs, setSyncingMsgs] = useState(false)
 
   const fetchMensagens = async (contato: Contato) => {
@@ -536,6 +612,22 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Conectado
             </span>
           </div>
+        </div>
+
+        {/* Botão de Gerenciar Etiquetas da Instância */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setIsLabelFormOpen(false);
+              setEditingLabelItem(null);
+              setShowManageLabelsModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200/80 hover:bg-indigo-100/80 text-indigo-700 rounded-lg text-xs font-bold transition-all shadow-sm"
+            title="Criar, editar ou excluir etiquetas desta instância"
+          >
+            <Tag className="w-3.5 h-3.5 text-indigo-600" />
+            Gerenciar Etiquetas
+          </button>
         </div>
       </div>
 
@@ -931,6 +1023,215 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
               >
                 {savingLabels ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 Salvar Etiquetas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE GERENCIAMENTO GERAL DE ETIQUETAS (CRIAR / EDITAR / DELETAR) */}
+      {showManageLabelsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-gray-900 flex items-center gap-2 text-base">
+                  <Tag className="w-4 h-4 text-indigo-600" />
+                  Gerenciar Etiquetas do WhatsApp
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Instância: <span className="font-semibold text-gray-600">{instancia.nome_instancia}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowManageLabelsModal(false);
+                  setIsLabelFormOpen(false);
+                  setEditingLabelItem(null);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Formulário de Criar / Editar Etiqueta */}
+            {isLabelFormOpen && editingLabelItem && (
+              <form onSubmit={handleSaveLabelDefinition} className="p-4 bg-indigo-50/60 border-b border-indigo-100 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-indigo-900">
+                    {editingLabelItem.labelid === 'new' ? 'Nova Etiqueta' : 'Editar Etiqueta'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLabelFormOpen(false);
+                      setEditingLabelItem(null);
+                    }}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-600 block mb-1">Nome da Etiqueta</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingLabelItem.name}
+                    onChange={(e) => setEditingLabelItem({ ...editingLabelItem, name: e.target.value })}
+                    placeholder="Ex: Cliente VIP, Resgate, Aguardando..."
+                    className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-600 block mb-1">Escolha uma Cor</label>
+                  <div className="grid grid-cols-10 gap-1.5 p-2 bg-white rounded-lg border border-gray-200">
+                    {[
+                      { id: 0, hex: '#ff9484' },
+                      { id: 1, hex: '#64c4ff' },
+                      { id: 2, hex: '#ffd24c' },
+                      { id: 3, hex: '#dfaef0' },
+                      { id: 4, hex: '#ffae04' },
+                      { id: 5, hex: '#56ccb4' },
+                      { id: 6, hex: '#fed428' },
+                      { id: 7, hex: '#92ceac' },
+                      { id: 8, hex: '#9568cf' },
+                      { id: 9, hex: '#ffc5c7' },
+                      { id: 10, hex: '#01d0e2' },
+                      { id: 11, hex: '#ff8a7a' },
+                      { id: 12, hex: '#77e0b5' },
+                      { id: 13, hex: '#f64847' },
+                      { id: 14, hex: '#5bc0de' },
+                      { id: 15, hex: '#f0ad4e' },
+                      { id: 16, hex: '#d9534f' },
+                      { id: 17, hex: '#b4ebff' },
+                      { id: 18, hex: '#e8a4a4' },
+                      { id: 19, hex: '#b590e0' },
+                    ].map(c => {
+                      const isSelected = editingLabelItem.color === c.id;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setEditingLabelItem({ ...editingLabelItem, color: c.id })}
+                          className={`w-6 h-6 rounded-full transition-transform flex items-center justify-center ${
+                            isSelected ? 'ring-2 ring-indigo-600 scale-110 shadow' : 'hover:scale-105 opacity-85 hover:opacity-100'
+                          }`}
+                          style={{ backgroundColor: c.hex }}
+                          title={`Cor ${c.id}`}
+                        >
+                          {isSelected && <div className="w-2 h-2 rounded-full bg-white shadow-sm" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 mt-1">
+                  <button
+                    type="submit"
+                    disabled={isSavingLabelAction || !editingLabelItem.name.trim()}
+                    className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                  >
+                    {isSavingLabelAction ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                    {editingLabelItem.labelid === 'new' ? 'Criar Etiqueta' : 'Salvar Alteração'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Cabeçalho da Lista + Botão Nova Etiqueta */}
+            <div className="px-5 py-3 bg-gray-50/70 border-b border-gray-100 flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Etiquetas Existentes ({uazapiLabels.length})
+              </span>
+              {!isLabelFormOpen && (
+                <button
+                  onClick={() => {
+                    setEditingLabelItem({ labelid: 'new', name: '', color: 1 });
+                    setIsLabelFormOpen(true);
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-white border border-gray-200 text-indigo-600 hover:border-indigo-300 rounded-lg text-xs font-bold transition-all shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Nova Etiqueta
+                </button>
+              )}
+            </div>
+
+            {/* Lista de Etiquetas Cadastradas */}
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
+              {uazapiLabels.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <Tag className="w-8 h-8 mx-auto mb-2 text-gray-300 opacity-60" />
+                  <p className="text-xs font-medium">Nenhuma etiqueta encontrada na Uazapi.</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Clique em "Nova Etiqueta" acima para criar a primeira.</p>
+                </div>
+              ) : (
+                uazapiLabels.map((lbl) => {
+                  const idStr = String(lbl.labelid || lbl.id);
+                  const isDeleting = deletingLabelId === idStr;
+
+                  return (
+                    <div
+                      key={idStr}
+                      className="flex items-center justify-between p-2.5 bg-white border border-gray-100 hover:border-gray-200 rounded-xl transition-all shadow-xs group"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span
+                          className="w-4 h-4 rounded-full flex-shrink-0 shadow-sm"
+                          style={{ backgroundColor: lbl.colorHex || '#ccc' }}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-gray-800 truncate">{lbl.name}</p>
+                          <span className="text-[10px] text-gray-400 font-mono">ID: {lbl.labelid || idStr}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setEditingLabelItem({
+                              labelid: String(lbl.labelid || idStr),
+                              name: lbl.name,
+                              color: typeof lbl.color === 'number' ? lbl.color : 1,
+                            });
+                            setIsLabelFormOpen(true);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="Editar nome ou cor"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteLabelDefinition(lbl.labelid || idStr)}
+                          disabled={isDeleting}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                          title="Excluir etiqueta do WhatsApp"
+                        >
+                          {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => {
+                  setShowManageLabelsModal(false);
+                  setIsLabelFormOpen(false);
+                  setEditingLabelItem(null);
+                }}
+                className="px-4 py-2 text-xs font-bold text-gray-700 bg-white border border-gray-200 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Fechar
               </button>
             </div>
           </div>
