@@ -479,17 +479,37 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
   const fetchMensagens = async (contato: Contato) => {
     setLoadingMsgs(true)
     try {
-      // Tenta buscar no banco primeiro
+      // 1. Tenta buscar no banco primeiro
       const res = await fetch(
         `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}&_t=${Date.now()}`,
         { cache: 'no-store' }
       )
       const data = await res.json()
       let msgs = data.mensagens || []
-      
       setMensagens(msgs)
 
-      // Se não tiver mensagens no banco, puxa automaticamente da Uazapi
+      // 2. Sincroniza em tempo real as etiquetas e dados do contato diretamente da Uazapi
+      fetch(`/api/wacloud/instances/${instancia.id}/chat-details`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number: contato.telefone_contato }),
+      })
+        .then(r => r.json())
+        .then(d => {
+          if (d.success && Array.isArray(d.whatsapp_labels)) {
+            const updatedContato = {
+              ...contato,
+              whatsapp_labels: d.whatsapp_labels,
+              nome_contato: d.chat?.name || d.chat?.wa_name || contato.nome_contato,
+            };
+            setSelectedContato(prev => prev && prev.telefone_contato === contato.telefone_contato ? updatedContato : prev);
+            setContatos(prev => prev.map(c => c.telefone_contato === contato.telefone_contato ? updatedContato : c));
+            setContatosFiltrados(prev => prev.map(c => c.telefone_contato === contato.telefone_contato ? updatedContato : c));
+          }
+        })
+        .catch(err => console.warn('Erro ao atualizar chat-details:', err));
+
+      // 3. Se não tiver mensagens no banco, puxa automaticamente da Uazapi
       if (msgs.length === 0) {
         await syncMensagens(contato, false)
       }
@@ -775,12 +795,38 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold ${getAvatarColor(selectedContato.telefone_contato)}`}>
                   {getInitials(selectedContato.nome_contato, selectedContato.telefone_contato)}
                 </div>
-                <div className="flex-1">
-                  <p className="font-bold text-gray-900 text-sm">{selectedContato.nome_contato || selectedContato.telefone_contato}</p>
-                  <p className="text-xs text-gray-500 flex items-center gap-1">
-                    <Phone className="w-3 h-3" />
-                    {selectedContato.telefone_contato}
-                  </p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-gray-900 text-sm truncate">{selectedContato.nome_contato || selectedContato.telefone_contato}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                    <p className="text-xs text-gray-500 flex items-center gap-1">
+                      <Phone className="w-3 h-3" />
+                      {selectedContato.telefone_contato}
+                    </p>
+                    {/* Tags ativas do contato no cabeçalho do chat */}
+                    {selectedContato.whatsapp_labels && selectedContato.whatsapp_labels.length > 0 && (
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {selectedContato.whatsapp_labels.map(labelId => {
+                          const lbl = uazapiLabels.find(l => 
+                            String(l.id) === String(labelId) || 
+                            String(l.labelid) === String(labelId) ||
+                            String(labelId).endsWith(`:${l.labelid}`)
+                          );
+                          if (!lbl) return null;
+                          return (
+                            <span
+                              key={labelId}
+                              className="text-[10px] px-2 py-0.5 rounded-full text-white font-semibold shadow-xs"
+                              style={{ backgroundColor: lbl.colorHex || '#ccc' }}
+                            >
+                              {lbl.name}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="flex gap-2">
