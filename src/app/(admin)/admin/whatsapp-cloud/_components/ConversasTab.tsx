@@ -173,7 +173,7 @@ function SelecionarInstancia({ onSelecionar }: { onSelecionar: (instancia: Insta
 // ==========================================
 // PASSO 2 — Chat da Instância Selecionada
 // ==========================================
-export function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar?: () => void }) {
+export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, initialName }: { instancia: Instancia; onVoltar?: () => void; initialPhone?: string; initialText?: string; initialName?: string }) {
   const [contatos, setContatos] = useState<Contato[]>([])
   const [contatosFiltrados, setContatosFiltrados] = useState<Contato[]>([])
   const [selectedContato, setSelectedContato] = useState<Contato | null>(null)
@@ -604,6 +604,22 @@ export function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; o
   useEffect(() => {
     selectedContatoRef.current = selectedContato
   }, [selectedContato])
+
+  // Abre automaticamente uma conversa vinda de outra tela (?tel=...&msg=...)
+  const initialAppliedRef = useRef(false)
+  useEffect(() => {
+    if (initialAppliedRef.current || !initialPhone || loading) return
+    const digits = initialPhone.split('@')[0].replace(/\D/g, '')
+    if (!digits) return
+    initialAppliedRef.current = true
+    const tail = digits.slice(-8)
+    const found = contatos.find(c => c.telefone_contato.split('@')[0].replace(/\D/g, '').endsWith(tail))
+    const alvo = found || ({ telefone_contato: digits, nome_contato: initialName || digits } as any as Contato)
+    setSelectedContato(alvo)
+    fetchMensagens(alvo)
+    if (initialText) setMsgText(initialText)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPhone, loading, contatos])
 
   // Auto-refresh a cada 30 segundos
   useEffect(() => {

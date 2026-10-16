@@ -16,7 +16,7 @@ function normalize(str: string) {
     .toLowerCase()
 }
 
-export default async function WhatsAppWebPage() {
+export default async function WhatsAppWebPage({ searchParams }: { searchParams?: { tel?: string; msg?: string; nome?: string } }) {
   const cookieStore = cookies()
   const supabaseSession = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -104,7 +104,7 @@ export default async function WhatsAppWebPage() {
       </div>
 
       <div className="flex-1 min-h-0 bg-white rounded-2xl border border-gray-200/90 shadow-sm p-3 sm:p-4 overflow-hidden flex flex-col">
-        <ChatInstancia instancia={instance} />
+        <ChatInstancia instancia={instance} initialPhone={searchParams?.tel} initialText={searchParams?.msg} initialName={searchParams?.nome} />
       </div>
     </div>
   )
