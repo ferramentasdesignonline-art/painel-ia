@@ -12,7 +12,10 @@ import {
   RefreshCw,
   Settings,
   Tag,
-  Check
+  Check,
+  ChevronDown,
+  Megaphone,
+  X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -52,6 +55,10 @@ export function KanbanBoard() {
   const [filtroAtivo, setFiltroAtivo] = useState('todos');
   const [canaisFiltro, setCanaisFiltro] = useState<string[]>([]);
   const [tagsFiltro, setTagsFiltro] = useState<string[]>([]);
+  const [canaisMenuAberto, setCanaisMenuAberto] = useState(false);
+  const [tagsMenuAberto, setTagsMenuAberto] = useState(false);
+  const canaisDropdownRef = useRef<HTMLDivElement>(null);
+  const tagsDropdownRef = useRef<HTMLDivElement>(null);
   const [novoLeadAberto, setNovoLeadAberto] = useState(false);
   const [leadSelecionado, setLeadSelecionado] = useState<LeadType | null>(null);
   const [colunaPreId, setColunaPreId] = useState<string | undefined>();
@@ -102,6 +109,20 @@ export function KanbanBoard() {
     const interval = setInterval(() => carregarFunil(true), 120000);
     return () => clearInterval(interval);
   }, [carregarFunil]);
+
+  // Fecha os dropdowns ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (canaisDropdownRef.current && !canaisDropdownRef.current.contains(event.target as Node)) {
+        setCanaisMenuAberto(false);
+      }
+      if (tagsDropdownRef.current && !tagsDropdownRef.current.contains(event.target as Node)) {
+        setTagsMenuAberto(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Toggle multi-select canal
   const toggleCanalFiltro = (canalKey: string) => {
@@ -527,180 +548,12 @@ export function KanbanBoard() {
         </div>
       </div>
 
-      {/* Barra de Filtros por Canal de Atendimento (Multi-Seleção com Checkbox) */}
-      {canaisMetrics.list.length > 0 && (
-        <div className="mx-1 bg-white/90 backdrop-blur-xs rounded-2xl border border-gray-100 p-3 shadow-xs space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-              Canais de Atendimento ({canaisMetrics.total} leads)
-              {canaisFiltro.length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-700">
-                  {canaisFiltro.length} selecionado{canaisFiltro.length > 1 ? 's' : ''}
-                </span>
-              )}
-            </span>
-            {canaisFiltro.length > 0 && (
-              <button
-                onClick={() => setCanaisFiltro([])}
-                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
-              >
-                Limpar canais &times;
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {/* Botão Todos os Canais */}
-            <button
-              onClick={() => setCanaisFiltro([])}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
-                canaisFiltro.length === 0
-                  ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                  : "bg-gray-50/70 border-gray-100 text-gray-600 hover:bg-gray-100/70"
-              )}
-            >
-              <span>Todos os Canais</span>
-              <span className={cn(
-                "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
-                canaisFiltro.length === 0 ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
-              )}>
-                {canaisMetrics.total}
-              </span>
-            </button>
-
-            {/* Checkbox pills individuais por canal */}
-            {canaisMetrics.list.map(c => {
-              const isChecked = canaisFiltro.includes(c.key);
-              return (
-                <button
-                  key={c.key}
-                  onClick={() => toggleCanalFiltro(c.key)}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0 select-none",
-                    isChecked
-                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-300 text-indigo-900 shadow-sm"
-                      : "bg-white border-gray-100 text-gray-600 hover:border-gray-200 hover:bg-gray-50/50"
-                  )}
-                >
-                  {/* Checkbox visual */}
-                  <span
-                    className={cn(
-                      "w-4 h-4 rounded-md flex items-center justify-center border transition-all shrink-0",
-                      isChecked
-                        ? "bg-indigo-600 border-indigo-600 text-white"
-                        : "border-gray-300 bg-white"
-                    )}
-                  >
-                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                  </span>
-
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: c.color || '#6366f1' }}
-                  />
-                  <span className="truncate max-w-[140px]">{c.nome}</span>
-                  <span className={cn(
-                    "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
-                    isChecked ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
-                  )}>
-                    {c.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Barra de Filtros por Etiquetas do WhatsApp & Estágios (Multi-Seleção com Checkbox) */}
-      {tagsDisponiveis.length > 0 && (
-        <div className="mx-1 bg-white/90 backdrop-blur-xs rounded-2xl border border-gray-100 p-2.5 shadow-xs space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-              <Tag className="w-3.5 h-3.5 text-indigo-500" />
-              Etiquetas do WhatsApp & Estágios ({tagsDisponiveis.length} ativas)
-              {tagsFiltro.length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-700">
-                  {tagsFiltro.length} selecionada{tagsFiltro.length > 1 ? 's' : ''}
-                </span>
-              )}
-            </span>
-            {tagsFiltro.length > 0 && (
-              <button
-                onClick={() => setTagsFiltro([])}
-                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
-              >
-                Limpar etiquetas &times;
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {/* Botão Todas as Etiquetas */}
-            <button
-              onClick={() => setTagsFiltro([])}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
-                tagsFiltro.length === 0
-                  ? "bg-slate-800 text-white border-slate-800 shadow-sm"
-                  : "bg-gray-50/70 border-gray-100 text-gray-600 hover:bg-gray-100/70"
-              )}
-            >
-              <span>Todas as Etiquetas</span>
-            </button>
-
-            {/* Checkbox pills de cada Etiqueta */}
-            {tagsDisponiveis.map(t => {
-              const isChecked = tagsFiltro.some(tf => tf.toLowerCase() === t.nome.toLowerCase());
-              const isHex = t.cor?.startsWith('#');
-              return (
-                <button
-                  key={t.nome}
-                  onClick={() => toggleTagFiltro(t.nome)}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0 select-none",
-                    isChecked
-                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-300 text-indigo-900 shadow-sm"
-                      : "bg-white border-gray-100 text-gray-600 hover:border-gray-200 hover:bg-gray-50/50"
-                  )}
-                >
-                  {/* Checkbox visual */}
-                  <span
-                    className={cn(
-                      "w-4 h-4 rounded-md flex items-center justify-center border transition-all shrink-0",
-                      isChecked
-                        ? "bg-indigo-600 border-indigo-600 text-white"
-                        : "border-gray-300 bg-white"
-                    )}
-                  >
-                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                  </span>
-
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: isHex ? t.cor : '#6366f1' }}
-                  />
-                  <span className="truncate max-w-[180px]">{t.nome}</span>
-                  <span className={cn(
-                    "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
-                    isChecked ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
-                  )}>
-                    {t.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Barra de Filtros */}
-      <div className="mx-1 bg-white rounded-[22px] border border-gray-100 p-2.5 flex flex-wrap items-center gap-4 shadow-sm">
-        <div className="flex items-center gap-3">
-          <span className="text-[12px] font-bold text-gray-400 ml-2">Filtrar:</span>
-          <div className="flex items-center gap-1.5">
+      {/* Barra de Ferramentas Minimalista (Filtros, Dropdowns de Canais e Etiquetas, Busca e Ações) */}
+      <div className="mx-1 bg-white rounded-2xl border border-gray-100 p-2.5 flex flex-wrap items-center gap-3 shadow-xs">
+        {/* Filtro Rápido de Período/Origem */}
+        <div className="flex items-center gap-2">
+          <span className="text-[12px] font-bold text-gray-400 ml-1">Filtrar:</span>
+          <div className="flex items-center gap-1">
             {[
               { id: 'todos', label: 'Todos' },
               { id: 'hoje', label: 'Hoje' },
@@ -712,10 +565,10 @@ export function KanbanBoard() {
                 key={f.id}
                 onClick={() => setFiltroAtivo(f.id)}
                 className={cn(
-                  "px-4 py-1.5 rounded-full text-[12px] font-bold transition-all border",
+                  "px-3 py-1 rounded-full text-[11px] font-bold transition-all border",
                   filtroAtivo === f.id 
-                    ? "bg-indigo-50 border-indigo-200 text-indigo-600" 
-                    : "bg-white border-gray-50 text-gray-400 hover:border-gray-100"
+                    ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-2xs" 
+                    : "bg-white border-gray-100 text-gray-400 hover:border-gray-200 hover:text-gray-600"
                 )}
               >
                 {f.label}
@@ -724,33 +577,156 @@ export function KanbanBoard() {
           </div>
         </div>
 
-        {/* Filtro por Etiqueta / Tag */}
-        {tagsDisponiveis.length > 0 && (
-          <div className="flex items-center gap-1.5 bg-gray-50/70 border border-gray-100 rounded-xl px-2.5 h-10">
-            <Tag className="w-3.5 h-3.5 text-gray-400" />
-            <select
-              value={tagsFiltro[0] || ''}
-              onChange={e => {
-                if (e.target.value) setTagsFiltro([e.target.value]);
-                else setTagsFiltro([]);
+        {/* Botão Dropdown Minimalista: Canais de Atendimento */}
+        {canaisMetrics.list.length > 0 && (
+          <div className="relative" ref={canaisDropdownRef}>
+            <button
+              onClick={() => {
+                setCanaisMenuAberto(prev => !prev);
+                setTagsMenuAberto(false);
               }}
-              className="bg-transparent text-xs font-bold text-gray-600 focus:outline-none cursor-pointer max-w-[150px] truncate"
+              className={cn(
+                "flex items-center gap-2 px-3 h-9 rounded-xl border text-xs font-bold transition-all select-none",
+                canaisFiltro.length > 0
+                  ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-xs"
+                  : "bg-gray-50/70 border-gray-100 text-gray-600 hover:bg-gray-100/70 hover:border-gray-200"
+              )}
             >
-              <option value="">Todas as Etiquetas</option>
-              {tagsDisponiveis.map(t => (
-                <option key={t.nome} value={t.nome}>
-                  {t.nome} ({t.count})
-                </option>
-              ))}
-            </select>
-            {tagsFiltro.length > 0 && (
-              <button
-                onClick={() => setTagsFiltro([])}
-                className="text-xs text-gray-400 hover:text-red-500 font-bold ml-1"
-                title="Limpar filtro de etiqueta"
-              >
-                ✕
-              </button>
+              <Megaphone className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Canais</span>
+              {canaisFiltro.length > 0 ? (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-600 text-white">
+                  {canaisFiltro.length}
+                </span>
+              ) : (
+                <span className="text-[11px] text-gray-400 font-normal">({canaisMetrics.list.length})</span>
+              )}
+              <ChevronDown className={cn("w-3.5 h-3.5 text-gray-400 transition-transform", canaisMenuAberto && "rotate-180")} />
+            </button>
+
+            {/* Menu Popover Flutuante de Canais */}
+            {canaisMenuAberto && (
+              <div className="absolute top-full left-0 mt-1.5 w-64 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between px-2 py-1 border-b border-gray-50">
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Canais de Atendimento</span>
+                  {canaisFiltro.length > 0 && (
+                    <button
+                      onClick={() => setCanaisFiltro([])}
+                      className="text-[10px] font-bold text-indigo-600 hover:underline"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-60 overflow-y-auto space-y-1 pr-1 scrollbar-thin">
+                  {canaisMetrics.list.map(c => {
+                    const isChecked = canaisFiltro.includes(c.key);
+                    return (
+                      <div
+                        key={c.key}
+                        onClick={() => toggleCanalFiltro(c.key)}
+                        className={cn(
+                          "flex items-center justify-between p-2 rounded-xl text-xs font-semibold cursor-pointer transition-all select-none",
+                          isChecked ? "bg-indigo-50/80 text-indigo-900" : "hover:bg-gray-50 text-gray-700"
+                        )}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={cn(
+                              "w-4 h-4 rounded-md flex items-center justify-center border transition-all shrink-0",
+                              isChecked ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300 bg-white"
+                            )}
+                          >
+                            {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                          </span>
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.color || '#6366f1' }} />
+                          <span className="truncate">{c.nome}</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-gray-400 ml-2 shrink-0">{c.count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Botão Dropdown Minimalista: Etiquetas do WhatsApp & Estágios */}
+        {tagsDisponiveis.length > 0 && (
+          <div className="relative" ref={tagsDropdownRef}>
+            <button
+              onClick={() => {
+                setTagsMenuAberto(prev => !prev);
+                setCanaisMenuAberto(false);
+              }}
+              className={cn(
+                "flex items-center gap-2 px-3 h-9 rounded-xl border text-xs font-bold transition-all select-none",
+                tagsFiltro.length > 0
+                  ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-xs"
+                  : "bg-gray-50/70 border-gray-100 text-gray-600 hover:bg-gray-100/70 hover:border-gray-200"
+              )}
+            >
+              <Tag className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Etiquetas</span>
+              {tagsFiltro.length > 0 ? (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-600 text-white">
+                  {tagsFiltro.length}
+                </span>
+              ) : (
+                <span className="text-[11px] text-gray-400 font-normal">({tagsDisponiveis.length})</span>
+              )}
+              <ChevronDown className={cn("w-3.5 h-3.5 text-gray-400 transition-transform", tagsMenuAberto && "rotate-180")} />
+            </button>
+
+            {/* Menu Popover Flutuante de Etiquetas */}
+            {tagsMenuAberto && (
+              <div className="absolute top-full left-0 mt-1.5 w-72 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between px-2 py-1 border-b border-gray-50">
+                  <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Etiquetas & Estágios</span>
+                  {tagsFiltro.length > 0 && (
+                    <button
+                      onClick={() => setTagsFiltro([])}
+                      className="text-[10px] font-bold text-indigo-600 hover:underline"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-72 overflow-y-auto space-y-1 pr-1 scrollbar-thin">
+                  {tagsDisponiveis.map(t => {
+                    const isChecked = tagsFiltro.some(tf => tf.toLowerCase() === t.nome.toLowerCase());
+                    const isHex = t.cor?.startsWith('#');
+                    return (
+                      <div
+                        key={t.nome}
+                        onClick={() => toggleTagFiltro(t.nome)}
+                        className={cn(
+                          "flex items-center justify-between p-2 rounded-xl text-xs font-semibold cursor-pointer transition-all select-none",
+                          isChecked ? "bg-indigo-50/80 text-indigo-900" : "hover:bg-gray-50 text-gray-700"
+                        )}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={cn(
+                              "w-4 h-4 rounded-md flex items-center justify-center border transition-all shrink-0",
+                              isChecked ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300 bg-white"
+                            )}
+                          >
+                            {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                          </span>
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: isHex ? t.cor : '#6366f1' }}
+                          />
+                          <span className="truncate">{t.nome}</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-gray-400 ml-2 shrink-0">{t.count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </div>
         )}
