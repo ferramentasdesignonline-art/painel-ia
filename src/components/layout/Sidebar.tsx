@@ -2,11 +2,12 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Users, Calendar, Car, ShieldBan, LogOut, Trophy, MessageCircle, MessageSquare } from "lucide-react"
+import { Sparkles, LayoutDashboard, Users, Calendar, Car, ShieldBan, LogOut, Trophy, MessageCircle, MessageSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { logout } from "@/app/(auth)/logout/actions"
 
 const navigation = [
+  { name: "Análise com IA", href: "/analise-ia", icon: Sparkles, badge: "Novo" },
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Leads", href: "/leads", icon: Users },
   { name: "Funil de Leads", href: "/funil", icon: Trophy },
@@ -51,7 +52,12 @@ export function Sidebar({ className }: { className?: string }) {
                     isActive ? "text-indigo-400" : "text-gray-500 group-hover:text-gray-300"
                   )}
                 />
-                {item.name}
+                <span className="flex-1">{item.name}</span>
+                {item.badge && (
+                  <span className="ml-auto text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xs">
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             )
           })}
