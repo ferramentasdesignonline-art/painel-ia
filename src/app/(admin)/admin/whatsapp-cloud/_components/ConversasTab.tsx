@@ -625,7 +625,7 @@ export function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; o
   }, []) // Roda só uma vez — refs garantem acesso ao estado mais atual
 
   return (
-    <div className="flex flex-col h-[750px] max-h-[calc(100vh-210px)] min-h-[580px]">
+    <div className="flex flex-col h-full min-h-0 flex-1">
       {/* Barra superior com instância selecionada */}
       <div className="flex items-center justify-between pb-3 mb-2 border-b border-gray-100">
         <div className="flex items-center gap-3">

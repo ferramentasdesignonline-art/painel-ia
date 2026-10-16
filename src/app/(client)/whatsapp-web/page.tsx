@@ -93,17 +93,17 @@ export default async function WhatsAppWebPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)]">
-      <div className="flex items-center justify-between mb-4">
+    <div className="flex flex-col flex-1 min-h-[620px] h-[calc(100vh-125px)] pb-2">
+      <div className="flex items-center justify-between mb-3 shrink-0">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">WhatsApp Web</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <h1 className="text-xl font-black text-gray-900 tracking-tight">WhatsApp Web</h1>
+          <p className="text-xs text-gray-500">
             Gerencie conversas em tempo real, responda clientes, visualize e aplique etiquetas.
           </p>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 bg-white rounded-2xl border border-gray-200/90 shadow-sm p-4 overflow-hidden">
+      <div className="flex-1 min-h-0 bg-white rounded-2xl border border-gray-200/90 shadow-sm p-3 sm:p-4 overflow-hidden flex flex-col">
         <ChatInstancia instancia={instance} />
       </div>
     </div>
