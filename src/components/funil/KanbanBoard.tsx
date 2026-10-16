@@ -729,8 +729,11 @@ export function KanbanBoard() {
           <div className="flex items-center gap-1.5 bg-gray-50/70 border border-gray-100 rounded-xl px-2.5 h-10">
             <Tag className="w-3.5 h-3.5 text-gray-400" />
             <select
-              value={tagFiltro || ''}
-              onChange={e => setTagFiltro(e.target.value || null)}
+              value={tagsFiltro[0] || ''}
+              onChange={e => {
+                if (e.target.value) setTagsFiltro([e.target.value]);
+                else setTagsFiltro([]);
+              }}
               className="bg-transparent text-xs font-bold text-gray-600 focus:outline-none cursor-pointer max-w-[150px] truncate"
             >
               <option value="">Todas as Etiquetas</option>
@@ -740,9 +743,9 @@ export function KanbanBoard() {
                 </option>
               ))}
             </select>
-            {tagFiltro && (
+            {tagsFiltro.length > 0 && (
               <button
-                onClick={() => setTagFiltro(null)}
+                onClick={() => setTagsFiltro([])}
                 className="text-xs text-gray-400 hover:text-red-500 font-bold ml-1"
                 title="Limpar filtro de etiqueta"
               >
