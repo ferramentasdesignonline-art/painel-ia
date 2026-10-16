@@ -132,10 +132,18 @@ export function LeadCard({ lead, onClick, formatarTelefone, metaFollowup, nomeEt
         </div>
 
         <div className="flex-1 min-w-0 flex flex-col gap-1">
-          {/* Nome */}
-          <h4 className="text-[14px] font-bold text-gray-800 truncate leading-tight pr-5">
-            {lead.nome || 'Visitante'}
-          </h4>
+          {/* Nome e Telefone lado a lado */}
+          <div className="flex items-center justify-between gap-2 pr-1">
+            <h4 className="text-[14px] font-bold text-gray-800 truncate leading-tight" title={lead.nome || 'Visitante'}>
+              {lead.nome || 'Visitante'}
+            </h4>
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 border border-gray-100 shrink-0">
+              <Phone className="w-2.5 h-2.5 text-gray-400" />
+              <span className="text-[10px] font-bold text-gray-600 tracking-tighter">
+                {formatarTelefone(lead.telefone)}
+              </span>
+            </div>
+          </div>
 
           {/* Carro */}
           <div className="flex items-center gap-1.5 text-gray-500">
@@ -145,12 +153,12 @@ export function LeadCard({ lead, onClick, formatarTelefone, metaFollowup, nomeEt
             </span>
           </div>
 
-          {/* Pills Labels & Tags */}
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
+          {/* Pills Labels & Todas as Etiquetas */}
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             {/* Canal de Atendimento */}
             {lead.canal_origem && (
               <div 
-                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight shadow-2xs border"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight shadow-2xs border shrink-0"
                 style={{
                   backgroundColor: lead.canal_color ? `${lead.canal_color}18` : '#f3f4f6',
                   color: lead.canal_color || '#4b5563',
@@ -164,31 +172,32 @@ export function LeadCard({ lead, onClick, formatarTelefone, metaFollowup, nomeEt
             )}
 
             {lead.bloqueado && (
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-50 border border-red-100">
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-50 border border-red-100 shrink-0">
                 <ShieldBan className="w-2.5 h-2.5 text-red-600" />
                 <span className="text-[10px] font-bold text-red-600 uppercase tracking-tighter">Humano</span>
               </div>
             )}
             {lead.origem === 'ia' && !lead.bloqueado && (
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100/50">
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100/50 shrink-0">
                 <BotIcon className="w-2.5 h-2.5 text-indigo-500" />
                 <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-tighter">IA ativa</span>
               </div>
             )}
             {lead.origem === 'manual' && (
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-100/50">
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-100/50 shrink-0">
                 <Users className="w-2.5 h-2.5 text-blue-500" />
                 <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter">Manual</span>
               </div>
             )}
-            {/* Tags e Etiquetas do WhatsApp */}
-            {lead.tags && lead.tags.slice(0, 3).map(tag => {
+
+            {/* Todas as Etiquetas do WhatsApp e CRM do Lead */}
+            {lead.tags && lead.tags.map(tag => {
               const isHex = tag.cor && tag.cor.startsWith('#');
               return (
                 <div 
                   key={tag.id} 
                   className={cn(
-                    "flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight border",
+                    "flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight border shrink-0",
                     !isHex && (tag.cor || 'bg-gray-50 border-gray-100 text-gray-600')
                   )}
                   style={isHex ? {
@@ -199,21 +208,10 @@ export function LeadCard({ lead, onClick, formatarTelefone, metaFollowup, nomeEt
                   title={tag.nome}
                 >
                   {isHex && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tag.cor }} />}
-                  <span className="truncate max-w-[120px]">{tag.nome}</span>
+                  <span className="truncate max-w-[140px]">{tag.nome}</span>
                 </div>
               );
             })}
-            {lead.tags && lead.tags.length > 3 && (
-              <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-md" title={lead.tags.slice(3).map(t => t.nome).join(', ')}>
-                +{lead.tags.length - 3}
-              </span>
-            )}
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 border border-gray-100">
-              <Phone className="w-2.5 h-2.5 text-gray-400" />
-              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">
-                {formatarTelefone(lead.telefone)}
-              </span>
-            </div>
           </div>
 
           {/* Barra de Progresso de Follow-up */}

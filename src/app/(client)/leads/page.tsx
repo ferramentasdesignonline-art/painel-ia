@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Eye, Plus, ArrowUpDown, Filter, ShieldBan, Megaphone, Tag, MessageSquare, ExternalLink, Calendar } from "lucide-react"
+import { Search, Eye, Plus, ArrowUpDown, Filter, ShieldBan, Megaphone, Tag, MessageSquare, ExternalLink, Calendar, Check } from "lucide-react"
 import { LeadDrawer, LeadType } from "@/components/leads/LeadDrawer"
 import { AddLeadModal } from "@/components/leads/AddLeadModal"
 import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
@@ -43,14 +43,31 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
-  const [filterCanal, setFilterCanal] = useState('')
-  const [filterTag, setFilterTag] = useState('')
+  const [filterCanais, setFilterCanais] = useState<string[]>([])
+  const [filterTags, setFilterTags] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<'ultima_mensagem' | 'created_at'>('ultima_mensagem')
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
   const [filterDataInicio, setFilterDataInicio] = useState('')
   const [filterDataFim, setFilterDataFim] = useState('')
 
   useEffect(() => { fetchLeads() }, [])
+
+  // Toggle multi-select canal
+  const toggleCanal = (canalKey: string) => {
+    setFilterCanais(prev =>
+      prev.includes(canalKey) ? prev.filter(k => k !== canalKey) : [...prev, canalKey]
+    );
+  };
+
+  // Toggle multi-select tag
+  const toggleTag = (tagNome: string) => {
+    const lower = tagNome.toLowerCase();
+    setFilterTags(prev =>
+      prev.some(t => t.toLowerCase() === lower)
+        ? prev.filter(t => t.toLowerCase() !== lower)
+        : [...prev, tagNome]
+    );
+  };
 
   const formatarTelefone = (tel?: string | null) => {
     if (!tel) return '-';
@@ -185,9 +202,13 @@ export default function LeadsPage() {
 
       const matchStatus = !filterStatus || getStageKey(l) === filterStatus;
 
-      const matchCanal = !filterCanal || (l.canal_origem || 'desconhecido') === filterCanal;
+      // Multi-seleção de canais
+      const matchCanal = filterCanais.length === 0 || filterCanais.includes(l.canal_origem || 'desconhecido');
 
-      const matchTag = !filterTag || (l.tags || []).some((t: any) => t.nome.toLowerCase() === filterTag.toLowerCase());
+      // Multi-seleção de tags
+      const matchTag = filterTags.length === 0 || (l.tags || []).some((t: any) =>
+        filterTags.some(ft => ft.toLowerCase() === t.nome.toLowerCase())
+      );
 
       const matchData = (() => {
         const d = new Date(sortBy === 'ultima_mensagem' ? (l.ultima_mensagem || l.created_at) : l.created_at);
@@ -211,7 +232,7 @@ export default function LeadsPage() {
     });
 
     return result;
-  }, [leads, search, filterStatus, filterCanal, filterTag, filterDataInicio, filterDataFim, sortBy, sortDir]);
+  }, [leads, search, filterStatus, filterCanais, filterTags, filterDataInicio, filterDataFim, sortBy, sortDir]);
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 font-poppins pb-10">
@@ -236,29 +257,34 @@ export default function LeadsPage() {
       </div>
 
       {/* Filtros */}
-      {/* Barra de Seleção Rápida por Canal de Atendimento */}
+      {/* Barra de Seleção Rápida por Canal de Atendimento (Multi-Seleção com Checkbox) */}
       {canaisDisponiveis.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 p-3 shadow-xs space-y-2">
           <div className="flex items-center justify-between px-1">
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
               <Megaphone className="w-3.5 h-3.5 text-indigo-500" />
               Filtrar por Canal de Entrada
+              {filterCanais.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-700">
+                  {filterCanais.length} selecionado{filterCanais.length > 1 ? 's' : ''}
+                </span>
+              )}
             </span>
-            {filterCanal && (
+            {filterCanais.length > 0 && (
               <button
-                onClick={() => setFilterCanal('')}
+                onClick={() => setFilterCanais([])}
                 className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
               >
-                Limpar canal &times;
+                Limpar canais &times;
               </button>
             )}
           </div>
           <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
             <button
-              onClick={() => setFilterCanal('')}
+              onClick={() => setFilterCanais([])}
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
-                !filterCanal
+                filterCanais.length === 0
                   ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
                   : "bg-gray-50/70 border-gray-100 text-gray-600 hover:bg-gray-100/70"
               )}
@@ -266,29 +292,41 @@ export default function LeadsPage() {
               <span>Todos os Canais</span>
               <span className={cn(
                 "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
-                !filterCanal ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
+                filterCanais.length === 0 ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
               )}>
                 {leads.length}
               </span>
             </button>
             {canaisDisponiveis.map(c => {
-              const isSelected = filterCanal === c.key;
+              const isChecked = filterCanais.includes(c.key);
               return (
                 <button
                   key={c.key}
-                  onClick={() => setFilterCanal(isSelected ? '' : c.key)}
+                  onClick={() => toggleCanal(c.key)}
                   className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
-                    isSelected
-                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-200 text-indigo-900 shadow-sm"
+                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0 select-none",
+                    isChecked
+                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-300 text-indigo-900 shadow-sm"
                       : "bg-white border-gray-100 text-gray-600 hover:border-gray-200 hover:bg-gray-50/50"
                   )}
                 >
+                  {/* Checkbox visual */}
+                  <span
+                    className={cn(
+                      "w-4 h-4 rounded-md flex items-center justify-center border transition-all shrink-0",
+                      isChecked
+                        ? "bg-indigo-600 border-indigo-600 text-white"
+                        : "border-gray-300 bg-white"
+                    )}
+                  >
+                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                  </span>
+
                   <span className="w-2 h-2 rounded-full shrink-0 bg-indigo-500" />
                   <span className="truncate max-w-[140px]">{c.label}</span>
                   <span className={cn(
                     "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
-                    isSelected ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
+                    isChecked ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
                   )}>
                     {c.count}
                   </span>
@@ -299,29 +337,34 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {/* Barra de Seleção Rápida por Etiquetas / Estágios */}
+      {/* Barra de Seleção Rápida por Etiquetas / Estágios (Multi-Seleção com Checkbox) */}
       {tagsDisponiveis.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 p-3 shadow-xs space-y-2">
           <div className="flex items-center justify-between px-1">
-            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
               <Tag className="w-3.5 h-3.5 text-indigo-500" />
               Filtrar por Etiquetas do WhatsApp & Estágios
+              {filterTags.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-700">
+                  {filterTags.length} selecionada{filterTags.length > 1 ? 's' : ''}
+                </span>
+              )}
             </span>
-            {filterTag && (
+            {filterTags.length > 0 && (
               <button
-                onClick={() => setFilterTag('')}
+                onClick={() => setFilterTags([])}
                 className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
               >
-                Limpar etiqueta &times;
+                Limpar etiquetas &times;
               </button>
             )}
           </div>
           <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
             <button
-              onClick={() => setFilterTag('')}
+              onClick={() => setFilterTags([])}
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
-                !filterTag
+                filterTags.length === 0
                   ? "bg-slate-800 text-white border-slate-800 shadow-sm"
                   : "bg-gray-50/70 border-gray-100 text-gray-600 hover:bg-gray-100/70"
               )}
@@ -329,23 +372,35 @@ export default function LeadsPage() {
               <span>Todas as Etiquetas</span>
             </button>
             {tagsDisponiveis.map(t => {
-              const isSelected = filterTag.toLowerCase() === t.nome.toLowerCase();
+              const isChecked = filterTags.some(ft => ft.toLowerCase() === t.nome.toLowerCase());
               return (
                 <button
                   key={t.nome}
-                  onClick={() => setFilterTag(isSelected ? '' : t.nome)}
+                  onClick={() => toggleTag(t.nome)}
                   className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
-                    isSelected
-                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-200 text-indigo-900 shadow-sm"
+                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0 select-none",
+                    isChecked
+                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-300 text-indigo-900 shadow-sm"
                       : "bg-white border-gray-100 text-gray-600 hover:border-gray-200 hover:bg-gray-50/50"
                   )}
                 >
+                  {/* Checkbox visual */}
+                  <span
+                    className={cn(
+                      "w-4 h-4 rounded-md flex items-center justify-center border transition-all shrink-0",
+                      isChecked
+                        ? "bg-indigo-600 border-indigo-600 text-white"
+                        : "border-gray-300 bg-white"
+                    )}
+                  >
+                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                  </span>
+
                   <span className="w-2 h-2 rounded-full shrink-0 bg-indigo-500" />
                   <span className="truncate max-w-[170px]">{t.nome}</span>
                   <span className={cn(
                     "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
-                    isSelected ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
+                    isChecked ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
                   )}>
                     {t.count}
                   </span>

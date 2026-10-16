@@ -11,7 +11,8 @@ import {
   Search, 
   RefreshCw,
   Settings,
-  Tag
+  Tag,
+  Check
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -49,8 +50,8 @@ export function KanbanBoard() {
   const [dataFim, setDataFim] = useState('');
   const [busca, setBusca] = useState('');
   const [filtroAtivo, setFiltroAtivo] = useState('todos');
-  const [canalFiltro, setCanalFiltro] = useState<string | null>(null);
-  const [tagFiltro, setTagFiltro] = useState<string | null>(null);
+  const [canaisFiltro, setCanaisFiltro] = useState<string[]>([]);
+  const [tagsFiltro, setTagsFiltro] = useState<string[]>([]);
   const [novoLeadAberto, setNovoLeadAberto] = useState(false);
   const [leadSelecionado, setLeadSelecionado] = useState<LeadType | null>(null);
   const [colunaPreId, setColunaPreId] = useState<string | undefined>();
@@ -101,6 +102,23 @@ export function KanbanBoard() {
     const interval = setInterval(() => carregarFunil(true), 120000);
     return () => clearInterval(interval);
   }, [carregarFunil]);
+
+  // Toggle multi-select canal
+  const toggleCanalFiltro = (canalKey: string) => {
+    setCanaisFiltro(prev => 
+      prev.includes(canalKey) ? prev.filter(k => k !== canalKey) : [...prev, canalKey]
+    );
+  };
+
+  // Toggle multi-select tag
+  const toggleTagFiltro = (tagNome: string) => {
+    const lower = tagNome.toLowerCase();
+    setTagsFiltro(prev =>
+      prev.some(t => t.toLowerCase() === lower)
+        ? prev.filter(t => t.toLowerCase() !== lower)
+        : [...prev, tagNome]
+    );
+  };
 
   // Dado um ID (lead ou coluna), retorna o ID da coluna que o contém
   const findContainer = useCallback((id: UniqueIdentifier): string | undefined => {
@@ -419,14 +437,21 @@ export function KanbanBoard() {
                              lead.veiculo_interessado?.toLowerCase().includes(busca.toLowerCase()));
         if (!matchesBusca) return false;
 
-        // Filtro por Canal de Atendimento clicado no topo
-        if (canalFiltro && (lead.canal_origem || 'desconhecido') !== canalFiltro) {
-          return false;
+        // Filtro por Canais de Atendimento (se houver algum marcado, deve pertencer a um deles)
+        if (canaisFiltro.length > 0) {
+          const leadCanal = lead.canal_origem || 'desconhecido';
+          if (!canaisFiltro.includes(leadCanal)) {
+            return false;
+          }
         }
 
-        // Filtro por Etiqueta / Tag selecionada
-        if (tagFiltro && !(lead.tags || []).some(t => t.nome.toLowerCase() === tagFiltro.toLowerCase())) {
-          return false;
+        // Filtro por Etiquetas / Tags (se houver alguma marcada, o lead deve ter pelo menos uma das selecionadas)
+        if (tagsFiltro.length > 0) {
+          const leadTagNames = (lead.tags || []).map((t: any) => t.nome.toLowerCase());
+          const matchQualquerTag = tagsFiltro.some(tf => leadTagNames.includes(tf.toLowerCase()));
+          if (!matchQualquerTag) {
+            return false;
+          }
         }
 
         if (filtroAtivo === 'todos') return true;
@@ -447,7 +472,7 @@ export function KanbanBoard() {
         return true;
       })
     }));
-  }, [colunas, busca, filtroAtivo, canalFiltro, tagFiltro]);
+  }, [colunas, busca, filtroAtivo, canaisFiltro, tagsFiltro]);
 
   return (
     <div className="flex flex-col flex-1 h-[calc(100vh-190px)] min-h-[550px] space-y-4">
@@ -502,31 +527,36 @@ export function KanbanBoard() {
         </div>
       </div>
 
-      {/* Barra de Métricas por Canal de Atendimento */}
+      {/* Barra de Filtros por Canal de Atendimento (Multi-Seleção com Checkbox) */}
       {canaisMetrics.list.length > 0 && (
-        <div className="mx-1 bg-white/90 backdrop-blur-xs rounded-2xl border border-gray-100 p-3 shadow-xs">
-          <div className="flex items-center justify-between mb-2 px-1">
+        <div className="mx-1 bg-white/90 backdrop-blur-xs rounded-2xl border border-gray-100 p-3 shadow-xs space-y-2">
+          <div className="flex items-center justify-between px-1">
             <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
               Canais de Atendimento ({canaisMetrics.total} leads)
+              {canaisFiltro.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-700">
+                  {canaisFiltro.length} selecionado{canaisFiltro.length > 1 ? 's' : ''}
+                </span>
+              )}
             </span>
-            {canalFiltro && (
+            {canaisFiltro.length > 0 && (
               <button
-                onClick={() => setCanalFiltro(null)}
+                onClick={() => setCanaisFiltro([])}
                 className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
               >
-                Limpar filtro de canal &times;
+                Limpar canais &times;
               </button>
             )}
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {/* Botão Todos */}
+            {/* Botão Todos os Canais */}
             <button
-              onClick={() => setCanalFiltro(null)}
+              onClick={() => setCanaisFiltro([])}
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
-                !canalFiltro
+                canaisFiltro.length === 0
                   ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
                   : "bg-gray-50/70 border-gray-100 text-gray-600 hover:bg-gray-100/70"
               )}
@@ -534,26 +564,38 @@ export function KanbanBoard() {
               <span>Todos os Canais</span>
               <span className={cn(
                 "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
-                !canalFiltro ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
+                canaisFiltro.length === 0 ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
               )}>
                 {canaisMetrics.total}
               </span>
             </button>
 
-            {/* Botões individuais por canal */}
+            {/* Checkbox pills individuais por canal */}
             {canaisMetrics.list.map(c => {
-              const isSelected = canalFiltro === c.key;
+              const isChecked = canaisFiltro.includes(c.key);
               return (
                 <button
                   key={c.key}
-                  onClick={() => setCanalFiltro(isSelected ? null : c.key)}
+                  onClick={() => toggleCanalFiltro(c.key)}
                   className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
-                    isSelected
-                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-200 text-indigo-900 shadow-sm"
+                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0 select-none",
+                    isChecked
+                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-300 text-indigo-900 shadow-sm"
                       : "bg-white border-gray-100 text-gray-600 hover:border-gray-200 hover:bg-gray-50/50"
                   )}
                 >
+                  {/* Checkbox visual */}
+                  <span
+                    className={cn(
+                      "w-4 h-4 rounded-md flex items-center justify-center border transition-all shrink-0",
+                      isChecked
+                        ? "bg-indigo-600 border-indigo-600 text-white"
+                        : "border-gray-300 bg-white"
+                    )}
+                  >
+                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                  </span>
+
                   <span
                     className="w-2 h-2 rounded-full shrink-0"
                     style={{ backgroundColor: c.color || '#6366f1' }}
@@ -561,7 +603,7 @@ export function KanbanBoard() {
                   <span className="truncate max-w-[140px]">{c.nome}</span>
                   <span className={cn(
                     "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
-                    isSelected ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
+                    isChecked ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
                   )}>
                     {c.count}
                   </span>
@@ -572,20 +614,25 @@ export function KanbanBoard() {
         </div>
       )}
 
-      {/* Barra de Filtros por Etiquetas do WhatsApp & Estágios */}
+      {/* Barra de Filtros por Etiquetas do WhatsApp & Estágios (Multi-Seleção com Checkbox) */}
       {tagsDisponiveis.length > 0 && (
-        <div className="mx-1 bg-white/90 backdrop-blur-xs rounded-2xl border border-gray-100 p-2.5 shadow-xs">
-          <div className="flex items-center justify-between mb-2 px-1">
+        <div className="mx-1 bg-white/90 backdrop-blur-xs rounded-2xl border border-gray-100 p-2.5 shadow-xs space-y-2">
+          <div className="flex items-center justify-between px-1">
             <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
               <Tag className="w-3.5 h-3.5 text-indigo-500" />
               Etiquetas do WhatsApp & Estágios ({tagsDisponiveis.length} ativas)
+              {tagsFiltro.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-700">
+                  {tagsFiltro.length} selecionada{tagsFiltro.length > 1 ? 's' : ''}
+                </span>
+              )}
             </span>
-            {tagFiltro && (
+            {tagsFiltro.length > 0 && (
               <button
-                onClick={() => setTagFiltro(null)}
+                onClick={() => setTagsFiltro([])}
                 className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
               >
-                Limpar filtro de etiqueta &times;
+                Limpar etiquetas &times;
               </button>
             )}
           </div>
@@ -593,10 +640,10 @@ export function KanbanBoard() {
           <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
             {/* Botão Todas as Etiquetas */}
             <button
-              onClick={() => setTagFiltro(null)}
+              onClick={() => setTagsFiltro([])}
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
-                !tagFiltro
+                tagsFiltro.length === 0
                   ? "bg-slate-800 text-white border-slate-800 shadow-sm"
                   : "bg-gray-50/70 border-gray-100 text-gray-600 hover:bg-gray-100/70"
               )}
@@ -604,21 +651,33 @@ export function KanbanBoard() {
               <span>Todas as Etiquetas</span>
             </button>
 
-            {/* Pílulas de cada Etiqueta com contagem e cores reais */}
+            {/* Checkbox pills de cada Etiqueta */}
             {tagsDisponiveis.map(t => {
-              const isSelected = tagFiltro?.toLowerCase() === t.nome.toLowerCase();
+              const isChecked = tagsFiltro.some(tf => tf.toLowerCase() === t.nome.toLowerCase());
               const isHex = t.cor?.startsWith('#');
               return (
                 <button
                   key={t.nome}
-                  onClick={() => setTagFiltro(isSelected ? null : t.nome)}
+                  onClick={() => toggleTagFiltro(t.nome)}
                   className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
-                    isSelected
-                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-200 text-indigo-900 shadow-sm"
+                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0 select-none",
+                    isChecked
+                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-300 text-indigo-900 shadow-sm"
                       : "bg-white border-gray-100 text-gray-600 hover:border-gray-200 hover:bg-gray-50/50"
                   )}
                 >
+                  {/* Checkbox visual */}
+                  <span
+                    className={cn(
+                      "w-4 h-4 rounded-md flex items-center justify-center border transition-all shrink-0",
+                      isChecked
+                        ? "bg-indigo-600 border-indigo-600 text-white"
+                        : "border-gray-300 bg-white"
+                    )}
+                  >
+                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                  </span>
+
                   <span
                     className="w-2 h-2 rounded-full shrink-0"
                     style={{ backgroundColor: isHex ? t.cor : '#6366f1' }}
@@ -626,7 +685,7 @@ export function KanbanBoard() {
                   <span className="truncate max-w-[180px]">{t.nome}</span>
                   <span className={cn(
                     "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
-                    isSelected ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
+                    isChecked ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
                   )}>
                     {t.count}
                   </span>
