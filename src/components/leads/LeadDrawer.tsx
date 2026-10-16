@@ -319,7 +319,14 @@ export function LeadDrawer({ lead, isOpen, onClose }: LeadDrawerProps) {
                 </Button>
               </div>
               <div className="flex-1 overflow-hidden">
-                <LeadChat messages={messages} />
+                <LeadChat
+                  messages={messages}
+                  telefone={lead.telefone}
+                  onMessageSent={() => {
+                    lead.is_blocked = true;
+                    fetchChat();
+                  }}
+                />
               </div>
             </div>
           </TabsContent>

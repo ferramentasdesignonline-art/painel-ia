@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
+import { Paperclip, Send, Loader2, FileText, Image as ImageIcon, Music } from "lucide-react"
 
 export type ChatMessage = {
   id: string
@@ -15,10 +16,17 @@ export type ChatMessage = {
 
 type LeadChatProps = {
   messages: ChatMessage[]
+  telefone?: string
+  onMessageSent?: () => void
 }
 
-export function LeadChat({ messages }: LeadChatProps) {
+export function LeadChat({ messages, telefone, onMessageSent }: LeadChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [msgText, setMsgText] = useState("")
+  const [sending, setSending] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
 
   // Scroll para o fundo quando novas mensagens chegam
   useEffect(() => {
@@ -58,18 +66,120 @@ export function LeadChat({ messages }: LeadChatProps) {
     
     return clean.split(urlRegex).map((part, i) => {
       if (part.match(urlRegex)) {
-        // Se for imagem (por extensão ou link conhecido do blob)
-        if (part.match(/\.(jpeg|jpg|gif|png|webp)/i) || part.includes('blob.core.windows.net')) {
+        // Se for imagem
+        if (part.match(/\.(jpeg|jpg|gif|png|webp)/i) || part.includes('wacloud_midias') && part.match(/\.(jpeg|jpg|gif|png|webp)/i)) {
           return (
             <a key={i} href={part} target="_blank" rel="noopener noreferrer">
               <img src={part} alt="Anexo" className="max-w-[240px] max-h-[240px] rounded-md mt-2 mb-2 object-cover border shadow-sm cursor-pointer" />
             </a>
           );
         }
-        return <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline break-all hover:text-blue-800 transition-colors">{part}</a>;
+        // Se for áudio
+        if (part.match(/\.(mp3|wav|ogg|m4a|aac|opus)/i) || (part.includes('wacloud_midias') && part.match(/\.(mp3|wav|ogg|m4a|aac|opus)/i))) {
+          return (
+            <div key={i} className="my-2">
+              <audio src={part} controls className="max-w-[240px] h-10" />
+            </div>
+          );
+        }
+        // Se for documento ou link genérico
+        return (
+          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline break-all hover:text-blue-800 transition-colors inline-flex items-center gap-1 font-semibold">
+            <FileText className="w-3.5 h-3.5 inline" /> Abrir anexo
+          </a>
+        );
       }
       return <span key={i} className="whitespace-pre-wrap leading-relaxed">{part}</span>;
     });
+  };
+
+  const handleSendText = async () => {
+    if (!msgText.trim() || !telefone || sending) return;
+    setSending(true);
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telefone,
+          text: msgText.trim(),
+          type: 'text'
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erro ao enviar mensagem');
+      }
+
+      setMsgText("");
+      if (onMessageSent) onMessageSent();
+    } catch (err: any) {
+      alert("Erro ao responder cliente: " + err.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !telefone || sending) return;
+
+    setSending(true);
+    setUploadProgress(15);
+
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const { WACLOUD_CONFIG } = await import('@/lib/wacloud/config');
+      const supabase = createClient(WACLOUD_CONFIG.supabaseUrl, WACLOUD_CONFIG.supabaseAnonKey);
+
+      const ext = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+
+      setUploadProgress(45);
+      const { error: uploadError } = await supabase.storage
+        .from('wacloud_midias')
+        .upload(fileName, file, { cacheControl: '3600', upsert: false });
+
+      if (uploadError) throw new Error("Erro no upload: " + uploadError.message);
+
+      setUploadProgress(75);
+      const { data: { publicUrl } } = supabase.storage
+        .from('wacloud_midias')
+        .getPublicUrl(fileName);
+
+      let mediaType = 'document';
+      if (file.type.startsWith('image/')) mediaType = 'image';
+      else if (file.type.startsWith('video/')) mediaType = 'video';
+      else if (file.type.startsWith('audio/')) mediaType = 'audio';
+
+      setUploadProgress(90);
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telefone,
+          text: file.name,
+          type: mediaType,
+          mediaUrl: publicUrl,
+          fileName: file.name
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erro ao enviar arquivo');
+      }
+
+      if (onMessageSent) onMessageSent();
+    } catch (err: any) {
+      alert("Erro ao enviar arquivo: " + err.message);
+    } finally {
+      setSending(false);
+      setUploadProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const visibleMessages = messages.filter(msg => {
@@ -174,7 +284,7 @@ export function LeadChat({ messages }: LeadChatProps) {
                       {/* Indicador de Remetente */}
                       {isHumanSeller && (
                         <div className="flex items-center gap-1 mb-1 border-b border-green-200/50 pb-1">
-                          <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">👤 Vendedor</span>
+                          <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">👤 Atendimento Humano</span>
                         </div>
                       )}
                       {isAi && !isHumanSeller && (
@@ -198,12 +308,59 @@ export function LeadChat({ messages }: LeadChatProps) {
           )}
         </div>
       </ScrollArea>
-      {/* Rodapé informativo silencioso */}
-      <div className="bg-[#F0F2F5] p-2 border-t flex items-center justify-center shrink-0">
-         <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-           Histórico de Conversas (IA & Vendedor)
-         </span>
+
+      {/* Barra de Envio e Atendimento Humano */}
+      <div className="bg-[#F0F2F5] p-2.5 border-t border-gray-200 flex items-center gap-2 shrink-0 relative">
+        {uploadProgress > 0 && (
+          <div className="absolute top-0 left-0 w-full h-1 bg-gray-200">
+            <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+          </div>
+        )}
+
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          className="hidden" 
+          onChange={handleFileUpload} 
+          accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
+        />
+
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={sending || !telefone}
+          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors disabled:opacity-40"
+          title="Anexar documento, imagem ou áudio"
+        >
+          <Paperclip className="w-5 h-5" />
+        </button>
+
+        <input
+          type="text"
+          value={msgText}
+          onChange={(e) => setMsgText(e.target.value)}
+          placeholder={telefone ? "Responder cliente (pausa a IA automaticamente)..." : "Sem telefone"}
+          disabled={sending || !telefone}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSendText();
+            }
+          }}
+          className="flex-1 bg-white border border-gray-300 text-gray-800 text-sm rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
+        />
+
+        <button
+          type="button"
+          onClick={handleSendText}
+          disabled={sending || !msgText.trim() || !telefone}
+          className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shrink-0 shadow-sm"
+          title="Enviar e pausar IA"
+        >
+          {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+        </button>
       </div>
     </div>
   )
 }
+

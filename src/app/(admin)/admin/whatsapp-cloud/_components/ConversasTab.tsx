@@ -173,7 +173,7 @@ function SelecionarInstancia({ onSelecionar }: { onSelecionar: (instancia: Insta
 // ==========================================
 // PASSO 2 — Chat da Instância Selecionada
 // ==========================================
-function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar: () => void }) {
+export function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar?: () => void }) {
   const [contatos, setContatos] = useState<Contato[]>([])
   const [contatosFiltrados, setContatosFiltrados] = useState<Contato[]>([])
   const [selectedContato, setSelectedContato] = useState<Contato | null>(null)
@@ -286,6 +286,13 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao enviar mensagem');
       
+      // Bloqueio automático da IA (Human Takeover)
+      fetch('/api/bloqueios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telefone: selectedContato.telefone_contato })
+      }).catch(err => console.error('Erro ao acionar bloqueio da IA:', err));
+
       // Optimistic add
       const novaMsg: Mensagem = {
         id: `temp-${Date.now()}`,
@@ -353,6 +360,13 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao enviar mídia');
       
+      // Bloqueio automático da IA (Human Takeover)
+      fetch('/api/bloqueios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telefone: selectedContato.telefone_contato })
+      }).catch(err => console.error('Erro ao acionar bloqueio da IA:', err));
+
       // Optimistic add
       const novaMsg: Mensagem = {
         id: `temp-${Date.now()}`,
@@ -615,14 +629,18 @@ function ChatInstancia({ instancia, onVoltar }: { instancia: Instancia; onVoltar
       {/* Barra superior com instância selecionada */}
       <div className="flex items-center justify-between pb-3 mb-2 border-b border-gray-100">
         <div className="flex items-center gap-3">
-          <button
-            onClick={onVoltar}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Trocar cliente
-          </button>
-          <div className="h-5 w-px bg-gray-200" />
+          {onVoltar && (
+            <>
+              <button
+                onClick={onVoltar}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Trocar cliente
+              </button>
+              <div className="h-5 w-px bg-gray-200" />
+            </>
+          )}
           <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-black shadow-sm ${getAvatarColor(instancia.nome_instancia)}`}>
             {instancia.nome_instancia.slice(0, 2).toUpperCase()}
           </div>
