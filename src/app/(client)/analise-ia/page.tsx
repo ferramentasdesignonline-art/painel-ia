@@ -81,66 +81,61 @@ export default function AnaliseIaPage() {
 
   return (
     <div className="space-y-6 pb-12 font-poppins max-w-7xl mx-auto">
-      {/* Top Banner & Ações */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#0d0f17] via-[#151928] to-[#1e1b4b] border border-indigo-950/60 p-6 sm:p-8 text-white shadow-xl shadow-indigo-950/20">
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 -mb-10 w-72 h-72 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
-        
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-400/20 text-indigo-300 text-xs font-semibold backdrop-blur-md">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-              Diretor de Vendas & Tráfego Virtual • GPT-4o Mini
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+      {/* Cabeçalho Minimalista e Clean */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-100">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-gray-900">
               Análise com Inteligência Artificial
             </h1>
-            <p className="text-gray-300 text-xs sm:text-sm leading-relaxed">
-              Auditoria em tempo real de todas as conversas do WhatsApp, identificação de clientes quentes, pontos de melhoria no atendimento e diagnóstico de tráfego dos anúncios.
-            </p>
+            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+              GPT-4o Mini
+            </span>
           </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Auditoria das conversas no WhatsApp, detecção de leads quentes e diagnóstico de tráfego.
+          </p>
+        </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-            {analise?.created_at && (
-              <span className="text-[11px] text-gray-400 flex items-center gap-1.5 self-center sm:self-auto">
-                <Clock className="w-3.5 h-3.5 text-gray-500" />
-                Atualizado {new Date(analise.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} ({new Date(analise.created_at).toLocaleDateString('pt-BR')})
-              </span>
-            )}
-            
-            <button
-              onClick={handleGerarAnalise}
-              disabled={generating}
-              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-xs sm:text-sm shadow-lg shadow-indigo-600/30 transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-            >
-              <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
-              {generating ? "Analisando Conversas..." : "Atualizar Análise Agora"}
-            </button>
-          </div>
+        <div className="flex items-center gap-3 shrink-0">
+          {analise?.created_at && (
+            <span className="text-[11px] text-gray-400 flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-gray-400" />
+              {new Date(analise.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          <button
+            onClick={handleGerarAnalise}
+            disabled={generating}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition-all duration-200 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${generating ? 'animate-spin' : ''}`} />
+            {generating ? "Analisando..." : "Atualizar Análise"}
+          </button>
         </div>
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center min-h-[350px] bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
-          <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mb-3" />
-          <p className="text-sm font-bold text-gray-800">Carregando relatório de inteligência...</p>
+        <div className="flex flex-col items-center justify-center min-h-[300px] bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+          <RefreshCw className="w-7 h-7 text-indigo-600 animate-spin mb-3" />
+          <p className="text-xs font-bold text-gray-600">Carregando relatório...</p>
         </div>
       ) : !analise ? (
-        <div className="flex flex-col items-center justify-center min-h-[350px] bg-white rounded-3xl border border-gray-100 shadow-sm p-8 text-center">
-          <div className="w-16 h-16 rounded-3xl bg-indigo-50 flex items-center justify-center text-indigo-600 mb-4 shadow-inner">
-            <Sparkles className="w-8 h-8" />
+        <div className="flex flex-col items-center justify-center min-h-[300px] bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 mb-3 shadow-inner">
+            <Sparkles className="w-6 h-6" />
           </div>
-          <h3 className="text-lg font-bold text-gray-900">Nenhuma análise gerada ainda</h3>
-          <p className="text-xs text-gray-500 max-w-md mt-1 mb-6">
-            Clique no botão abaixo para a IA ler as conversas recentes do WhatsApp, cruzar com os canais de anúncios e gerar o primeiro relatório estratégico.
+          <h3 className="text-base font-bold text-gray-900">Nenhuma análise gerada ainda</h3>
+          <p className="text-xs text-gray-500 max-w-sm mt-1 mb-5">
+            Clique no botão abaixo para processar as conversas e gerar o primeiro relatório estratégico.
           </p>
           <button
             onClick={handleGerarAnalise}
             disabled={generating}
-            className="px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer flex items-center gap-2"
+            className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-sm transition-all cursor-pointer flex items-center gap-2"
           >
-            <Sparkles className="w-4 h-4" />
-            Gerar Primeira Análise
+            <Sparkles className="w-3.5 h-3.5" />
+            {generating ? "Processando..." : "Gerar Análise"}
           </button>
         </div>
       ) : (

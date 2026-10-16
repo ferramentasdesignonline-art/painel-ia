@@ -73,9 +73,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const openAiKey = process.env.OPENAI_API_KEY
+    const openAiKey = process.env.OPENAI_API_KEY || clientConfig.openai_key || clientConfig.openai_api_key
     if (!openAiKey) {
-      return NextResponse.json({ error: "OPENAI_API_KEY não configurada no servidor." }, { status: 500 })
+      return NextResponse.json({ 
+        error: "OPENAI_API_KEY não configurada no servidor de hospedagem. Adicione a variável OPENAI_API_KEY no painel da Vercel / Servidor." 
+      }, { status: 500 })
     }
 
     // 1. Cliente Supabase do cliente para ler tabela_leads e tabela_memoria
