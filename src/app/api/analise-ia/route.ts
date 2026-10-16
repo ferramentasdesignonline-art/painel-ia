@@ -73,12 +73,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Chave validada diretamente
-    const defaultEncoded = "c2stcHJvai1rN3RacmItRkRkdlRkLTZQbHdzNGpEMGJJWW01cXVVdjRDQUhYSzY4RDlrZFU1UXRFUTY2QVZKM056UU1uU216aGNBRFRmT091X1QzQmxia0ZKVy00cGZ5N2NIT0VMTmZwZ3JNMEVLeTNEeVBoUGVaVk5mODFGUE84dTM5OG9ycnF3cEE1bmZ0LUdYQUFCVE05YkhoTFBEOWxZY0E=";
-    const fallbackKey = typeof Buffer !== "undefined" ? Buffer.from(defaultEncoded, "base64").toString("utf-8").trim() : "";
-
-    // Usa a chave funcional confirmada
-    const openAiKey = fallbackKey;
+    // Chave lida apenas da variável de ambiente (nunca no código)
+    const openAiKey = (process.env.OPENAI_API_KEY || "").trim();
 
     if (!openAiKey) {
       return NextResponse.json({ 
