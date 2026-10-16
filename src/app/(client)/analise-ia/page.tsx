@@ -142,7 +142,6 @@ export default function AnaliseIaPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-gray-900">Análise com Inteligência Artificial</h1>
-            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">GPT-4o Mini</span>
           </div>
           <p className="text-xs text-gray-500 mt-1">Auditoria completa de todas as conversas do WhatsApp, leads quentes e diagnóstico de tráfego.</p>
         </div>

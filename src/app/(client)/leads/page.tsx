@@ -279,7 +279,7 @@ export default function LeadsPage() {
               </button>
             )}
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
             <button
               onClick={() => setFilterCanais([])}
               className={cn(
@@ -359,7 +359,7 @@ export default function LeadsPage() {
               </button>
             )}
           </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
             <button
               onClick={() => setFilterTags([])}
               className={cn(

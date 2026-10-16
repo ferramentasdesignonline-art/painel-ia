@@ -35,8 +35,8 @@ export default async function ClientLayout({
         <Sidebar />
         <div className="flex flex-col flex-1 w-full overflow-hidden">
           <Header clientName={clientConfig?.nome} clientEmail={clientConfig?.email} />
-          <main className="flex-1 relative overflow-y-auto focus:outline-none flex flex-col">
-            <div className="py-4 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0">
+          <main className="flex-1 relative overflow-y-auto focus:outline-none">
+            <div className="py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
               {children}
             </div>
           </main>
