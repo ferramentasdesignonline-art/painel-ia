@@ -572,6 +572,71 @@ export function KanbanBoard() {
         </div>
       )}
 
+      {/* Barra de Filtros por Etiquetas do WhatsApp & Estágios */}
+      {tagsDisponiveis.length > 0 && (
+        <div className="mx-1 bg-white/90 backdrop-blur-xs rounded-2xl border border-gray-100 p-2.5 shadow-xs">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+              <Tag className="w-3.5 h-3.5 text-indigo-500" />
+              Etiquetas do WhatsApp & Estágios ({tagsDisponiveis.length} ativas)
+            </span>
+            {tagFiltro && (
+              <button
+                onClick={() => setTagFiltro(null)}
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+              >
+                Limpar filtro de etiqueta &times;
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {/* Botão Todas as Etiquetas */}
+            <button
+              onClick={() => setTagFiltro(null)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
+                !tagFiltro
+                  ? "bg-slate-800 text-white border-slate-800 shadow-sm"
+                  : "bg-gray-50/70 border-gray-100 text-gray-600 hover:bg-gray-100/70"
+              )}
+            >
+              <span>Todas as Etiquetas</span>
+            </button>
+
+            {/* Pílulas de cada Etiqueta com contagem e cores reais */}
+            {tagsDisponiveis.map(t => {
+              const isSelected = tagFiltro?.toLowerCase() === t.nome.toLowerCase();
+              const isHex = t.cor?.startsWith('#');
+              return (
+                <button
+                  key={t.nome}
+                  onClick={() => setTagFiltro(isSelected ? null : t.nome)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
+                    isSelected
+                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-200 text-indigo-900 shadow-sm"
+                      : "bg-white border-gray-100 text-gray-600 hover:border-gray-200 hover:bg-gray-50/50"
+                  )}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: isHex ? t.cor : '#6366f1' }}
+                  />
+                  <span className="truncate max-w-[180px]">{t.nome}</span>
+                  <span className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
+                    isSelected ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
+                  )}>
+                    {t.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Barra de Filtros */}
       <div className="mx-1 bg-white rounded-[22px] border border-gray-100 p-2.5 flex flex-wrap items-center gap-4 shadow-sm">
         <div className="flex items-center gap-3">

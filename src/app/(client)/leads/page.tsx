@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Eye, Plus, ArrowUpDown, Filter, ShieldBan } from "lucide-react"
+import { Search, Eye, Plus, ArrowUpDown, Filter, ShieldBan, Megaphone, Tag, MessageSquare, ExternalLink, Calendar } from "lucide-react"
 import { LeadDrawer, LeadType } from "@/components/leads/LeadDrawer"
 import { AddLeadModal } from "@/components/leads/AddLeadModal"
 import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
@@ -236,141 +236,234 @@ export default function LeadsPage() {
       </div>
 
       {/* Filtros */}
-      <Card className="border-none shadow-sm bg-white rounded-2xl overflow-hidden">
-        <div className="p-4 border-b border-gray-50 bg-gray-50/30 flex flex-wrap gap-3 items-center">
-          {/* Busca */}
-          <div className="relative w-full sm:flex-1 sm:max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Buscar por nome ou telefone..."
-              className="pl-9 h-9 bg-white border-gray-100 rounded-lg text-sm"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          {/* Status */}
-          <select
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-            className="h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          >
-            {STATUS_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-
-          {/* Filtro Canal */}
-          {canaisDisponiveis.length > 0 && (
-            <select
-              value={filterCanal}
-              onChange={e => setFilterCanal(e.target.value)}
-              className="h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 max-w-[170px] truncate"
-            >
-              <option value="">Todos os canais</option>
-              {canaisDisponiveis.map(c => (
-                <option key={c.key} value={c.key}>
-                  {c.label} ({c.count})
-                </option>
-              ))}
-            </select>
-          )}
-
-          {/* Filtro Etiqueta / Tag */}
-          {tagsDisponiveis.length > 0 && (
-            <select
-              value={filterTag}
-              onChange={e => setFilterTag(e.target.value)}
-              className="h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 max-w-[170px] truncate"
-            >
-              <option value="">Todas as etiquetas</option>
-              {tagsDisponiveis.map(t => (
-                <option key={t.nome} value={t.nome}>
-                  {t.nome} ({t.count})
-                </option>
-              ))}
-            </select>
-          )}
-
-          {/* Filtro por data */}
-          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
-            <Filter className="h-4 w-4 text-gray-400 ml-2" />
-            <div className="flex flex-col">
-              <span className="text-[9px] font-bold text-gray-400 uppercase leading-none ml-1">Início</span>
-              <input
-                type="date"
-                value={filterDataInicio}
-                onChange={e => setFilterDataInicio(e.target.value)}
-                className="h-7 px-1 text-xs text-gray-600 focus:outline-none bg-transparent"
-              />
-            </div>
-            <div className="w-px h-6 bg-gray-200 mx-1" />
-            <div className="flex flex-col">
-              <span className="text-[9px] font-bold text-gray-400 uppercase leading-none ml-1">Fim</span>
-              <input
-                type="date"
-                value={filterDataFim}
-                onChange={e => setFilterDataFim(e.target.value)}
-                className="h-7 px-1 text-xs text-gray-600 focus:outline-none bg-transparent"
-              />
-            </div>
-            {(filterDataInicio || filterDataFim) && (
-              <button 
-                onClick={() => { setFilterDataInicio(''); setFilterDataFim(''); }} 
-                className="text-xs text-gray-400 hover:text-red-500 transition-colors mr-2"
-                title="Limpar datas"
+      {/* Barra de Seleção Rápida por Canal de Atendimento */}
+      {canaisDisponiveis.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-3 shadow-xs space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Megaphone className="w-3.5 h-3.5 text-indigo-500" />
+              Filtrar por Canal de Entrada
+            </span>
+            {filterCanal && (
+              <button
+                onClick={() => setFilterCanal('')}
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
               >
-                ✕
+                Limpar canal &times;
               </button>
             )}
           </div>
-
-          {/* Ordenação */}
-          <div className="flex items-center gap-1 ml-auto">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
             <button
-              onClick={() => toggleSort('ultima_mensagem')}
-              className={cn("flex items-center gap-1 h-9 px-3 rounded-lg text-xs font-semibold border transition-all",
-                sortBy === 'ultima_mensagem' ? "bg-indigo-50 text-indigo-600 border-indigo-200" : "bg-white text-gray-500 border-gray-200"
+              onClick={() => setFilterCanal('')}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
+                !filterCanal
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                  : "bg-gray-50/70 border-gray-100 text-gray-600 hover:bg-gray-100/70"
               )}
             >
-              <ArrowUpDown className="h-3 w-3" />
+              <span>Todos os Canais</span>
+              <span className={cn(
+                "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
+                !filterCanal ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
+              )}>
+                {leads.length}
+              </span>
+            </button>
+            {canaisDisponiveis.map(c => {
+              const isSelected = filterCanal === c.key;
+              return (
+                <button
+                  key={c.key}
+                  onClick={() => setFilterCanal(isSelected ? '' : c.key)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
+                    isSelected
+                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-200 text-indigo-900 shadow-sm"
+                      : "bg-white border-gray-100 text-gray-600 hover:border-gray-200 hover:bg-gray-50/50"
+                  )}
+                >
+                  <span className="w-2 h-2 rounded-full shrink-0 bg-indigo-500" />
+                  <span className="truncate max-w-[140px]">{c.label}</span>
+                  <span className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
+                    isSelected ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
+                  )}>
+                    {c.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Barra de Seleção Rápida por Etiquetas / Estágios */}
+      {tagsDisponiveis.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-3 shadow-xs space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Tag className="w-3.5 h-3.5 text-indigo-500" />
+              Filtrar por Etiquetas do WhatsApp & Estágios
+            </span>
+            {filterTag && (
+              <button
+                onClick={() => setFilterTag('')}
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
+              >
+                Limpar etiqueta &times;
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            <button
+              onClick={() => setFilterTag('')}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
+                !filterTag
+                  ? "bg-slate-800 text-white border-slate-800 shadow-sm"
+                  : "bg-gray-50/70 border-gray-100 text-gray-600 hover:bg-gray-100/70"
+              )}
+            >
+              <span>Todas as Etiquetas</span>
+            </button>
+            {tagsDisponiveis.map(t => {
+              const isSelected = filterTag.toLowerCase() === t.nome.toLowerCase();
+              return (
+                <button
+                  key={t.nome}
+                  onClick={() => setFilterTag(isSelected ? '' : t.nome)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
+                    isSelected
+                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-200 text-indigo-900 shadow-sm"
+                      : "bg-white border-gray-100 text-gray-600 hover:border-gray-200 hover:bg-gray-50/50"
+                  )}
+                >
+                  <span className="w-2 h-2 rounded-full shrink-0 bg-indigo-500" />
+                  <span className="truncate max-w-[170px]">{t.nome}</span>
+                  <span className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
+                    isSelected ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
+                  )}>
+                    {t.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Filtros de Busca e Ordenação */}
+      <Card className="border border-gray-100 shadow-sm bg-white rounded-2xl overflow-hidden">
+        <div className="p-4 border-b border-gray-50 bg-gray-50/30 flex flex-wrap gap-3 items-center justify-between">
+          <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+            {/* Busca */}
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Buscar por nome, telefone ou carro..."
+                className="pl-9 h-10 bg-white border-gray-100 rounded-xl text-sm"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+
+            {/* Status */}
+            <select
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value)}
+              className="h-10 px-3 bg-white border border-gray-100 rounded-xl text-xs font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              {STATUS_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+
+            {/* Filtro por data */}
+            <div className="flex items-center gap-2 bg-white border border-gray-100 rounded-xl p-1 shadow-xs h-10">
+              <Filter className="h-3.5 w-3.5 text-gray-400 ml-2" />
+              <div className="flex flex-col">
+                <span className="text-[8px] font-bold text-gray-400 uppercase leading-none ml-1">Início</span>
+                <input
+                  type="date"
+                  value={filterDataInicio}
+                  onChange={e => setFilterDataInicio(e.target.value)}
+                  className="h-5 px-1 text-xs text-gray-600 focus:outline-none bg-transparent"
+                />
+              </div>
+              <div className="w-px h-5 bg-gray-200 mx-1" />
+              <div className="flex flex-col">
+                <span className="text-[8px] font-bold text-gray-400 uppercase leading-none ml-1">Fim</span>
+                <input
+                  type="date"
+                  value={filterDataFim}
+                  onChange={e => setFilterDataFim(e.target.value)}
+                  className="h-5 px-1 text-xs text-gray-600 focus:outline-none bg-transparent"
+                />
+              </div>
+              {(filterDataInicio || filterDataFim) && (
+                <button 
+                  onClick={() => { setFilterDataInicio(''); setFilterDataFim(''); }} 
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors mr-2 font-bold"
+                  title="Limpar datas"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Ordenação */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => toggleSort('ultima_mensagem')}
+              className={cn("flex items-center gap-1.5 h-10 px-3.5 rounded-xl text-xs font-bold border transition-all",
+                sortBy === 'ultima_mensagem' ? "bg-indigo-50 text-indigo-600 border-indigo-200" : "bg-white text-gray-500 border-gray-100 hover:border-gray-200"
+              )}
+            >
+              <ArrowUpDown className="h-3.5 w-3.5" />
               Últ. mensagem {sortBy === 'ultima_mensagem' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
             </button>
             <button
               onClick={() => toggleSort('created_at')}
-              className={cn("flex items-center gap-1 h-9 px-3 rounded-lg text-xs font-semibold border transition-all",
-                sortBy === 'created_at' ? "bg-indigo-50 text-indigo-600 border-indigo-200" : "bg-white text-gray-500 border-gray-200"
+              className={cn("flex items-center gap-1.5 h-10 px-3.5 rounded-xl text-xs font-bold border transition-all",
+                sortBy === 'created_at' ? "bg-indigo-50 text-indigo-600 border-indigo-200" : "bg-white text-gray-500 border-gray-100 hover:border-gray-200"
               )}
             >
-              <ArrowUpDown className="h-3 w-3" />
+              <ArrowUpDown className="h-3.5 w-3.5" />
               Criação {sortBy === 'created_at' ? (sortDir === 'desc' ? '↓' : '↑') : ''}
             </button>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
+        {/* Tabela de Leads com Rolagem Horizontal Suave */}
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left min-w-[1050px]">
             <thead>
-              <tr className="bg-gray-50/50 border-b border-gray-100">
-                <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em]">Cliente</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em]">Interesse</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em]">Última Atividade</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em]">Observação</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em]">Status</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] text-center">Ação</th>
+              <tr className="bg-gray-50/70 border-b border-gray-100">
+                <th className="px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] min-w-[240px]">Cliente & Canal</th>
+                <th className="px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] min-w-[200px]">Etiquetas (WhatsApp)</th>
+                <th className="px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] min-w-[180px]">Origem / Anúncio</th>
+                <th className="px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] min-w-[160px]">Interesse</th>
+                <th className="px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] min-w-[200px]">Última Atividade</th>
+                <th className="px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] min-w-[150px]">Status & Agendamento</th>
+                <th className="px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] text-center min-w-[100px]">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-20 text-center text-gray-400 font-medium animate-pulse">
+                  <td colSpan={7} className="px-6 py-20 text-center text-gray-400 font-medium animate-pulse">
                     Carregando leads...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-20 text-center text-gray-400 font-medium italic">
-                    Nenhum lead encontrado.
+                  <td colSpan={7} className="px-6 py-20 text-center text-gray-400 font-medium italic">
+                    Nenhum lead encontrado com os filtros selecionados.
                   </td>
                 </tr>
               ) : (
@@ -379,15 +472,15 @@ export default function LeadsPage() {
                   return (
                     <tr
                       key={lead.id}
-                      className="group hover:bg-indigo-50/30 transition-colors cursor-pointer"
+                      className="group hover:bg-indigo-50/20 transition-colors cursor-pointer"
                       onClick={() => handleRowClick(lead)}
                     >
-                      <td className="px-6 py-4">
+                      {/* Cliente & Canal */}
+                      <td className="px-5 py-3.5">
                         <div className="flex flex-col gap-1">
                           <span className="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{lead.nome || 'Cliente S/ Nome'}</span>
-                          <span className="text-xs font-medium text-gray-400 whitespace-nowrap">{formatarTelefone(lead.telefone || lead.phone)}</span>
+                          <span className="text-xs font-semibold text-gray-400 whitespace-nowrap">{formatarTelefone(lead.telefone || lead.phone)}</span>
                           
-                          {/* Badge de Canal */}
                           {lead.canal_origem && (
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span
@@ -410,83 +503,117 @@ export default function LeadsPage() {
                               </span>
                             </div>
                           )}
-
-                          {lead.tags && lead.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {lead.tags.map((tag: any) => {
-                                const isHex = tag.cor?.startsWith('#');
-                                return (
-                                  <span
-                                    key={tag.id}
-                                    className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", !isHex && tag.cor)}
-                                    style={isHex ? { backgroundColor: `${tag.cor}18`, borderColor: `${tag.cor}55`, color: tag.cor } : undefined}
-                                  >
-                                    {tag.nome}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-semibold text-gray-600">{lead.veiculo_interessado || '-'}</span>
+
+                      {/* Etiquetas (WhatsApp & CRM) */}
+                      <td className="px-5 py-3.5">
+                        {lead.tags && lead.tags.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 max-w-[220px]">
+                            {lead.tags.map((tag: any) => {
+                              const isHex = tag.cor?.startsWith('#');
+                              return (
+                                <span
+                                  key={tag.id}
+                                  className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", !isHex && tag.cor)}
+                                  style={isHex ? { backgroundColor: `${tag.cor}18`, borderColor: `${tag.cor}55`, color: tag.cor } : undefined}
+                                >
+                                  {tag.nome}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300 italic">-</span>
+                        )}
                       </td>
-                      <td className="px-6 py-4">
+
+                      {/* Origem / Anúncio */}
+                      <td className="px-5 py-3.5">
+                        {lead.anuncio_titulo || lead.anuncio_id ? (
+                          <div className="flex flex-col gap-0.5 text-xs max-w-[200px]">
+                            <span className="font-bold text-gray-800 line-clamp-1">{lead.anuncio_titulo || 'Anúncio Meta'}</span>
+                            {lead.anuncio_id && (
+                              <span className="text-[10px] text-gray-400 font-mono">ID: {lead.anuncio_id}</span>
+                            )}
+                            {lead.anuncio_url && (
+                              <a
+                                href={lead.anuncio_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:underline pt-0.5"
+                              >
+                                Anúncio original <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Entrada direta</span>
+                        )}
+                      </td>
+
+                      {/* Veículo de Interesse */}
+                      <td className="px-5 py-3.5">
+                        <span className="text-sm font-semibold text-gray-700 line-clamp-2 max-w-[180px]">{lead.veiculo_interessado || '-'}</span>
+                      </td>
+
+                      {/* Última Atividade */}
+                      <td className="px-5 py-3.5">
                         <div className="flex flex-col">
                           {(lead.ultima_mensagem && !lead.ultima_mensagem.startsWith('202')) || lead.notas ? (
-                            <span className="text-sm text-gray-500 line-clamp-1 max-w-[250px]">
+                            <span className="text-xs text-gray-600 line-clamp-1 max-w-[240px]">
                               {lead.ultima_mensagem && !lead.ultima_mensagem.startsWith('202') 
-                                ? `"${lead.ultima_mensagem.substring(0, 45)}..."` 
+                                ? `"${lead.ultima_mensagem.substring(0, 40)}..."` 
                                 : lead.notas}
                             </span>
                           ) : null}
                           <span className="text-[10px] font-bold text-gray-400 mt-1 uppercase">
                             Criado: {formatTs(lead.created_at, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} • 
-                            Últ. Msg: {formatTs(lead.ultima_mensagem || lead.created_at, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            Últ: {formatTs(lead.ultima_mensagem || lead.created_at, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-xs text-gray-500 line-clamp-2 max-w-[200px]" title={lead.observacao_lead_qualificado || ''}>
-                            {lead.observacao_lead_qualificado || '-'}
-                          </span>
+
+                      {/* Status & Agendamento */}
+                      <td className="px-5 py-3.5">
+                        <div className="flex flex-col gap-1 items-start">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={cn(
+                              "inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-xs",
+                              STATUS_STYLE[stageKey] || 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                            )}>
+                              {getStageName(lead)}
+                            </span>
+                            {(lead.quantidade_followup || 0) > 0 && !lead.is_blocked && (
+                              <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-md border border-orange-100">
+                                {lead.quantidade_followup}× FU
+                              </span>
+                            )}
+                            {lead.is_blocked && (
+                              <span className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md border border-red-100 uppercase tracking-wider">
+                                <ShieldBan className="w-3 h-3" /> Humano
+                              </span>
+                            )}
+                          </div>
                           {lead.data_agendamento && (
-                            <span className="text-[10px] font-bold text-amber-600 mt-1 uppercase">
-                              📅 {formatTs(lead.data_agendamento, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100 flex items-center gap-1 mt-0.5">
+                              <Calendar className="w-3 h-3 text-amber-600" />
+                              {formatTs(lead.data_agendamento, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className={cn(
-                            "inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-sm",
-                            STATUS_STYLE[stageKey] || 'bg-indigo-50 text-indigo-600 border-indigo-100'
-                          )}>
-                            {getStageName(lead)}
-                          </span>
-                          {(lead.quantidade_followup || 0) > 0 && !lead.is_blocked && (
-                            <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-100">
-                              {lead.quantidade_followup}× FU
-                            </span>
-                          )}
-                          {lead.is_blocked && (
-                            <span className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-lg border border-red-100 uppercase tracking-wider">
-                              <ShieldBan className="w-3 h-3" /> Humano
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
+
+                      {/* Ação */}
+                      <td className="px-5 py-3.5 text-center">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg font-bold transition-all"
+                          className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl font-bold transition-all text-xs h-8 px-3"
                         >
-                          <Eye className="w-4 h-4 mr-2" />
-                          Ver Detalhes
+                          <Eye className="w-3.5 h-3.5 mr-1.5" />
+                          Ver
                         </Button>
                       </td>
                     </tr>

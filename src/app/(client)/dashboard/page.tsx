@@ -264,6 +264,51 @@ export default function ClientDashboardPage() {
     return Array.from(map.values()).sort((a, b) => b.count - a.count)
   }, [allLeads])
 
+  // Métricas consolidadas e ranking de melhor performance dos Anúncios
+  const adsMetrics = useMemo(() => {
+    const map = new Map<string, {
+      titulo: string;
+      id?: string | null;
+      url?: string | null;
+      canal?: string | null;
+      totalLeads: number;
+      visitas: number;
+      simulacoes: number;
+      qualificados: number;
+    }>()
+
+    for (const lead of allLeads) {
+      if (lead.anuncio_titulo || lead.anuncio_id) {
+        const key = lead.anuncio_titulo || lead.anuncio_id || 'Anúncio Meta'
+        if (!map.has(key)) {
+          map.set(key, {
+            titulo: lead.anuncio_titulo || 'Anúncio Meta',
+            id: lead.anuncio_id,
+            url: lead.anuncio_url,
+            canal: lead.canal_label_name || lead.canal_origem,
+            totalLeads: 0,
+            visitas: 0,
+            simulacoes: 0,
+            qualificados: 0,
+          })
+        }
+        const item = map.get(key)!
+        item.totalLeads += 1
+        if (lead.lead_visita_confirmada) item.visitas += 1
+        if (lead.lead_simulacao_aprovada || lead.lead_simulacao_pre_aprovada) item.simulacoes += 1
+        if (lead.lead_finalizado || lead.horario_lead_qualificado) item.qualificados += 1
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+      // Prioridade: visitas confirmadas > simulações > qualificados > total de leads
+      if (b.visitas !== a.visitas) return b.visitas - a.visitas
+      if (b.simulacoes !== a.simulacoes) return b.simulacoes - a.simulacoes
+      if (b.qualificados !== a.qualificados) return b.qualificados - a.qualificados
+      return b.totalLeads - a.totalLeads
+    })
+  }, [allLeads])
+
   // Leads filtrados pelo canal clicado e pela etiqueta opcional
   const leadsFiltradosPorCanal = useMemo(() => {
     if (!canalFiltro) return []
@@ -578,6 +623,152 @@ export default function ClientDashboardPage() {
               )
             })}
           </div>
+
+          {/* Barra de Filtro Rápido por Etiquetas / Estágios do WhatsApp & CRM */}
+          {tagsDisponiveis.length > 0 && (
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-indigo-600" />
+                  Filtrar Leads por Etiqueta / Estágio:
+                </span>
+                {tagFiltro && (
+                  <button
+                    onClick={() => setTagFiltro(null)}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
+                  >
+                    Mostrar todas &times;
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                <button
+                  onClick={() => setTagFiltro(null)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border",
+                    !tagFiltro
+                      ? "bg-gray-900 text-white border-gray-900 shadow-sm"
+                      : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                  )}
+                >
+                  Todas ({tagsDisponiveis.reduce((acc, t) => acc + t.count, 0)})
+                </button>
+                {tagsDisponiveis.map(t => {
+                  const active = tagFiltro?.toLowerCase() === t.nome.toLowerCase()
+                  return (
+                    <button
+                      key={t.nome}
+                      onClick={() => setTagFiltro(active ? null : t.nome)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-1.5",
+                        active
+                          ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                          : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/30"
+                      )}
+                    >
+                      <span>{t.nome}</span>
+                      <span className={cn(
+                        "px-1.5 py-0.2 text-[10px] rounded-full font-black",
+                        active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"
+                      )}>
+                        {t.count}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Ranking de Performance dos Melhores Anúncios */}
+          {adsMetrics.length > 0 && (
+            <Card className="border border-indigo-100/80 bg-linear-to-br from-white via-indigo-50/20 to-purple-50/20 rounded-2xl p-5 shadow-2xs space-y-3">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-xs">
+                    🏆
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                      Ranking dos Melhores Anúncios (Campanhas Meta / Origem)
+                    </h3>
+                    <p className="text-[11px] text-gray-500 font-medium">
+                      Ordenado pelos que mais geraram visitas confirmadas, simulações aprovadas e leads qualificados.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
+                  {adsMetrics.length} anúncio{adsMetrics.length !== 1 ? 's' : ''} rastreado{adsMetrics.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {adsMetrics.map((ad, idx) => {
+                  const isTop = idx === 0
+                  return (
+                    <div
+                      key={ad.titulo + idx}
+                      className={cn(
+                        "p-3.5 rounded-xl border bg-white transition-all space-y-2.5 relative overflow-hidden",
+                        isTop ? "border-amber-300 ring-2 ring-amber-200/60 shadow-xs" : "border-gray-100 shadow-2xs"
+                      )}
+                    >
+                      {isTop && (
+                        <span className="absolute top-0 right-0 bg-amber-400 text-amber-950 font-black text-[9px] uppercase px-2 py-0.5 rounded-bl-lg">
+                          ★ #1 Mais Conversões
+                        </span>
+                      )}
+
+                      <div className="space-y-1 pr-16">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                          #{idx + 1} • {ad.canal || 'Meta Ads'}
+                        </span>
+                        <h4 className="text-xs font-bold text-gray-900 line-clamp-1 title" title={ad.titulo}>
+                          {ad.titulo}
+                        </h4>
+                        {ad.id && (
+                          <span className="text-[10px] font-mono text-gray-400 block truncate">
+                            ID: {ad.id}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Badges de conversões do anúncio */}
+                      <div className="grid grid-cols-4 gap-1 pt-1 border-t border-gray-50 text-center">
+                        <div className="bg-gray-50 rounded-lg p-1.5">
+                          <span className="text-[9px] font-bold text-gray-400 block uppercase">Leads</span>
+                          <span className="text-xs font-black text-gray-900">{ad.totalLeads}</span>
+                        </div>
+                        <div className="bg-cyan-50 rounded-lg p-1.5">
+                          <span className="text-[9px] font-bold text-cyan-600 block uppercase">Visitas</span>
+                          <span className="text-xs font-black text-cyan-700">{ad.visitas}</span>
+                        </div>
+                        <div className="bg-green-50 rounded-lg p-1.5">
+                          <span className="text-[9px] font-bold text-green-600 block uppercase">Simulações</span>
+                          <span className="text-xs font-black text-green-700">{ad.simulacoes}</span>
+                        </div>
+                        <div className="bg-indigo-50 rounded-lg p-1.5">
+                          <span className="text-[9px] font-bold text-indigo-600 block uppercase">Qualificados</span>
+                          <span className="text-xs font-black text-indigo-700">{ad.qualificados}</span>
+                        </div>
+                      </div>
+
+                      {ad.url && (
+                        <a
+                          href={ad.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:underline pt-0.5"
+                        >
+                          Abrir anúncio no Meta <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
+          )}
 
           {/* Painel expandido dos Leads do canal selecionado */}
           {canalFiltro && (

@@ -127,17 +127,32 @@ export async function GET(request: Request) {
     });
 
     if (instanciaMatch) {
-      // Buscar contatos com etiquetas dessa instância
-      const { data: contatosCloud } = await wacloudAdmin
-        .from('wacloud_contatos')
-        .select('telefone_contato, whatsapp_labels')
-        .eq('nome_instancia', instanciaMatch.nome_instancia)
-        .neq('whatsapp_labels', '[]')
-        .limit(10000);
+      // Buscar TODOS os contatos com etiquetas dessa instância (paginado)
+      let allContatosCloud: any[] = [];
+      const pageSize = 1000;
+      let page = 0;
+      while (page < 10) { // até 10.000 contatos
+        const { data: chunk, error: chunkErr } = await wacloudAdmin
+          .from('wacloud_contatos')
+          .select('telefone_contato, whatsapp_labels')
+          .eq('nome_instancia', instanciaMatch.nome_instancia)
+          .neq('whatsapp_labels', '[]')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (chunkErr || !chunk || chunk.length === 0) break;
+        allContatosCloud.push(...chunk);
+        if (chunk.length < pageSize) break;
+        page++;
+      }
 
-      for (const cc of contatosCloud || []) {
+      for (const cc of allContatosCloud) {
         if (cc.telefone_contato && Array.isArray(cc.whatsapp_labels) && cc.whatsapp_labels.length > 0) {
-          mapaWhatsappLabels.set(cc.telefone_contato, cc.whatsapp_labels);
+          const rawTel = String(cc.telefone_contato).replace(/\D/g, '');
+          mapaWhatsappLabels.set(rawTel, cc.whatsapp_labels);
+          if (rawTel.startsWith('55')) {
+            mapaWhatsappLabels.set(rawTel.slice(2), cc.whatsapp_labels);
+          } else {
+            mapaWhatsappLabels.set(`55${rawTel}`, cc.whatsapp_labels);
+          }
         }
       }
 
