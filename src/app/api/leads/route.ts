@@ -80,6 +80,57 @@ export async function GET(request: Request) {
       };
     });
 
+    // 6. Buscar contatos e etiquetas do WhatsApp Cloud para enriquecer leads
+    let mapaWhatsappLabels = new Map<string, string[]>();
+    let mapaUazapiLabels = new Map<string, { id: string; name: string; colorHex: string; color: number }>();
+
+    try {
+      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+      const wacloudAdmin = getWacloudSupabaseAdmin();
+
+      const nomeLimpo = clientConfig.nome.replace(/\s+/g, '').toLowerCase();
+      const { data: instancias } = await wacloudAdmin
+        .from('wacloud_instancias')
+        .select('id, nome_instancia, token')
+        .limit(50);
+
+      const instanciaMatch = instancias?.find(i => {
+        const instNome = i.nome_instancia.replace(/\s+/g, '').toLowerCase();
+        return instNome === nomeLimpo || instNome.includes(nomeLimpo) || nomeLimpo.includes(instNome);
+      });
+
+      if (instanciaMatch) {
+        const { data: contatosCloud } = await wacloudAdmin
+          .from('wacloud_contatos')
+          .select('telefone_contato, whatsapp_labels')
+          .eq('nome_instancia', instanciaMatch.nome_instancia)
+          .neq('whatsapp_labels', '[]')
+          .limit(10000);
+
+        for (const cc of contatosCloud || []) {
+          if (cc.telefone_contato && Array.isArray(cc.whatsapp_labels) && cc.whatsapp_labels.length > 0) {
+            mapaWhatsappLabels.set(cc.telefone_contato, cc.whatsapp_labels);
+          }
+        }
+
+        if (instanciaMatch.token) {
+          const { fetchUazapiLabels } = await import('@/lib/wacloud/uazapi');
+          const labelsList = await fetchUazapiLabels(instanciaMatch.token);
+          for (const lbl of labelsList || []) {
+            const key = String(lbl.labelid || lbl.id);
+            mapaUazapiLabels.set(key, {
+              id: key,
+              name: lbl.name,
+              colorHex: lbl.colorHex || '#ccc',
+              color: lbl.color,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar etiquetas do wacloud em /api/leads:', err);
+    }
+
     // Formata leads IA para garantir mesmo padrão q usamos no funil
     const iaFormatados = (leadsIA || []).map((lead: any) => {
       let data_agendamento = lead.data_agendamento || null;
@@ -146,13 +197,40 @@ export async function GET(request: Request) {
       const phoneClean = rawPhone.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
       const isBlocked = blockedNumbers.has(phoneClean);
 
+      // Correlaciona etiquetas do WhatsApp
+      const leadWaLabels = mapaWhatsappLabels.get(phoneClean) || [];
+
+      // Descobrir Canal de Atendimento (via etiqueta WhatsApp 'Canal | ...' ou campo origem_lead)
+      let canal_origem: string = lead.origem_lead || 'desconhecido';
+      let canal_label_name: string | null = null;
+      let canal_color: string | null = null;
+
+      for (const lId of leadWaLabels) {
+        const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
+        const def = mapaUazapiLabels.get(cleanId);
+        if (def && def.name.toLowerCase().startsWith('canal')) {
+          canal_label_name = def.name.replace(/^canal\s*\|\s*/i, '').trim();
+          canal_color = def.colorHex;
+          canal_origem = canal_label_name.toLowerCase().replace(/\s+/g, '_');
+          break;
+        }
+      }
+
       return {
         ...lead,
         data_agendamento,
         original_id: lead.id,
         id: `ia-${lead.id}`,
         origem: 'ia',
-        is_blocked: isBlocked
+        is_blocked: isBlocked,
+        whatsapp_labels: leadWaLabels,
+        canal_origem,
+        canal_label_name,
+        canal_color,
+        anuncio_titulo: lead.anuncio_titulo || null,
+        anuncio_id: lead.anuncio_id || null,
+        anuncio_url: lead.anuncio_url || null,
+        origem_detalhe: lead.origem_detalhe || null,
       };
     });
 
@@ -162,22 +240,30 @@ export async function GET(request: Request) {
     const { data: allTags } = await supabaseAdmin.from('sistema-dash-ia_tags').select('*').eq('cliente_id', clientConfig.id);
     const { data: leadTagsMap } = await supabaseAdmin.from('sistema-dash-ia_lead_tags').select('*').eq('cliente_id', clientConfig.id);
     
-    if (allTags && leadTagsMap) {
-      const tagsById = new Map(allTags.map((t: any) => [t.id, t]));
-      const tagsByLeadId = new Map();
-      for (const lt of leadTagsMap) {
-        if (!tagsByLeadId.has(lt.lead_id)) tagsByLeadId.set(lt.lead_id, []);
-        const tagObj = tagsById.get(lt.tag_id);
-        if (tagObj) tagsByLeadId.get(lt.lead_id).push(tagObj);
+    const tagsById = new Map((allTags || []).map((t: any) => [t.id, t]));
+    const tagsByLeadId = new Map();
+    for (const lt of leadTagsMap || []) {
+      if (!tagsByLeadId.has(lt.lead_id)) tagsByLeadId.set(lt.lead_id, []);
+      const tagObj = tagsById.get(lt.tag_id);
+      if (tagObj) tagsByLeadId.get(lt.lead_id).push(tagObj);
+    }
+    
+    for (const lead of todosLeads) {
+      const crmTags = tagsByLeadId.get(lead.id) || [];
+      const waTags: any[] = [];
+      for (const lId of (lead.whatsapp_labels || [])) {
+        const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
+        const def = mapaUazapiLabels.get(cleanId);
+        if (def && !def.name.toLowerCase().startsWith('canal')) {
+          waTags.push({
+            id: `wa-${cleanId}`,
+            nome: def.name,
+            cor: def.colorHex || '#6366f1',
+            is_whatsapp: true,
+          });
+        }
       }
-      
-      for (const lead of todosLeads) {
-        lead.tags = tagsByLeadId.get(lead.id) || [];
-      }
-    } else {
-      for (const lead of todosLeads) {
-        lead.tags = [];
-      }
+      lead.tags = [...crmTags, ...waTags];
     }
 
     // Ordena todos por data de criação mais recente

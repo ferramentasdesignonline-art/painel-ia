@@ -10,7 +10,8 @@ import {
   Plus, 
   Search, 
   RefreshCw,
-  Settings
+  Settings,
+  Tag
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -49,6 +50,7 @@ export function KanbanBoard() {
   const [busca, setBusca] = useState('');
   const [filtroAtivo, setFiltroAtivo] = useState('todos');
   const [canalFiltro, setCanalFiltro] = useState<string | null>(null);
+  const [tagFiltro, setTagFiltro] = useState<string | null>(null);
   const [novoLeadAberto, setNovoLeadAberto] = useState(false);
   const [leadSelecionado, setLeadSelecionado] = useState<LeadType | null>(null);
   const [colunaPreId, setColunaPreId] = useState<string | undefined>();
@@ -329,6 +331,14 @@ export function KanbanBoard() {
       endereco: (l as any).endereço || null,
       possuiCnh: (l as any).possui_cnh,
       genero: (l as any).genero || null,
+      tags: l.tags || [],
+      canal_origem: l.canal_origem,
+      canal_label_name: l.canal_label_name,
+      canal_color: l.canal_color,
+      anuncio_titulo: l.anuncio_titulo,
+      anuncio_id: l.anuncio_id,
+      anuncio_url: l.anuncio_url,
+      origem_detalhe: l.origem_detalhe,
     };
     setLeadSelecionado(formattedLead);
   };
@@ -385,6 +395,22 @@ export function KanbanBoard() {
     return { list, total: totalComCanal };
   }, [colunas]);
 
+  // Lista de todas as tags ativas presentes nos leads (exceto canais)
+  const tagsDisponiveis = useMemo(() => {
+    const map = new Map<string, { nome: string; cor: string; count: number }>();
+    for (const col of colunas) {
+      for (const lead of col.leads) {
+        for (const tag of (lead.tags || [])) {
+          if (!map.has(tag.nome)) {
+            map.set(tag.nome, { nome: tag.nome, cor: tag.cor, count: 0 });
+          }
+          map.get(tag.nome)!.count += 1;
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [colunas]);
+
   const colunasFiltradas = useMemo(() => {
     return colunas.map(col => ({
       ...col,
@@ -395,6 +421,11 @@ export function KanbanBoard() {
 
         // Filtro por Canal de Atendimento clicado no topo
         if (canalFiltro && (lead.canal_origem || 'desconhecido') !== canalFiltro) {
+          return false;
+        }
+
+        // Filtro por Etiqueta / Tag selecionada
+        if (tagFiltro && !(lead.tags || []).some(t => t.nome.toLowerCase() === tagFiltro.toLowerCase())) {
           return false;
         }
 
@@ -416,7 +447,7 @@ export function KanbanBoard() {
         return true;
       })
     }));
-  }, [colunas, busca, filtroAtivo, canalFiltro]);
+  }, [colunas, busca, filtroAtivo, canalFiltro, tagFiltro]);
 
   return (
     <div className="flex flex-col flex-1 h-[calc(100vh-190px)] min-h-[550px] space-y-4">
@@ -568,6 +599,34 @@ export function KanbanBoard() {
             ))}
           </div>
         </div>
+
+        {/* Filtro por Etiqueta / Tag */}
+        {tagsDisponiveis.length > 0 && (
+          <div className="flex items-center gap-1.5 bg-gray-50/70 border border-gray-100 rounded-xl px-2.5 h-10">
+            <Tag className="w-3.5 h-3.5 text-gray-400" />
+            <select
+              value={tagFiltro || ''}
+              onChange={e => setTagFiltro(e.target.value || null)}
+              className="bg-transparent text-xs font-bold text-gray-600 focus:outline-none cursor-pointer max-w-[150px] truncate"
+            >
+              <option value="">Todas as Etiquetas</option>
+              {tagsDisponiveis.map(t => (
+                <option key={t.nome} value={t.nome}>
+                  {t.nome} ({t.count})
+                </option>
+              ))}
+            </select>
+            {tagFiltro && (
+              <button
+                onClick={() => setTagFiltro(null)}
+                className="text-xs text-gray-400 hover:text-red-500 font-bold ml-1"
+                title="Limpar filtro de etiqueta"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="flex-1 min-w-[200px] relative group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300 group-focus-within:text-indigo-500 transition-colors" />

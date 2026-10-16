@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -8,7 +8,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area
 } from "recharts"
-import { Users, Bot, MessageSquare, Trophy, RefreshCw, Calendar, TrendingUp, ShieldBan } from "lucide-react"
+import { Users, Bot, MessageSquare, Trophy, RefreshCw, Calendar, TrendingUp, ShieldBan, ExternalLink, Megaphone, Tag, Filter } from "lucide-react"
 import { LeadDrawer, LeadType } from "@/components/leads/LeadDrawer"
 
 type AnalyticsData = {
@@ -96,7 +96,10 @@ const KpiCard = ({ title, value, subtitle, icon: Icon, color, trend }: any) => (
 
 export default function ClientDashboardPage() {
   const [data, setData] = useState<AnalyticsData | null>(null)
+  const [allLeads, setAllLeads] = useState<any[]>([])
   const [qualifiedLeadsList, setQualifiedLeadsList] = useState<any[]>([])
+  const [canalFiltro, setCanalFiltro] = useState<string | null>(null)
+  const [tagFiltro, setTagFiltro] = useState<string | null>(null)
   const [visitasDate, setVisitasDate] = useState('')
   const [selectedLead, setSelectedLead] = useState<LeadType | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -142,6 +145,14 @@ export default function ClientDashboardPage() {
       endereco: lead.endereço || null,
       possuiCnh: lead.possui_cnh,
       genero: lead.genero || null,
+      tags: lead.tags || [],
+      canal_origem: lead.canal_origem,
+      canal_label_name: lead.canal_label_name,
+      canal_color: lead.canal_color,
+      anuncio_titulo: lead.anuncio_titulo,
+      anuncio_id: lead.anuncio_id,
+      anuncio_url: lead.anuncio_url,
+      origem_detalhe: lead.origem_detalhe,
     }
     setSelectedLead(formattedLead)
     setIsDrawerOpen(true)
@@ -171,6 +182,7 @@ export default function ClientDashboardPage() {
 
       const jsonLeads = await resLeads.json()
       if (jsonLeads.data) {
+        setAllLeads(jsonLeads.data)
         // Filtrar leads qualificados (lead_finalizado, horario_lead_qualificado ou novas etapas ativas)
         const qualificados = jsonLeads.data.filter((l: any) => 
           l.lead_finalizado === true || 
@@ -181,10 +193,13 @@ export default function ClientDashboardPage() {
           l.lead_simulacao_reprovada === true
         )
         setQualifiedLeadsList(qualificados)
+      } else {
+        setAllLeads([])
       }
     } catch (e) {
       console.error(e)
       setData(null)
+      setAllLeads([])
       setQualifiedLeadsList([])
     } finally {
       setLoading(false)
@@ -194,6 +209,73 @@ export default function ClientDashboardPage() {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  // Métricas agrupadas por canal de atendimento
+  const canaisMetrics = useMemo(() => {
+    const map = new Map<string, { nome: string; count: number; color?: string }>()
+    let totalComCanal = 0
+
+    for (const lead of allLeads) {
+      const canalKey = lead.canal_origem || 'desconhecido'
+      const canalNome = lead.canal_label_name || (
+        canalKey === 'facebook_ads' ? 'Facebook Ads' :
+        canalKey === 'instagram_ads' ? 'Instagram Ads' :
+        canalKey === 'meta_ads' ? 'Meta Ads' :
+        canalKey === 'facebook_marketplace' ? 'Marketplace' :
+        canalKey === 'mercado_livre' ? 'Mercado Livre' :
+        canalKey === 'webmotors' ? 'WebMotors' :
+        canalKey === 'olx' ? 'OLX' :
+        canalKey === 'icarros' ? 'iCarros' :
+        'Direto / Desconhecido'
+      )
+
+      if (!map.has(canalKey)) {
+        map.set(canalKey, {
+          nome: canalNome,
+          count: 0,
+          color: lead.canal_color || undefined,
+        })
+      }
+      map.get(canalKey)!.count += 1
+      totalComCanal += 1
+    }
+
+    const list = Array.from(map.entries()).map(([key, data]) => ({
+      key,
+      nome: data.nome,
+      count: data.count,
+      color: data.color,
+    })).sort((a, b) => b.count - a.count)
+
+    return { list, total: totalComCanal }
+  }, [allLeads])
+
+  // Lista de tags únicas dos leads
+  const tagsDisponiveis = useMemo(() => {
+    const map = new Map<string, { nome: string; count: number }>()
+    for (const lead of allLeads) {
+      for (const t of (lead.tags || [])) {
+        if (!map.has(t.nome)) {
+          map.set(t.nome, { nome: t.nome, count: 0 })
+        }
+        map.get(t.nome)!.count += 1
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count)
+  }, [allLeads])
+
+  // Leads filtrados pelo canal clicado e pela etiqueta opcional
+  const leadsFiltradosPorCanal = useMemo(() => {
+    if (!canalFiltro) return []
+    return allLeads.filter(l => {
+      const matchCanal = (l.canal_origem || 'desconhecido') === canalFiltro
+      if (!matchCanal) return false
+      if (tagFiltro && !(l.tags || []).some((t: any) => t.nome.toLowerCase() === tagFiltro.toLowerCase())) {
+        return false
+      }
+      return true
+    })
+  }, [allLeads, canalFiltro, tagFiltro])
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 font-poppins pb-10">
@@ -429,6 +511,188 @@ export default function ClientDashboardPage() {
             </div>
           </Card>
 
+        </div>
+      )}
+
+      {/* Seção Desempenho por Canal de Atendimento */}
+      {!loading && canaisMetrics.list.length > 0 && (
+        <div className="space-y-4 animate-in fade-in duration-500">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-gray-900 font-poppins flex items-center gap-2">
+                <Megaphone className="w-5 h-5 text-indigo-600" />
+                Canais de Atendimento & Anúncios
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Volume de captação por canal. Clique em qualquer canal para ver e filtrar os leads correspondentes.
+              </p>
+            </div>
+            {canalFiltro && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setCanalFiltro(null); setTagFiltro(null); }}
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
+              >
+                Limpar seleção &times;
+              </Button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {canaisMetrics.list.map(c => {
+              const isSelected = canalFiltro === c.key
+              const perc = canaisMetrics.total > 0 ? Math.round((c.count / canaisMetrics.total) * 100) : 0
+              return (
+                <Card
+                  key={c.key}
+                  onClick={() => setCanalFiltro(isSelected ? null : c.key)}
+                  className={cn(
+                    "relative overflow-hidden cursor-pointer transition-all duration-200 p-4 border select-none group",
+                    isSelected
+                      ? "ring-2 ring-indigo-500 bg-indigo-50/70 border-indigo-200 shadow-md"
+                      : "bg-white border-gray-100 hover:border-indigo-200 hover:shadow-sm"
+                  )}
+                >
+                  <div
+                    className="absolute top-0 left-0 right-0 h-1"
+                    style={{ backgroundColor: c.color || '#6366f1' }}
+                  />
+                  <div className="flex flex-col justify-between h-full space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: c.color || '#6366f1' }}
+                      />
+                      <span className="text-xs font-bold text-gray-700 truncate line-clamp-1">{c.nome}</span>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-black text-gray-900 tracking-tight">{c.count}</div>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-gray-400 mt-0.5">
+                        <span>{perc}% do total</span>
+                        <span className="text-indigo-600 group-hover:underline">Ver leads →</span>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+
+          {/* Painel expandido dos Leads do canal selecionado */}
+          {canalFiltro && (
+            <Card className="border border-indigo-100 bg-white rounded-2xl p-5 shadow-sm space-y-4 animate-in fade-in zoom-in-95 duration-300">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-gray-900">
+                    Leads do Canal: <span className="text-indigo-600">{canaisMetrics.list.find(c => c.key === canalFiltro)?.nome}</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                    {leadsFiltradosPorCanal.length} lead{leadsFiltradosPorCanal.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+
+                {/* Filtro secundário por Etiqueta / Tag dentro do canal */}
+                {tagsDisponiveis.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-3.5 h-3.5 text-gray-400" />
+                    <select
+                      value={tagFiltro || ''}
+                      onChange={e => setTagFiltro(e.target.value || null)}
+                      className="h-8 px-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    >
+                      <option value="">Todas as etiquetas</option>
+                      {tagsDisponiveis.map(t => (
+                        <option key={t.nome} value={t.nome}>
+                          {t.nome} ({t.count})
+                        </option>
+                      ))}
+                    </select>
+                    {tagFiltro && (
+                      <button
+                        onClick={() => setTagFiltro(null)}
+                        className="text-xs text-gray-400 hover:text-red-500 font-bold"
+                        title="Limpar etiqueta"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {leadsFiltradosPorCanal.length === 0 ? (
+                <p className="text-xs text-gray-400 italic py-6 text-center">Nenhum lead com os filtros selecionados.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[460px] overflow-y-auto pr-1">
+                  {leadsFiltradosPorCanal.map(lead => (
+                    <div
+                      key={lead.id}
+                      onClick={() => handleCardClick(lead)}
+                      className="p-3.5 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-white hover:border-indigo-200 hover:shadow-xs transition-all cursor-pointer space-y-2 group"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-gray-900 group-hover:text-indigo-600 transition-colors line-clamp-1">
+                            {lead.nome || 'Cliente sem nome'}
+                          </span>
+                          <span className="text-[11px] font-medium text-gray-400">
+                            {formatarTelefone(lead.telefone)}
+                          </span>
+                        </div>
+                        {lead.lead_finalizado ? (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-800 shrink-0">
+                            Qualificado
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 shrink-0">
+                            Em Andamento
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Anúncio identificado */}
+                      {(lead.anuncio_titulo || lead.anuncio_id) && (
+                        <div className="bg-white rounded-lg p-2 border border-gray-100 text-[11px] space-y-0.5">
+                          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider block">Anúncio</span>
+                          <p className="font-semibold text-gray-800 line-clamp-1">{lead.anuncio_titulo || 'Anúncio Meta'}</p>
+                          {lead.anuncio_url && (
+                            <a
+                              href={lead.anuncio_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:underline pt-0.5"
+                            >
+                              Ver anúncio <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Tags / Etiquetas */}
+                      {lead.tags && lead.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {lead.tags.map((tag: any) => {
+                            const isHex = tag.cor?.startsWith('#')
+                            return (
+                              <span
+                                key={tag.id}
+                                className={cn("px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider border", !isHex && tag.cor)}
+                                style={isHex ? { backgroundColor: `${tag.cor}18`, borderColor: `${tag.cor}55`, color: tag.cor } : undefined}
+                              >
+                                {tag.nome}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
         </div>
       )}
 

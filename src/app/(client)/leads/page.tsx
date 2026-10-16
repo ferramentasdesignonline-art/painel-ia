@@ -43,6 +43,8 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterCanal, setFilterCanal] = useState('')
+  const [filterTag, setFilterTag] = useState('')
   const [sortBy, setSortBy] = useState<'ultima_mensagem' | 'created_at'>('ultima_mensagem')
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
   const [filterDataInicio, setFilterDataInicio] = useState('')
@@ -119,6 +121,14 @@ export default function LeadsPage() {
       endereco: lead.endereço || null,
       possuiCnh: lead.possui_cnh,
       genero: lead.genero || null,
+      tags: lead.tags || [],
+      canal_origem: lead.canal_origem,
+      canal_label_name: lead.canal_label_name,
+      canal_color: lead.canal_color,
+      anuncio_titulo: lead.anuncio_titulo,
+      anuncio_id: lead.anuncio_id,
+      anuncio_url: lead.anuncio_url,
+      origem_detalhe: lead.origem_detalhe,
     }
     setSelectedLead(formattedLead)
     setIsDrawerOpen(true)
@@ -129,6 +139,44 @@ export default function LeadsPage() {
     else { setSortBy(col); setSortDir('desc'); }
   }
 
+  // Extrai lista única de canais disponíveis
+  const canaisDisponiveis = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; count: number }>();
+    for (const l of leads) {
+      const key = l.canal_origem || 'desconhecido';
+      const label = l.canal_label_name || (
+        key === 'facebook_ads' ? 'Facebook Ads' :
+        key === 'instagram_ads' ? 'Instagram Ads' :
+        key === 'meta_ads' ? 'Meta Ads' :
+        key === 'facebook_marketplace' ? 'Marketplace' :
+        key === 'mercado_livre' ? 'Mercado Livre' :
+        key === 'webmotors' ? 'WebMotors' :
+        key === 'olx' ? 'OLX' :
+        key === 'icarros' ? 'iCarros' :
+        'Direto / Desconhecido'
+      );
+      if (!map.has(key)) {
+        map.set(key, { key, label, count: 0 });
+      }
+      map.get(key)!.count += 1;
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [leads]);
+
+  // Extrai lista única de tags disponíveis
+  const tagsDisponiveis = useMemo(() => {
+    const map = new Map<string, { nome: string; count: number }>();
+    for (const l of leads) {
+      for (const t of (l.tags || [])) {
+        if (!map.has(t.nome)) {
+          map.set(t.nome, { nome: t.nome, count: 0 });
+        }
+        map.get(t.nome)!.count += 1;
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [leads]);
+
   const filtered = useMemo(() => {
     let result = leads.filter(l => {
       const matchSearch =
@@ -136,6 +184,10 @@ export default function LeadsPage() {
         (l.telefone || '').includes(search);
 
       const matchStatus = !filterStatus || getStageKey(l) === filterStatus;
+
+      const matchCanal = !filterCanal || (l.canal_origem || 'desconhecido') === filterCanal;
+
+      const matchTag = !filterTag || (l.tags || []).some((t: any) => t.nome.toLowerCase() === filterTag.toLowerCase());
 
       const matchData = (() => {
         const d = new Date(sortBy === 'ultima_mensagem' ? (l.ultima_mensagem || l.created_at) : l.created_at);
@@ -145,7 +197,7 @@ export default function LeadsPage() {
         return true;
       })();
 
-      return matchSearch && matchStatus && matchData;
+      return matchSearch && matchStatus && matchCanal && matchTag && matchData;
     });
 
     result.sort((a, b) => {
@@ -159,7 +211,7 @@ export default function LeadsPage() {
     });
 
     return result;
-  }, [leads, search, filterStatus, filterDataInicio, filterDataFim, sortBy, sortDir]);
+  }, [leads, search, filterStatus, filterCanal, filterTag, filterDataInicio, filterDataFim, sortBy, sortDir]);
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 font-poppins pb-10">
@@ -207,6 +259,38 @@ export default function LeadsPage() {
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
+
+          {/* Filtro Canal */}
+          {canaisDisponiveis.length > 0 && (
+            <select
+              value={filterCanal}
+              onChange={e => setFilterCanal(e.target.value)}
+              className="h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 max-w-[170px] truncate"
+            >
+              <option value="">Todos os canais</option>
+              {canaisDisponiveis.map(c => (
+                <option key={c.key} value={c.key}>
+                  {c.label} ({c.count})
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Filtro Etiqueta / Tag */}
+          {tagsDisponiveis.length > 0 && (
+            <select
+              value={filterTag}
+              onChange={e => setFilterTag(e.target.value)}
+              className="h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 max-w-[170px] truncate"
+            >
+              <option value="">Todas as etiquetas</option>
+              {tagsDisponiveis.map(t => (
+                <option key={t.nome} value={t.nome}>
+                  {t.nome} ({t.count})
+                </option>
+              ))}
+            </select>
+          )}
 
           {/* Filtro por data */}
           <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
@@ -302,13 +386,45 @@ export default function LeadsPage() {
                         <div className="flex flex-col gap-1">
                           <span className="text-sm font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{lead.nome || 'Cliente S/ Nome'}</span>
                           <span className="text-xs font-medium text-gray-400 whitespace-nowrap">{formatarTelefone(lead.telefone || lead.phone)}</span>
+                          
+                          {/* Badge de Canal */}
+                          {lead.canal_origem && (
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border"
+                                style={lead.canal_color ? {
+                                  backgroundColor: `${lead.canal_color}15`,
+                                  borderColor: `${lead.canal_color}40`,
+                                  color: lead.canal_color,
+                                } : {
+                                  backgroundColor: '#eef2ff',
+                                  borderColor: '#c7d2fe',
+                                  color: '#4f46e5',
+                                }}
+                              >
+                                <span
+                                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: lead.canal_color || '#4f46e5' }}
+                                />
+                                {lead.canal_label_name || lead.canal_origem}
+                              </span>
+                            </div>
+                          )}
+
                           {lead.tags && lead.tags.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
-                              {lead.tags.map((tag: any) => (
-                                <span key={tag.id} className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", tag.cor)}>
-                                  {tag.nome}
-                                </span>
-                              ))}
+                              {lead.tags.map((tag: any) => {
+                                const isHex = tag.cor?.startsWith('#');
+                                return (
+                                  <span
+                                    key={tag.id}
+                                    className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", !isHex && tag.cor)}
+                                    style={isHex ? { backgroundColor: `${tag.cor}18`, borderColor: `${tag.cor}55`, color: tag.cor } : undefined}
+                                  >
+                                    {tag.nome}
+                                  </span>
+                                );
+                              })}
                             </div>
                           )}
                         </div>

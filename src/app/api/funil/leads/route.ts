@@ -283,6 +283,10 @@ export async function GET(request: Request) {
         canal_origem,
         canal_label_name,
         canal_color,
+        anuncio_titulo: lead.anuncio_titulo || null,
+        anuncio_id: lead.anuncio_id || null,
+        anuncio_url: lead.anuncio_url || null,
+        origem_detalhe: lead.origem_detalhe || null,
       });
     }
   }

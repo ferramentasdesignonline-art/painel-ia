@@ -37,6 +37,13 @@ export type LeadType = {
   genero?: string | null
   is_blocked?: boolean
   tags?: { id: string, nome: string, cor: string }[]
+  canal_origem?: string
+  canal_label_name?: string | null
+  canal_color?: string | null
+  anuncio_titulo?: string | null
+  anuncio_id?: string | null
+  anuncio_url?: string | null
+  origem_detalhe?: string | null
 }
 
 type LeadDrawerProps = {
@@ -363,14 +370,78 @@ export function LeadDrawer({ lead, isOpen, onClose }: LeadDrawerProps) {
                </div>
                <div className="flex flex-wrap gap-2 pt-1">
                  {lead.tags && lead.tags.length > 0 ? (
-                   lead.tags.map(tag => (
-                     <span key={tag.id} className={cn("px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border", tag.cor)}>
-                       {tag.nome}
-                     </span>
-                   ))
+                   lead.tags.map(tag => {
+                     const isHex = tag.cor?.startsWith('#');
+                     return (
+                       <span
+                         key={tag.id}
+                         className={cn("px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border shadow-xs", !isHex && tag.cor)}
+                         style={isHex ? { backgroundColor: `${tag.cor}18`, borderColor: `${tag.cor}55`, color: tag.cor } : undefined}
+                       >
+                         {tag.nome}
+                       </span>
+                     );
+                   })
                  ) : (
                    <p className="text-xs text-gray-400 italic">Nenhuma etiqueta adicionada.</p>
                  )}
+               </div>
+             </div>
+
+             {/* Canal de Atendimento & Anúncio de Origem */}
+             <div className="space-y-3">
+               <h3 className="font-semibold text-base text-gray-900 border-b pb-2">Origem & Anúncio</h3>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                 <div className="bg-gray-50 rounded-lg p-3">
+                   <p className="text-gray-400 text-[11px] uppercase tracking-wider font-medium mb-1">Canal de Entrada</p>
+                   <div className="flex items-center gap-2 mt-1">
+                     <span
+                       className="w-2.5 h-2.5 rounded-full shrink-0"
+                       style={{ backgroundColor: lead.canal_color || '#6366f1' }}
+                     />
+                     <span className="font-bold text-sm text-gray-900">
+                       {lead.canal_label_name || (
+                         lead.canal_origem === 'facebook_ads' ? 'Facebook Ads' :
+                         lead.canal_origem === 'instagram_ads' ? 'Instagram Ads' :
+                         lead.canal_origem === 'meta_ads' ? 'Meta Ads' :
+                         lead.canal_origem === 'facebook_marketplace' ? 'Marketplace' :
+                         lead.canal_origem === 'mercado_livre' ? 'Mercado Livre' :
+                         lead.canal_origem === 'webmotors' ? 'WebMotors' :
+                         lead.canal_origem === 'olx' ? 'OLX' :
+                         lead.canal_origem === 'icarros' ? 'iCarros' :
+                         lead.canal_origem === 'desconhecido' ? 'Direto / Desconhecido' :
+                         lead.canal_origem || 'Não identificado'
+                       )}
+                     </span>
+                   </div>
+                   {lead.origem_detalhe && (
+                     <p className="text-[11px] text-gray-500 mt-1">{lead.origem_detalhe}</p>
+                   )}
+                 </div>
+
+                 <div className="bg-gray-50 rounded-lg p-3">
+                   <p className="text-gray-400 text-[11px] uppercase tracking-wider font-medium mb-1">Anúncio Identificado</p>
+                   {lead.anuncio_titulo || lead.anuncio_id ? (
+                     <div className="space-y-1">
+                       <p className="font-bold text-sm text-gray-900 line-clamp-1">{lead.anuncio_titulo || 'Anúncio Meta'}</p>
+                       {lead.anuncio_id && (
+                         <p className="text-[10px] text-gray-400 font-mono">ID: {lead.anuncio_id}</p>
+                       )}
+                       {lead.anuncio_url && (
+                         <a
+                           href={lead.anuncio_url}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline pt-0.5"
+                         >
+                           Ver anúncio original ↗
+                         </a>
+                       )}
+                     </div>
+                   ) : (
+                     <p className="text-xs text-gray-400 italic mt-1">Nenhum anúncio direto detectado</p>
+                   )}
+                 </div>
                </div>
              </div>
 

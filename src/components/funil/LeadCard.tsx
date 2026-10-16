@@ -42,6 +42,10 @@ export type Lead = {
   canal_origem?: string;
   canal_label_name?: string | null;
   canal_color?: string | null;
+  anuncio_titulo?: string | null;
+  anuncio_id?: string | null;
+  anuncio_url?: string | null;
+  origem_detalhe?: string | null;
 };
 
 type Props = {
