@@ -38,6 +38,10 @@ export type Lead = {
   lead_simulacao_pre_aprovada?: boolean;
   lead_simulacao_reprovada?: boolean;
   tags?: { id: string, nome: string, cor: string }[];
+  whatsapp_labels?: string[];
+  canal_origem?: string;
+  canal_label_name?: string | null;
+  canal_color?: string | null;
 };
 
 type Props = {
@@ -139,6 +143,22 @@ export function LeadCard({ lead, onClick, formatarTelefone, metaFollowup, nomeEt
 
           {/* Pills Labels & Tags */}
           <div className="flex items-center gap-2 mt-1 flex-wrap">
+            {/* Canal de Atendimento */}
+            {lead.canal_origem && (
+              <div 
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight shadow-2xs border"
+                style={{
+                  backgroundColor: lead.canal_color ? `${lead.canal_color}18` : '#f3f4f6',
+                  color: lead.canal_color || '#4b5563',
+                  borderColor: lead.canal_color ? `${lead.canal_color}40` : '#e5e7eb',
+                }}
+                title={`Canal: ${lead.canal_label_name || lead.canal_origem}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lead.canal_color || '#9ca3af' }} />
+                <span>{lead.canal_label_name || lead.canal_origem.replace(/_/g, ' ')}</span>
+              </div>
+            )}
+
             {lead.bloqueado && (
               <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-50 border border-red-100">
                 <ShieldBan className="w-2.5 h-2.5 text-red-600" />

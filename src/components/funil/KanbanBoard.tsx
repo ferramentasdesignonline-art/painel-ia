@@ -48,6 +48,7 @@ export function KanbanBoard() {
   const [dataFim, setDataFim] = useState('');
   const [busca, setBusca] = useState('');
   const [filtroAtivo, setFiltroAtivo] = useState('todos');
+  const [canalFiltro, setCanalFiltro] = useState<string | null>(null);
   const [novoLeadAberto, setNovoLeadAberto] = useState(false);
   const [leadSelecionado, setLeadSelecionado] = useState<LeadType | null>(null);
   const [colunaPreId, setColunaPreId] = useState<string | undefined>();
@@ -342,6 +343,48 @@ export function KanbanBoard() {
     return limpo;
   };
 
+  // Métricas consolidadas por Canal de Atendimento
+  const canaisMetrics = useMemo(() => {
+    const map = new Map<string, { nome: string; count: number; color?: string }>();
+    let totalComCanal = 0;
+
+    for (const col of colunas) {
+      for (const lead of col.leads) {
+        const canalKey = lead.canal_origem || 'desconhecido';
+        const canalNome = lead.canal_label_name || (
+          canalKey === 'facebook_ads' ? 'Facebook Ads' :
+          canalKey === 'instagram_ads' ? 'Instagram Ads' :
+          canalKey === 'meta_ads' ? 'Meta Ads' :
+          canalKey === 'facebook_marketplace' ? 'Marketplace' :
+          canalKey === 'mercado_livre' ? 'Mercado Livre' :
+          canalKey === 'webmotors' ? 'WebMotors' :
+          canalKey === 'olx' ? 'OLX' :
+          canalKey === 'icarros' ? 'iCarros' :
+          'Outros / Direto'
+        );
+
+        if (!map.has(canalKey)) {
+          map.set(canalKey, {
+            nome: canalNome,
+            count: 0,
+            color: lead.canal_color || undefined,
+          });
+        }
+        map.get(canalKey)!.count += 1;
+        totalComCanal += 1;
+      }
+    }
+
+    const list = Array.from(map.entries()).map(([key, data]) => ({
+      key,
+      nome: data.nome,
+      count: data.count,
+      color: data.color,
+    })).sort((a, b) => b.count - a.count);
+
+    return { list, total: totalComCanal };
+  }, [colunas]);
+
   const colunasFiltradas = useMemo(() => {
     return colunas.map(col => ({
       ...col,
@@ -349,6 +392,11 @@ export function KanbanBoard() {
         const matchesBusca = (lead.nome?.toLowerCase().includes(busca.toLowerCase()) || 
                              lead.veiculo_interessado?.toLowerCase().includes(busca.toLowerCase()));
         if (!matchesBusca) return false;
+
+        // Filtro por Canal de Atendimento clicado no topo
+        if (canalFiltro && (lead.canal_origem || 'desconhecido') !== canalFiltro) {
+          return false;
+        }
 
         if (filtroAtivo === 'todos') return true;
         if (filtroAtivo === 'ia') return lead.origem === 'ia';
@@ -368,7 +416,7 @@ export function KanbanBoard() {
         return true;
       })
     }));
-  }, [colunas, busca, filtroAtivo]);
+  }, [colunas, busca, filtroAtivo, canalFiltro]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] space-y-6 overflow-hidden">
@@ -422,6 +470,76 @@ export function KanbanBoard() {
           </div>
         </div>
       </div>
+
+      {/* Barra de Métricas por Canal de Atendimento */}
+      {canaisMetrics.list.length > 0 && (
+        <div className="mx-1 bg-white/90 backdrop-blur-xs rounded-2xl border border-gray-100 p-3 shadow-xs">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+              Canais de Atendimento ({canaisMetrics.total} leads)
+            </span>
+            {canalFiltro && (
+              <button
+                onClick={() => setCanalFiltro(null)}
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+              >
+                Limpar filtro de canal &times;
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {/* Botão Todos */}
+            <button
+              onClick={() => setCanalFiltro(null)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
+                !canalFiltro
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                  : "bg-gray-50/70 border-gray-100 text-gray-600 hover:bg-gray-100/70"
+              )}
+            >
+              <span>Todos os Canais</span>
+              <span className={cn(
+                "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
+                !canalFiltro ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
+              )}>
+                {canaisMetrics.total}
+              </span>
+            </button>
+
+            {/* Botões individuais por canal */}
+            {canaisMetrics.list.map(c => {
+              const isSelected = canalFiltro === c.key;
+              return (
+                <button
+                  key={c.key}
+                  onClick={() => setCanalFiltro(isSelected ? null : c.key)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0",
+                    isSelected
+                      ? "ring-2 ring-indigo-500 bg-indigo-50 border-indigo-200 text-indigo-900 shadow-sm"
+                      : "bg-white border-gray-100 text-gray-600 hover:border-gray-200 hover:bg-gray-50/50"
+                  )}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: c.color || '#6366f1' }}
+                  />
+                  <span className="truncate max-w-[140px]">{c.nome}</span>
+                  <span className={cn(
+                    "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
+                    isSelected ? "bg-indigo-200/60 text-indigo-900" : "bg-gray-100 text-gray-600"
+                  )}>
+                    {c.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Barra de Filtros */}
       <div className="mx-1 bg-white rounded-[22px] border border-gray-100 p-2.5 flex flex-wrap items-center gap-4 shadow-sm">

@@ -106,7 +106,61 @@ export async function GET(request: Request) {
     .select('*')
     .eq('cliente_id', cliente.id);
 
-  // 7. Montar o mapa de etapas por tipo e por id
+  // 7. Buscar contatos e etiquetas do WhatsApp Cloud para correlacionar
+  let mapaWhatsappLabels = new Map<string, string[]>();
+  let mapaUazapiLabels = new Map<string, { id: string; name: string; colorHex: string; color: number }>();
+
+  try {
+    const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+    const wacloudAdmin = getWacloudSupabaseAdmin();
+
+    // Encontra a instância vinculada ao nome do cliente ou slug
+    const nomeLimpo = cliente.nome.replace(/\s+/g, '').toLowerCase();
+    const { data: instancias } = await wacloudAdmin
+      .from('wacloud_instancias')
+      .select('id, nome_instancia, token')
+      .limit(50);
+
+    const instanciaMatch = instancias?.find(i => {
+      const instNome = i.nome_instancia.replace(/\s+/g, '').toLowerCase();
+      return instNome === nomeLimpo || instNome.includes(nomeLimpo) || nomeLimpo.includes(instNome);
+    });
+
+    if (instanciaMatch) {
+      // Buscar contatos com etiquetas dessa instância
+      const { data: contatosCloud } = await wacloudAdmin
+        .from('wacloud_contatos')
+        .select('telefone_contato, whatsapp_labels')
+        .eq('nome_instancia', instanciaMatch.nome_instancia)
+        .neq('whatsapp_labels', '[]')
+        .limit(10000);
+
+      for (const cc of contatosCloud || []) {
+        if (cc.telefone_contato && Array.isArray(cc.whatsapp_labels) && cc.whatsapp_labels.length > 0) {
+          mapaWhatsappLabels.set(cc.telefone_contato, cc.whatsapp_labels);
+        }
+      }
+
+      // Buscar dicionário de etiquetas da Uazapi se houver token
+      if (instanciaMatch.token) {
+        const { fetchUazapiLabels } = await import('@/lib/wacloud/uazapi');
+        const labelsList = await fetchUazapiLabels(instanciaMatch.token);
+        for (const lbl of labelsList || []) {
+          const key = String(lbl.labelid || lbl.id);
+          mapaUazapiLabels.set(key, {
+            id: key,
+            name: lbl.name,
+            colorHex: lbl.colorHex || '#ccc',
+            color: lbl.color,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Erro ao carregar etiquetas do wacloud:', err);
+  }
+
+  // 8. Montar o mapa de etapas por tipo e por id
   const etapaPorTipo = new Map(etapas?.map(e => [e.tipo, e.id]) || []);
   const colunas = etapas?.map(etapa => ({
     ...etapa,
@@ -115,12 +169,31 @@ export async function GET(request: Request) {
 
   const colunasPorId = new Map(colunas.map(c => [c.id, c]));
 
-  // 8. Distribuir leads pelas etapas
+  // 9. Distribuir leads pelas etapas
   for (const lead of leads || []) {
     // IA Leads
     const rawPhone = lead.telefone || lead.phone || '';
     const phoneClean = rawPhone.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
     const bloqueado = numerosBloqueados.has(phoneClean);
+
+    // Correlaciona etiquetas do WhatsApp
+    const leadWaLabels = mapaWhatsappLabels.get(phoneClean) || [];
+
+    // Descobrir Canal de Atendimento (via etiqueta WhatsApp 'Canal | ...' ou campo origem_lead)
+    let canal_origem: string = lead.origem_lead || 'desconhecido';
+    let canal_label_name: string | null = null;
+    let canal_color: string | null = null;
+
+    for (const lId of leadWaLabels) {
+      const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
+      const def = mapaUazapiLabels.get(cleanId);
+      if (def && def.name.toLowerCase().startsWith('canal')) {
+        canal_label_name = def.name.replace(/^canal\s*\|\s*/i, '').trim();
+        canal_color = def.colorHex;
+        canal_origem = canal_label_name.toLowerCase().replace(/\s+/g, '_');
+        break;
+      }
+    }
 
     // Construct data_agendamento from database columns
     let data_agendamento = lead.data_agendamento || null;
@@ -183,11 +256,19 @@ export async function GET(request: Request) {
       }
     }
 
+    // Passa whatsapp_labels para calcularEtapaIA priorizar etiquetas
+    const leadComLabels = {
+      ...lead,
+      data_agendamento,
+      whatsapp_labels: leadWaLabels,
+    };
+
     // Verificar se tem posição manual recente (30 dias)
     const etapaManualId = mapaPosicoesManuais.get(String(lead.id));
-    const etapaIdCalculada = etapaPorTipo.get(calcularEtapaIA({ ...lead, data_agendamento }, funil.meta_followup || 5));
+    const tipoCalculado = calcularEtapaIA(leadComLabels, funil.meta_followup || 5);
+    const etapaIdCalculada = etapaPorTipo.get(tipoCalculado);
     
-    // Se foi movido manualmente, respeita. Caso contrário, lógica da IA.
+    // Se foi movido manualmente, respeita. Caso contrário, lógica das etiquetas / IA.
     const etapaIdFinal = etapaManualId || etapaIdCalculada;
 
     if (etapaIdFinal && colunasPorId.has(etapaIdFinal)) {
@@ -198,6 +279,10 @@ export async function GET(request: Request) {
         origem: 'ia',
         bloqueado,
         movido_manualmente: !!etapaManualId,
+        whatsapp_labels: leadWaLabels,
+        canal_origem,
+        canal_label_name,
+        canal_color,
       });
     }
   }
