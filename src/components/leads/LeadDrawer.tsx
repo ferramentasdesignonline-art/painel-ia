@@ -310,24 +310,22 @@ export function LeadDrawer({ lead, isOpen, onClose }: LeadDrawerProps) {
             <TabsTrigger value="chat" className="relative h-8 rounded-none border-b-2 border-b-transparent px-3 pb-2 pt-1 text-xs font-semibold text-muted-foreground shadow-none transition-none data-[state=active]:border-b-blue-600 data-[state=active]:text-foreground data-[state=active]:shadow-none">Histórico (IA)</TabsTrigger>
           </TabsList>
           
-          <TabsContent value="chat" className="flex-1 m-0 overflow-hidden flex flex-col border-t">
-            <div className="flex-1 flex flex-col min-h-0">
-              <div className="p-2 bg-gray-50 flex justify-end border-b border-gray-200">
-                <Button variant="ghost" size="sm" onClick={fetchChat} disabled={loadingChat} className="text-gray-500 h-8 text-xs">
-                  <RefreshCw className={`h-3 w-3 mr-2 ${loadingChat ? 'animate-spin' : ''}`} />
-                  Atualizar
-                </Button>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <LeadChat
-                  messages={messages}
-                  telefone={lead.telefone}
-                  onMessageSent={() => {
-                    lead.is_blocked = true;
-                    fetchChat();
-                  }}
-                />
-              </div>
+          <TabsContent value="chat" className="flex-1 m-0 min-h-0 overflow-hidden flex flex-col border-t">
+            <div className="p-2 bg-gray-50 flex justify-end border-b border-gray-200 shrink-0">
+              <Button variant="ghost" size="sm" onClick={fetchChat} disabled={loadingChat} className="text-gray-500 h-8 text-xs">
+                <RefreshCw className={`h-3 w-3 mr-2 ${loadingChat ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+              <LeadChat
+                messages={messages}
+                telefone={lead.telefone}
+                onMessageSent={() => {
+                  lead.is_blocked = true;
+                  fetchChat();
+                }}
+              />
             </div>
           </TabsContent>
           

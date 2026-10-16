@@ -227,8 +227,8 @@ export function LeadChat({ messages, telefone, onMessageSent }: LeadChatProps) {
   let lastDateLabel = "";
 
   return (
-    <div className="flex flex-col h-full bg-[#E5DDD5] relative" ref={scrollRef}>
-      <ScrollArea className="flex-1 p-4 h-full">
+    <div className="flex flex-col h-full min-h-0 flex-1 bg-[#E5DDD5] relative" ref={scrollRef}>
+      <ScrollArea className="flex-1 min-h-0 p-4 h-full">
         <div className="space-y-4 pb-4">
           {finalMessages.length === 0 ? (
             <div className="flex items-center justify-center min-h-[200px] text-gray-500 text-sm italic">
