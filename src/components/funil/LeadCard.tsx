@@ -177,12 +177,33 @@ export function LeadCard({ lead, onClick, formatarTelefone, metaFollowup, nomeEt
                 <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter">Manual</span>
               </div>
             )}
-            {/* Tags do Banco */}
-            {lead.tags && lead.tags.map(tag => (
-              <div key={tag.id} className={cn("flex items-center gap-1 px-2 py-0.5 rounded-md border", tag.cor)}>
-                <span className="text-[10px] font-bold uppercase tracking-tighter">{tag.nome}</span>
-              </div>
-            ))}
+            {/* Tags e Etiquetas do WhatsApp */}
+            {lead.tags && lead.tags.slice(0, 3).map(tag => {
+              const isHex = tag.cor && tag.cor.startsWith('#');
+              return (
+                <div 
+                  key={tag.id} 
+                  className={cn(
+                    "flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-tight border",
+                    !isHex && (tag.cor || 'bg-gray-50 border-gray-100 text-gray-600')
+                  )}
+                  style={isHex ? {
+                    backgroundColor: `${tag.cor}18`,
+                    color: tag.cor,
+                    borderColor: `${tag.cor}40`,
+                  } : undefined}
+                  title={tag.nome}
+                >
+                  {isHex && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tag.cor }} />}
+                  <span className="truncate max-w-[120px]">{tag.nome}</span>
+                </div>
+              );
+            })}
+            {lead.tags && lead.tags.length > 3 && (
+              <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-md" title={lead.tags.slice(3).map(t => t.nome).join(', ')}>
+                +{lead.tags.length - 3}
+              </span>
+            )}
             <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 border border-gray-100">
               <Phone className="w-2.5 h-2.5 text-gray-400" />
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">

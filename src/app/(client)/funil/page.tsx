@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function FunilPage() {
   return (
-    <div className="h-[calc(100vh-140px)] flex flex-col">
+    <div className="flex-1 h-full min-h-0 flex flex-col">
       <KanbanBoard />
     </div>
   );

@@ -419,7 +419,7 @@ export function KanbanBoard() {
   }, [colunas, busca, filtroAtivo, canalFiltro]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] space-y-6 overflow-hidden">
+    <div className="flex flex-col flex-1 h-[calc(100vh-190px)] min-h-[550px] space-y-4">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 px-1">
         <div className="flex items-center gap-3">

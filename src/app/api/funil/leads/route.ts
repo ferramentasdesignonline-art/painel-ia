@@ -315,13 +315,43 @@ export async function GET(request: Request) {
     
     for (const col of colunas) {
       for (const lead of col.leads) {
-        lead.tags = tagsByLeadId.get(lead.id) || [];
+        const crmTags = tagsByLeadId.get(lead.id) || [];
+        
+        // Converte as etiquetas de WhatsApp reais (que não sejam canal) em tags resumidas
+        const waTags: any[] = [];
+        for (const lId of (lead.whatsapp_labels || [])) {
+          const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
+          const def = mapaUazapiLabels.get(cleanId);
+          if (def && !def.name.toLowerCase().startsWith('canal')) {
+            waTags.push({
+              id: `wa-${cleanId}`,
+              nome: def.name,
+              cor: def.colorHex || '#6366f1',
+              is_whatsapp: true,
+            });
+          }
+        }
+
+        lead.tags = [...crmTags, ...waTags];
       }
     }
   } else {
     for (const col of colunas) {
       for (const lead of col.leads) {
-        lead.tags = [];
+        const waTags: any[] = [];
+        for (const lId of (lead.whatsapp_labels || [])) {
+          const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
+          const def = mapaUazapiLabels.get(cleanId);
+          if (def && !def.name.toLowerCase().startsWith('canal')) {
+            waTags.push({
+              id: `wa-${cleanId}`,
+              nome: def.name,
+              cor: def.colorHex || '#6366f1',
+              is_whatsapp: true,
+            });
+          }
+        }
+        lead.tags = waTags;
       }
     }
   }
