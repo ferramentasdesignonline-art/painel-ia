@@ -32,9 +32,7 @@ export function Sidebar({ className }: { className?: string }) {
       <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6">
         <nav className="space-y-1.5 flex-1">
           {navigation.map((item) => {
-            const isActive = item.href === "/dashboard" 
-              ? pathname === "/dashboard" 
-              : pathname.startsWith(item.href)
+            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"))
             
             return (
               <Link
