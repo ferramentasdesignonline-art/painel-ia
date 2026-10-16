@@ -88,16 +88,28 @@ export async function GET(request: Request) {
       const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
       const wacloudAdmin = getWacloudSupabaseAdmin();
 
-      const nomeLimpo = clientConfig.nome.replace(/\s+/g, '').toLowerCase();
+      const normalizeStr = (str: string) =>
+        (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
+      const nomeNorm = normalizeStr(clientConfig.nome);
+      const slugNorm = normalizeStr(clientConfig.slug || '');
+
       const { data: instancias } = await wacloudAdmin
         .from('wacloud_instancias')
         .select('id, nome_instancia, token')
         .limit(50);
 
-      const instanciaMatch = instancias?.find(i => {
-        const instNome = i.nome_instancia.replace(/\s+/g, '').toLowerCase();
-        return instNome === nomeLimpo || instNome.includes(nomeLimpo) || nomeLimpo.includes(instNome);
+      let instanciaMatch = instancias?.find(i => {
+        const instNorm = normalizeStr(i.nome_instancia);
+        return instNorm === nomeNorm || instNorm === slugNorm;
       });
+
+      if (!instanciaMatch) {
+        instanciaMatch = instancias?.find(i => {
+          const instNorm = normalizeStr(i.nome_instancia);
+          return instNorm.includes(nomeNorm) || nomeNorm.includes(instNorm);
+        });
+      }
 
       if (instanciaMatch) {
         let allContatosCloud: any[] = [];
