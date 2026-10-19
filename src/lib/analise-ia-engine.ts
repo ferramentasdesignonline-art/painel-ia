@@ -104,7 +104,7 @@ Regras: inclua TODAS as conversas recebidas. Seja específico, use dados reais d
 const REDUCE_SYSTEM = `Você é Diretor Comercial e especialista em tráfego pago para concessionárias. Recebe dados JÁ CONSOLIDADOS de TODAS as conversas e leads da loja: estatísticas reais por canal, lista de atritos encontrados com exemplos e demandas de veículos.
 Responda SOMENTE JSON neste formato:
 {
-  "resumo_geral": "3 parágrafos objetivos com números reais: cenário, onde está o dinheiro, maiores gargalos.",
+  "resumo_geral": "3 parágrafos objetivos com números reais: cenário, onde está o dinheiro, maiores gargalos e resultados de agendamentos.",
   "metricas": { "temperatura_geral": "Quente" | "Morna" | "Fria", "score_qualidade_leads": number 0-100 },
   "diagnostico_canais": [
     { "canal": "nome exato do canal recebido",
@@ -145,8 +145,122 @@ export async function runAnalise(clientConfig: any, openAiKey: string, log: (s: 
     ? fetchParallel(clientDb, clientConfig.tabela_memoria, "id, session_id, message", 50000)
     : Promise.resolve([])
 
-  const [leads, mensagensRaw] = await Promise.all([leadsPromise, msgsPromise])
+  // 2. Buscar contatos e etiquetas do Wacloud para correlação precisa de canais e agendamento de visitas
+  const agendamentoPhones = new Set<string>()
+  const canalByPhone = new Map<string, string>()
+
+  const enrichmentPromise = (async () => {
+    try {
+      const { getWacloudSupabaseAdmin } = await import("@/lib/wacloud/supabase")
+      const { fetchUazapiLabels } = await import("@/lib/wacloud/uazapi")
+      const wacloudAdmin = getWacloudSupabaseAdmin()
+
+      const { data: insts } = await wacloudAdmin.from("wacloud_instancias").select("id, nome_instancia, token, cliente_id")
+      const instNorm = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase()
+      const clientNameNorm = instNorm(clientConfig.whatsapp_instancia || clientConfig.nome || "")
+
+      const instMatch = insts?.find((i: any) => {
+        if (i.cliente_id && (i.cliente_id === clientConfig.id || i.cliente_id === clientConfig.auth_user_id)) return true
+        const n = instNorm(i.nome_instancia || "")
+        return n === clientNameNorm || n.includes(clientNameNorm) || clientNameNorm.includes(n)
+      })
+
+      if (instMatch) {
+        let uazapiLabels: any[] = []
+        if (instMatch.token) {
+          uazapiLabels = await fetchUazapiLabels(instMatch.token).catch(() => [])
+        }
+
+        const agendamentoLabelIds = new Set<string>()
+        const canalLabels = new Map<string, string>()
+
+        for (const lbl of uazapiLabels || []) {
+          const id = String(lbl.labelid || lbl.id)
+          const name = String(lbl.name || "").trim()
+          const nameNorm = name.toLowerCase()
+
+          if (nameNorm.includes("agendad") || nameNorm.includes("visita") || nameNorm.includes("agendamento")) {
+            agendamentoLabelIds.add(id)
+            if (lbl.id) agendamentoLabelIds.add(String(lbl.id))
+            if (lbl.labelid) agendamentoLabelIds.add(String(lbl.labelid))
+          }
+
+          if (nameNorm.startsWith("canal")) {
+            const cleanName = name.replace(/^canal\s*\|\s*/i, "").trim()
+            canalLabels.set(id, cleanName)
+            if (lbl.id) canalLabels.set(String(lbl.id), cleanName)
+            if (lbl.labelid) canalLabels.set(String(lbl.labelid), cleanName)
+          }
+        }
+
+        const contatosPromises: Promise<any>[] = []
+        for (let p = 0; p < 8; p++) {
+          contatosPromises.push(
+            wacloudAdmin.from("wacloud_contatos")
+              .select("telefone_contato, whatsapp_labels")
+              .eq("nome_instancia", instMatch.nome_instancia)
+              .range(p * 1000, (p + 1) * 1000 - 1)
+          )
+        }
+        const contatosChunks = await Promise.all(contatosPromises)
+        for (const chunk of contatosChunks) {
+          if (!chunk.data) continue
+          for (const c of chunk.data) {
+            if (!c.telefone_contato || !Array.isArray(c.whatsapp_labels) || c.whatsapp_labels.length === 0) continue
+            const cleanPhone = String(c.telefone_contato).replace(/\D/g, "")
+            if (!cleanPhone) continue
+
+            const hasAgendamento = c.whatsapp_labels.some((lId: any) => {
+              const cleanId = String(lId).includes(":") ? String(lId).split(":")[1] : String(lId)
+              return agendamentoLabelIds.has(String(lId)) || agendamentoLabelIds.has(cleanId)
+            })
+
+            if (hasAgendamento) {
+              agendamentoPhones.add(cleanPhone)
+              if (cleanPhone.startsWith("55")) agendamentoPhones.add(cleanPhone.slice(2))
+              else agendamentoPhones.add(`55${cleanPhone}`)
+            }
+
+            for (const lId of c.whatsapp_labels) {
+              const cleanId = String(lId).includes(":") ? String(lId).split(":")[1] : String(lId)
+              if (canalLabels.has(cleanId) || canalLabels.has(String(lId))) {
+                const cName = canalLabels.get(cleanId) || canalLabels.get(String(lId))!
+                canalByPhone.set(cleanPhone, cName)
+                if (cleanPhone.startsWith("55")) canalByPhone.set(cleanPhone.slice(2), cName)
+                else canalByPhone.set(`55${cleanPhone}`, cName)
+                break
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Aviso ao carregar etiquetas do Wacloud para análise:", err)
+    }
+  })()
+
+  const [leads, mensagensRaw] = await Promise.all([leadsPromise, msgsPromise, enrichmentPromise])
   const mensagens = mensagensRaw.sort((a: any, b: any) => (Number(a.id) || 0) - (Number(b.id) || 0))
+
+  // Enriquecer cada lead com status de agendamento e canal identificado
+  for (const l of leads) {
+    const rawTel = String(l.telefone || l.phone || "").replace(/\D/g, "")
+    const hasLabelAgendamento = rawTel ? agendamentoPhones.has(rawTel) : false
+    const hasDbAgendamento = l.lead_visita_confirmada === true ||
+      (l.data_agendamento_visita != null && String(l.data_agendamento_visita).trim() !== "") ||
+      (l.data_agendamento != null && String(l.data_agendamento).trim() !== "")
+
+    l.agendado = hasDbAgendamento || hasLabelAgendamento
+    if (l.agendado && !l.data_agendamento) {
+      l.data_agendamento = l.data_agendamento_visita
+        ? `${l.data_agendamento_visita} ${l.horario_agendamento_visita || ""}`.trim()
+        : "Visita Agendada"
+    }
+
+    if (rawTel && canalByPhone.has(rawTel)) {
+      l.canal_label_name = canalByPhone.get(rawTel)
+    }
+  }
 
   const leadByTail = new Map<string, any>()
   leads.forEach((l: any) => { const t = tail(l.telefone || l.phone); if (t) leadByTail.set(t, l) })
@@ -181,7 +295,7 @@ export async function runAnalise(clientConfig: any, openAiKey: string, log: (s: 
       lead,
       total: c.total,
       texto: `### CONVERSA id=${sid}
-Lead: ${lead?.nome || "desconhecido"} | Canal: ${canalDe(lead)} | Anúncio: ${lead?.anuncio_titulo || "-"} | Veículo cadastrado: ${lead?.veiculo_interessado || "-"} | Troca: ${lead?.veiculo_troca || "-"} | Agendado: ${lead?.data_agendamento ? "sim" : "não"}
+Lead: ${lead?.nome || "desconhecido"} | Canal: ${canalDe(lead)} | Anúncio: ${lead?.anuncio_titulo || "-"} | Veículo cadastrado: ${lead?.veiculo_interessado || "-"} | Troca: ${lead?.veiculo_troca || "-"} | Agendado: ${lead?.agendado ? "sim" : "não"}
 ${c.linhas.slice(-MSGS_POR_CONVERSA).join("\n")}`,
     }
   })
@@ -215,7 +329,7 @@ ${c.linhas.slice(-MSGS_POR_CONVERSA).join("\n")}`,
     const nome = canalDe(l)
     const c = canais[nome] ||= { canal: nome, total_leads: 0, com_conversa: 0, agendados: 0, finalizados: 0, quentes: 0, mornos: 0, frios: 0, atritos: 0, veiculos: {} as Record<string, number>, anuncios: {} as Record<string, number> }
     c.total_leads++
-    if (l.data_agendamento) c.agendados++
+    if (l.agendado) c.agendados++
     if (l.lead_finalizado) c.finalizados++
     const v = l.veiculo_interessado; if (v) c.veiculos[v] = (c.veiculos[v] || 0) + 1
     const an = l.anuncio_titulo; if (an) c.anuncios[an] = (c.anuncios[an] || 0) + 1
@@ -271,12 +385,13 @@ ${c.linhas.slice(-MSGS_POR_CONVERSA).join("\n")}`,
   // 7. REDUCE
   const temps = { quente: 0, morna: 0, fria: 0 } as Record<string, number>
   analisadas.forEach(a => { temps[a.temperatura] = (temps[a.temperatura] || 0) + 1 })
-  const totalAgendados = leads.filter((l: any) => l.data_agendamento).length
+  const totalAgendados = leads.filter((l: any) => l.agendado).length
+  const taxaAgendamentoNum = leads.length ? Math.round((totalAgendados / leads.length) * 100) : 0
 
   const reduceUser = `CONCESSIONÁRIA: ${clientConfig.nome}
 TOTAL DE LEADS NO BANCO: ${leads.length}
 CONVERSAS ANALISADAS: ${analisadas.length} (quentes ${temps.quente || 0}, mornas ${temps.morna || 0}, frias ${temps.fria || 0})
-LEADS AGENDADOS: ${totalAgendados}
+LEADS COM VISITA AGENDADA: ${totalAgendados} (taxa de agendamento real de ${taxaAgendamentoNum}%)
 
 ESTATÍSTICAS REAIS POR CANAL:
 ${JSON.stringify(statsCanais)}
@@ -305,7 +420,7 @@ ${JSON.stringify(demandasBrutas.slice(0, 300))}`
       total_mensagens: mensagens.length,
       temperatura_geral: final.metricas?.temperatura_geral || "Morna",
       score_qualidade_leads: final.metricas?.score_qualidade_leads ?? 0,
-      taxa_agendamento_estimada: leads.length ? `${Math.round((totalAgendados / leads.length) * 100)}%` : "0%",
+      taxa_agendamento_estimada: `${taxaAgendamentoNum}%`,
       quentes: temps.quente || 0, mornas: temps.morna || 0, frias: temps.fria || 0,
     },
     leads_quentes: leadsQuentes,
