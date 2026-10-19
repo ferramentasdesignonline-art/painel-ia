@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { criarFunilPadrao } from '@/lib/funil/criar-funil-padrao';
 import { getActiveClientConfig } from '@/lib/auth/helpers';
 import { getAllBlockedNumbers } from '@/lib/supabase/queries';
+import { construirDataAgendamentoIso } from '@/lib/agendamento-utils';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -218,62 +219,7 @@ export async function GET(request: Request) {
     // Construct data_agendamento from database columns
     let data_agendamento = lead.data_agendamento || null;
     if (lead.data_agendamento_visita) {
-      const dateStr = String(lead.data_agendamento_visita).trim();
-      const timeStr = lead.horario_agendamento_visita || '00:00';
-      let day = 1;
-      let month = 1;
-      let year = new Date().getFullYear();
-      let parsedOk = false;
-
-      if (dateStr.includes('/')) {
-        const parts = dateStr.split('/');
-        if (parts.length >= 2) {
-          day = parseInt(parts[0], 10);
-          month = parseInt(parts[1], 10) - 1; // 0-based
-          if (parts.length >= 3) {
-            year = parseInt(parts[2], 10);
-            if (year < 100) year += 2000;
-          }
-          parsedOk = true;
-        }
-      } else if (dateStr.includes('-')) {
-        const parts = dateStr.split('-');
-        if (parts.length === 3) {
-          if (parts[0].length === 4) {
-            year = parseInt(parts[0], 10);
-            month = parseInt(parts[1], 10) - 1;
-            day = parseInt(parts[2], 10);
-            parsedOk = true;
-          } else {
-            day = parseInt(parts[0], 10);
-            month = parseInt(parts[1], 10) - 1;
-            year = parseInt(parts[2], 10);
-            if (year < 100) year += 2000;
-            parsedOk = true;
-          }
-        }
-      }
-
-      if (parsedOk) {
-        let hh = 0;
-        let mm = 0;
-        const timeParts = timeStr.split(':');
-        if (timeParts.length >= 2) {
-          hh = parseInt(timeParts[0], 10);
-          mm = parseInt(timeParts[1], 10);
-        }
-        try {
-          data_agendamento = new Date(year, month, day, hh, mm).toISOString();
-        } catch (e) {
-          data_agendamento = `${dateStr} ${timeStr}`;
-        }
-      } else {
-        try {
-          data_agendamento = new Date(`${dateStr}T${timeStr}:00`).toISOString();
-        } catch (e) {
-          data_agendamento = `${dateStr} ${timeStr}`;
-        }
-      }
+      data_agendamento = construirDataAgendamentoIso(lead.data_agendamento_visita, lead.horario_agendamento_visita) || data_agendamento;
     }
 
     // Passa whatsapp_labels para calcularEtapaIA priorizar etiquetas

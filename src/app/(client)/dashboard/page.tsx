@@ -10,6 +10,7 @@ import {
 } from "recharts"
 import { Users, Bot, MessageSquare, Trophy, RefreshCw, Calendar, TrendingUp, ShieldBan, ExternalLink, Megaphone, Tag, Filter } from "lucide-react"
 import { LeadDrawer, LeadType } from "@/components/leads/LeadDrawer"
+import { formatarVisitaDashboard, matchesVisitasDate } from "@/lib/agendamento-utils"
 
 type AnalyticsData = {
   kpis: {
@@ -137,6 +138,10 @@ export default function ClientDashboardPage() {
       horarioLeadQualificado: lead.horario_lead_qualificado || null,
       veiculoInteressado: lead.veiculo_interessado || null,
       dataAgendamento: lead.data_agendamento || null,
+      data_agendamento_visita: lead.data_agendamento_visita || null,
+      horario_agendamento_visita: lead.horario_agendamento_visita || null,
+      dataAgendamentoVisita: lead.data_agendamento_visita || null,
+      horarioAgendamentoVisita: lead.horario_agendamento_visita || null,
       observacaoLeadQualificado: lead.observacao_lead_qualificado || null,
       email: lead.email || null,
       cpfCnpj: lead.cpf_cnpj || null,
@@ -909,65 +914,68 @@ export default function ClientDashboardPage() {
                 )}
               </div>
               <div className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-bold border border-indigo-100 whitespace-nowrap">
-                {qualifiedLeadsList.filter(l => !visitasDate || (l.data_agendamento && new Date(l.data_agendamento).toISOString().startsWith(visitasDate))).length} Qualificado{qualifiedLeadsList.length > 1 ? 's' : ''}
+                {qualifiedLeadsList.filter(l => matchesVisitasDate(l, visitasDate)).length} Qualificado{qualifiedLeadsList.length > 1 ? 's' : ''}
               </div>
             </div>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {qualifiedLeadsList
-              .filter(l => !visitasDate || (l.data_agendamento && new Date(l.data_agendamento).toISOString().startsWith(visitasDate)))
+              .filter(l => matchesVisitasDate(l, visitasDate))
               .sort((a, b) => {
                 const aTime = a.data_agendamento ? new Date(a.data_agendamento).getTime() : 0;
                 const bTime = b.data_agendamento ? new Date(b.data_agendamento).getTime() : 0;
                 return bTime - aTime;
               })
-              .map((lead: any) => (
-              <Card 
-                key={lead.id} 
-                onClick={() => handleCardClick(lead)}
-                className="relative overflow-hidden border-none premium-shadow bg-white hover:-translate-y-1 transition-all duration-300 cursor-pointer"
-              >
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
-                <CardContent className="p-6 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold text-gray-900 line-clamp-1">{lead.nome || 'Cliente não informado'}</span>
-                      <span className="text-xs font-semibold text-gray-400 mt-0.5 whitespace-nowrap">{formatarTelefone(lead.telefone)}</span>
-                    </div>
-                    {lead.data_agendamento ? (
-                      <div className="bg-amber-50 text-amber-700 px-2.5 py-1 rounded-lg text-xs font-bold border border-amber-100 whitespace-nowrap flex items-center gap-1.5">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(lead.data_agendamento).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              .map((lead: any) => {
+                const visitaInfo = formatarVisitaDashboard(lead);
+                return (
+                  <Card 
+                    key={lead.id} 
+                    onClick={() => handleCardClick(lead)}
+                    className="relative overflow-hidden border-none premium-shadow bg-white hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+                  >
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
+                    <CardContent className="p-6 space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-gray-900 line-clamp-1">{lead.nome || 'Cliente não informado'}</span>
+                          <span className="text-xs font-semibold text-gray-400 mt-0.5 whitespace-nowrap">{formatarTelefone(lead.telefone)}</span>
+                        </div>
+                        {visitaInfo.hasAgendamento ? (
+                          <div className="bg-amber-50 text-amber-700 px-2.5 py-1 rounded-lg text-xs font-bold border border-amber-100 whitespace-nowrap flex items-center gap-1.5">
+                            <Calendar className="w-3 h-3" />
+                            {visitaInfo.badgeText}
+                          </div>
+                        ) : (
+                          <div className="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg text-xs font-bold border border-emerald-100 whitespace-nowrap">
+                            Qualificado
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg text-xs font-bold border border-emerald-100 whitespace-nowrap">
-                        Qualificado
-                      </div>
-                    )}
-                  </div>
 
-                  <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-2 border border-gray-100">
-                    <div className="flex gap-2">
-                      <span className="text-gray-400 font-medium whitespace-nowrap w-20 text-xs text-right">Interesse:</span>
-                      <span className="text-gray-900 font-semibold line-clamp-1 flex-1">{lead.veiculo_interessado || '-'}</span>
-                    </div>
-                    {lead.observacao_lead_qualificado && (
-                      <div className="flex gap-2">
-                         <span className="text-gray-400 font-medium whitespace-nowrap w-20 text-xs text-right">Obs:</span>
-                         <span className="text-gray-600 font-medium line-clamp-2 text-xs flex-1">{lead.observacao_lead_qualificado}</span>
+                      <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-2 border border-gray-100">
+                        <div className="flex gap-2">
+                          <span className="text-gray-400 font-medium whitespace-nowrap w-20 text-xs text-right">Interesse:</span>
+                          <span className="text-gray-900 font-semibold line-clamp-1 flex-1">{lead.veiculo_interessado || '-'}</span>
+                        </div>
+                        {lead.observacao_lead_qualificado && (
+                          <div className="flex gap-2">
+                             <span className="text-gray-400 font-medium whitespace-nowrap w-20 text-xs text-right">Obs:</span>
+                             <span className="text-gray-600 font-medium line-clamp-2 text-xs flex-1">{lead.observacao_lead_qualificado}</span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  
-                  {lead.data_agendamento && (
-                    <div className="pt-2 flex items-center gap-2 text-xs font-bold text-gray-500">
-                       Data da visita: {new Date(lead.data_agendamento).toLocaleDateString('pt-BR')} às {new Date(lead.data_agendamento).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                      
+                      {visitaInfo.hasAgendamento && (
+                        <div className="pt-2 flex items-center gap-2 text-xs font-bold text-gray-500">
+                           {visitaInfo.dataTexto}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
           </div>
         </div>
       )}

@@ -9,6 +9,7 @@ import { LeadDrawer, LeadType } from "@/components/leads/LeadDrawer"
 import { AddLeadModal } from "@/components/leads/AddLeadModal"
 import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
 import { cn } from "@/lib/utils"
+import { formatarVisitaDashboard } from "@/lib/agendamento-utils"
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos os status' },
@@ -130,6 +131,10 @@ export default function LeadsPage() {
       horarioLeadQualificado: lead.horario_lead_qualificado || null,
       veiculoInteressado: lead.veiculo_interessado || null,
       dataAgendamento: lead.data_agendamento || null,
+      data_agendamento_visita: lead.data_agendamento_visita || null,
+      horario_agendamento_visita: lead.horario_agendamento_visita || null,
+      dataAgendamentoVisita: lead.data_agendamento_visita || null,
+      horarioAgendamentoVisita: lead.horario_agendamento_visita || null,
       observacaoLeadQualificado: lead.observacao_lead_qualificado || null,
       email: lead.email || null,
       cpfCnpj: lead.cpf_cnpj || null,
@@ -651,12 +656,17 @@ export default function LeadsPage() {
                               </span>
                             )}
                           </div>
-                          {lead.data_agendamento && (
-                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100 flex items-center gap-1 mt-0.5">
-                              <Calendar className="w-3 h-3 text-amber-600" />
-                              {formatTs(lead.data_agendamento, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          )}
+                          {(() => {
+                            const vi = formatarVisitaDashboard(lead);
+                            if (!vi.hasAgendamento) return null;
+                            const badge = vi.badgeText ? `${vi.dataFormatada ? vi.dataFormatada.slice(0, 5) + ' • ' : ''}${vi.badgeText}` : vi.dataFormatada;
+                            return (
+                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100 flex items-center gap-1 mt-0.5">
+                                <Calendar className="w-3 h-3 text-amber-600" />
+                                {badge}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </td>
 

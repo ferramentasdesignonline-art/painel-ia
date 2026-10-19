@@ -78,14 +78,16 @@ export async function POST(request: Request) {
       if ('data_agendamento' in payload) {
         if (payload.data_agendamento) {
           const d = new Date(payload.data_agendamento);
-          const yyyy = d.getFullYear();
-          const mm = String(d.getMonth() + 1).padStart(2, '0');
-          const dd = String(d.getDate()).padStart(2, '0');
-          payload.data_agendamento_visita = `${yyyy}-${mm}-${dd}`;
-          
-          const hh = String(d.getHours()).padStart(2, '0');
-          const min = String(d.getMinutes()).padStart(2, '0');
-          payload.horario_agendamento_visita = `${hh}:${min}`;
+          const brasilStr = d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+          const parts = brasilStr.replace(',', '').split(' ');
+          const dateParts = (parts[0] || '').split('/');
+          const timeParts = (parts[1] || '').split(':');
+          if (dateParts.length === 3) {
+            payload.data_agendamento_visita = `${dateParts[2]}-${dateParts[1].padStart(2, '0')}-${dateParts[0].padStart(2, '0')}`;
+          }
+          if (timeParts.length >= 2) {
+            payload.horario_agendamento_visita = `${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}`;
+          }
         } else {
           payload.data_agendamento_visita = null;
           payload.horario_agendamento_visita = null;

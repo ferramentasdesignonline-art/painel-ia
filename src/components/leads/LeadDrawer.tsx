@@ -8,6 +8,7 @@ import { RefreshCw, Pencil, Check, X, ShieldBan } from "lucide-react"
 import { LeadChat, ChatMessage } from "./LeadChat"
 import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
+import { formatarVisitaDashboard } from "@/lib/agendamento-utils"
 
 export type LeadType = {
   id: string
@@ -27,6 +28,10 @@ export type LeadType = {
   horarioLeadQualificado?: string | null
   veiculoInteressado?: string | null
   dataAgendamento?: string | null
+  data_agendamento_visita?: string | null
+  horario_agendamento_visita?: string | null
+  dataAgendamentoVisita?: string | null
+  horarioAgendamentoVisita?: string | null
   observacaoLeadQualificado?: string | null
   email?: string | null
   cpfCnpj?: string | null
@@ -494,7 +499,11 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated }: LeadDrawerP
                      />
                    ) : (
                      <p className="font-semibold text-amber-900">
-                       {lead.dataAgendamento ? new Date(lead.dataAgendamento).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Não agendado'}
+                       {(() => {
+                         const vi = formatarVisitaDashboard(lead);
+                         if (!vi.hasAgendamento) return 'Não agendado';
+                         return vi.dataTexto.replace(/^Data da visita:\s*/i, '');
+                       })()}
                      </p>
                    )}
                  </div>
