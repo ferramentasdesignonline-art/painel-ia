@@ -1,24 +1,30 @@
 import { createClient } from "@supabase/supabase-js"
 
 const MODEL = "gpt-4o-mini"
-const BATCH_SIZE = 15          // conversas por chamada na fase "map"
-const CONCURRENCY = 20         // chamadas paralelas
-const MSGS_POR_CONVERSA = 30   // últimas N mensagens de cada conversa
-const CHARS_POR_MSG = 280
-const MAP_BUDGET_MS = 180000   // limite de 3 min na fase de mapa para garantir resposta sem timeout
+const BATCH_SIZE = 20          // conversas por chamada na fase "map"
+const CONCURRENCY = 25         // chamadas paralelas simultâneas
+const MSGS_POR_CONVERSA = 16   // últimas N mensagens de cada conversa (foco na negociação)
+const CHARS_POR_MSG = 180      // tamanho ideal de mensagem
+const MAP_BUDGET_MS = 36000    // orçamento máximo de 36s na fase MAP para resposta total < 45s
 
 const digits = (s: any) => String(s || "").split("@")[0].replace(/\D/g, "")
 const tail = (s: any) => digits(s).slice(-8)
 
-async function fetchAllNoOrder(db: any, table: string, select: string, max = 60000) {
+// Busca paralela ultrarrápida no banco (evita dezenas de segundos em requisições sequenciais)
+async function fetchParallel(db: any, table: string, select: string, maxRows = 50000) {
+  const pageSize = 1000
+  const promises: Promise<any>[] = []
+  for (let from = 0; from < maxRows; from += pageSize) {
+    promises.push(
+      db.from(table).select(select).range(from, from + pageSize - 1)
+    )
+  }
+  const results = await Promise.all(promises)
   const out: any[] = []
-  const page = 1000
-  for (let from = 0; from < max; from += page) {
-    const { data, error } = await db.from(table).select(select).range(from, from + page - 1)
-    if (error) throw new Error(`Erro lendo ${table}: ${error.message}`)
-    if (!data || data.length === 0) break
-    out.push(...data)
-    if (data.length < page) break
+  for (const r of results) {
+    if (r.data && r.data.length > 0) {
+      out.push(...r.data)
+    }
   }
   return out
 }
@@ -45,7 +51,7 @@ async function callOpenAI(key: string, system: string, user: string, maxTokens =
     const txt = await res.text()
     if (res.status === 401) throw new Error("Chave da OpenAI inválida: " + txt.slice(0, 200))
     if (attempt === retries) throw new Error(`OpenAI ${res.status}: ${txt.slice(0, 300)}`)
-    await new Promise(r => setTimeout(r, 2000 * (attempt + 1)))
+    await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
   }
   return {}
 }
@@ -133,17 +139,18 @@ export async function runAnalise(clientConfig: any, openAiKey: string, log: (s: 
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
-  // 1. TODOS os leads
-  const leads = await fetchAllNoOrder(clientDb, clientConfig.tabela_leads, "*")
+  // 1. TODOS os leads e TODAS as mensagens em paralelo ultrarrápido
+  const leadsPromise = fetchParallel(clientDb, clientConfig.tabela_leads, "*", 10000)
+  const msgsPromise = clientConfig.tabela_memoria
+    ? fetchParallel(clientDb, clientConfig.tabela_memoria, "id, session_id, message", 50000)
+    : Promise.resolve([])
+
+  const [leads, mensagensRaw] = await Promise.all([leadsPromise, msgsPromise])
+  const mensagens = mensagensRaw.sort((a: any, b: any) => (Number(a.id) || 0) - (Number(b.id) || 0))
+
   const leadByTail = new Map<string, any>()
   leads.forEach((l: any) => { const t = tail(l.telefone || l.phone); if (t) leadByTail.set(t, l) })
 
-  // 2. TODAS as mensagens
-  let mensagens: any[] = []
-  if (clientConfig.tabela_memoria) {
-    mensagens = await fetchAllNoOrder(clientDb, clientConfig.tabela_memoria, "*")
-    mensagens.sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0))
-  }
   log(`leads=${leads.length} mensagens=${mensagens.length}`)
 
   const conversas: Record<string, { cliente: number; total: number; ultimo: number; linhas: string[] }> = {}
@@ -185,8 +192,8 @@ ${c.linhas.slice(-MSGS_POR_CONVERSA).join("\n")}`,
 
   const inicio = Date.now()
   const mapResults = await pool(lotes, CONCURRENCY, async (lote) => {
-    if (Date.now() - inicio > MAP_BUDGET_MS) return [] // orcamento de tempo
-    const r = await callOpenAI(openAiKey, MAP_SYSTEM, lote.map(x => x.texto).join("\n\n"), 14000)
+    if (Date.now() - inicio > MAP_BUDGET_MS) return [] // orçamento rigoroso de tempo para evitar timeout
+    const r = await callOpenAI(openAiKey, MAP_SYSTEM, lote.map(x => x.texto).join("\n\n"), 4000)
     return Array.isArray(r?.conversas) ? r.conversas : []
   })
 
@@ -280,7 +287,7 @@ ${JSON.stringify(atritosBrutos.slice(0, 250))}
 DEMANDAS DE VEÍCULOS (${demandasBrutas.length}):
 ${JSON.stringify(demandasBrutas.slice(0, 300))}`
 
-  const final = await callOpenAI(openAiKey, REDUCE_SYSTEM, reduceUser, 12000)
+  const final = await callOpenAI(openAiKey, REDUCE_SYSTEM, reduceUser, 4500)
   log(`reduce ok`)
 
   const diagnostico = (final.diagnostico_canais || []).map((d: any) => {

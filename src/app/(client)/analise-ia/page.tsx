@@ -165,7 +165,7 @@ export default function AnaliseIaPage() {
 
       {generating && (
         <div className="text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5">
-          Estamos lendo todas as conversas. Isso pode levar de 1 a 4 minutos, dependendo do volume. Não feche a página.
+          Estamos auditando todas as conversas da loja com IA. O processamento rápido leva cerca de 30 a 45 segundos. Não feche a página.
         </div>
       )}
 
