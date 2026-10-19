@@ -204,6 +204,7 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimerRef = useRef<any>(null)
+  const isCancelledRef = useRef<boolean>(false)
   
   const chatRef = useRef<HTMLDivElement>(null)
 
@@ -406,6 +407,7 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
         alert("Seu navegador não tem suporte para gravação de áudio ou a permissão foi negada.");
         return;
       }
+      isCancelledRef.current = false;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
       
@@ -427,6 +429,10 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
         if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        if (isCancelledRef.current) {
+          audioChunksRef.current = [];
+          return;
+        }
         const chunks = audioChunksRef.current;
         if (!chunks || chunks.length === 0) return;
 
@@ -452,6 +458,7 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
   };
 
   const stopAudioRecording = () => {
+    isCancelledRef.current = false;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
@@ -460,6 +467,7 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
   };
 
   const cancelAudioRecording = () => {
+    isCancelledRef.current = true;
     audioChunksRef.current = [];
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();

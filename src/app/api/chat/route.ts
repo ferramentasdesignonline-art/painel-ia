@@ -194,32 +194,38 @@ export async function POST(request: Request) {
 
     const sessionIdCandidate = pureNumbers.startsWith('55') ? whatsappJid : `55${whatsappJid}`
 
-    await supabaseAdmin
-      .from(clientConfig.tabela_memoria)
-      .insert({
-        session_id: sessionIdCandidate,
-        message: messageJson
-      })
-      .catch((e: any) => console.error("Erro ao salvar mensagem na tabela de memória:", e))
+    try {
+      await supabaseAdmin
+        .from(clientConfig.tabela_memoria)
+        .insert({
+          session_id: sessionIdCandidate,
+          message: messageJson
+        })
+    } catch (e: any) {
+      console.error("Erro ao salvar mensagem na tabela de memória:", e)
+    }
 
     // 4. Bloqueia a IA automaticamente na tabela_bloqueios
     const instanciaNome = clientConfig.whatsapp_instancia || clientConfig.nome.replace(/\s+/g, '')
     const numeroClientePadrao = `${instanciaNome} ${pureNumbers}@s.whatsapp.net block`
 
-    const { data: existente } = await supabaseAdmin
-      .from(clientConfig.tabela_bloqueios)
-      .select('id')
-      .or(`numero_cliente.eq.${numeroClientePadrao},numero_cliente.ilike.%${pureNumbers}%`)
-      .limit(1)
-
-    if (!existente || existente.length === 0) {
-      await supabaseAdmin
+    try {
+      const { data: existente } = await supabaseAdmin
         .from(clientConfig.tabela_bloqueios)
-        .insert({
-          numero_cliente: numeroClientePadrao,
-          bloqueio_existe: true
-        })
-        .catch((e: any) => console.error("Erro ao criar bloqueio humano:", e))
+        .select('id')
+        .or(`numero_cliente.eq.${numeroClientePadrao},numero_cliente.ilike.%${pureNumbers}%`)
+        .limit(1)
+
+      if (!existente || existente.length === 0) {
+        await supabaseAdmin
+          .from(clientConfig.tabela_bloqueios)
+          .insert({
+            numero_cliente: numeroClientePadrao,
+            bloqueio_existe: true
+          })
+      }
+    } catch (e: any) {
+      console.error("Erro ao criar bloqueio humano:", e)
     }
 
     return NextResponse.json({
