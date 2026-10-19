@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { Paperclip, Send, Loader2, FileText, Image as ImageIcon, Music } from "lucide-react"
+import { Paperclip, Send, Loader2, FileText, Image as ImageIcon, Music, Mic } from "lucide-react"
 
 export type ChatMessage = {
   id: string
@@ -27,6 +27,13 @@ export function LeadChat({ messages, telefone, onMessageSent }: LeadChatProps) {
   const [msgText, setMsgText] = useState("")
   const [sending, setSending] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+
+  // Gravador de áudio
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingDuration, setRecordingDuration] = useState(0)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const recordingTimerRef = useRef<any>(null)
 
   // Scroll para o fundo quando novas mensagens chegam
   useEffect(() => {
@@ -182,6 +189,128 @@ export function LeadChat({ messages, telefone, onMessageSent }: LeadChatProps) {
     }
   };
 
+  const startAudioRecording = async () => {
+    if (isRecording || sending || !telefone) return;
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Seu navegador não tem suporte para gravação de áudio ou a permissão foi negada.");
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+        ? 'audio/ogg;codecs=opus'
+        : 'audio/mp4';
+
+      const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        const chunks = audioChunksRef.current;
+        if (!chunks || chunks.length === 0) return;
+
+        const actualType = mediaRecorder.mimeType || 'audio/ogg';
+        const ext = actualType.includes('mp4') ? 'm4a' : actualType.includes('webm') ? 'webm' : 'ogg';
+        const audioBlob = new Blob(chunks, { type: actualType });
+        if (audioBlob.size < 500) return;
+
+        await sendRecordedAudio(audioBlob, ext, actualType);
+      };
+
+      mediaRecorder.start(250);
+      setIsRecording(true);
+      setRecordingDuration(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(d => d + 1);
+      }, 1000);
+    } catch (err: any) {
+      console.error("Erro ao iniciar gravação:", err);
+      alert("Não foi possível acessar o microfone: " + (err.message || 'Permissão negada'));
+      setIsRecording(false);
+    }
+  };
+
+  const stopAudioRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    setIsRecording(false);
+  };
+
+  const cancelAudioRecording = () => {
+    audioChunksRef.current = [];
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    setIsRecording(false);
+    setRecordingDuration(0);
+  };
+
+  const sendRecordedAudio = async (blob: Blob, ext: string, mimeType: string) => {
+    if (!telefone) return;
+    setSending(true);
+    setUploadProgress(15);
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const { WACLOUD_CONFIG } = await import('@/lib/wacloud/config');
+      const supabase = createClient(WACLOUD_CONFIG.supabaseUrl, WACLOUD_CONFIG.supabaseAnonKey);
+
+      const fileName = `audio-${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+
+      setUploadProgress(45);
+      const { error: uploadError } = await supabase.storage
+        .from('wacloud_midias')
+        .upload(fileName, blob, { contentType: mimeType, cacheControl: '3600', upsert: false });
+
+      if (uploadError) throw new Error("Erro no upload do áudio: " + uploadError.message);
+
+      setUploadProgress(75);
+      const { data: { publicUrl } } = supabase.storage
+        .from('wacloud_midias')
+        .getPublicUrl(fileName);
+
+      setUploadProgress(90);
+      // tipo 'ptt' para enviar como áudio nativo de voz do WhatsApp
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telefone,
+          text: '',
+          type: 'ptt',
+          mediaUrl: publicUrl,
+          fileName: 'Mensagem de voz'
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erro ao enviar mensagem de voz');
+      }
+
+      if (onMessageSent) onMessageSent();
+    } catch (err: any) {
+      alert("Erro ao enviar áudio: " + err.message);
+    } finally {
+      setSending(false);
+      setUploadProgress(0);
+      setRecordingDuration(0);
+    }
+  };
+
   const visibleMessages = messages.filter(msg => {
     const content = cleanMessageContent(msg.data.content);
     if (!content) return false;
@@ -317,48 +446,90 @@ export function LeadChat({ messages, telefone, onMessageSent }: LeadChatProps) {
           </div>
         )}
 
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          className="hidden" 
-          onChange={handleFileUpload} 
-          accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
-        />
+        {isRecording ? (
+          <div className="flex-1 flex items-center justify-between bg-white rounded-xl px-3.5 py-2 border border-red-200 shadow-sm animate-in fade-in duration-200">
+            <div className="flex items-center gap-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-xs font-bold text-red-600 font-mono tracking-wider">
+                Gravando... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={cancelAudioRecording}
+                className="text-xs font-bold text-gray-500 hover:text-red-600 px-2.5 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={stopAudioRecording}
+                className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all shadow-sm active:scale-95"
+              >
+                <Send className="w-3.5 h-3.5" />
+                Enviar Áudio
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              onChange={handleFileUpload} 
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
+            />
 
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={sending || !telefone}
-          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors disabled:opacity-40"
-          title="Anexar documento, imagem ou áudio"
-        >
-          <Paperclip className="w-5 h-5" />
-        </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending || !telefone}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full transition-colors disabled:opacity-40"
+              title="Anexar documento, imagem ou áudio"
+            >
+              <Paperclip className="w-5 h-5" />
+            </button>
 
-        <input
-          type="text"
-          value={msgText}
-          onChange={(e) => setMsgText(e.target.value)}
-          placeholder={telefone ? "Responder cliente (pausa a IA automaticamente)..." : "Sem telefone"}
-          disabled={sending || !telefone}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSendText();
-            }
-          }}
-          className="flex-1 bg-white border border-gray-300 text-gray-800 text-sm rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
-        />
+            <input
+              type="text"
+              value={msgText}
+              onChange={(e) => setMsgText(e.target.value)}
+              placeholder={telefone ? "Responder cliente (pausa a IA automaticamente)..." : "Sem telefone"}
+              disabled={sending || !telefone}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendText();
+                }
+              }}
+              className="flex-1 bg-white border border-gray-300 text-gray-800 text-sm rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100"
+            />
 
-        <button
-          type="button"
-          onClick={handleSendText}
-          disabled={sending || !msgText.trim() || !telefone}
-          className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shrink-0 shadow-sm"
-          title="Enviar e pausar IA"
-        >
-          {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-        </button>
+            {msgText.trim() ? (
+              <button
+                type="button"
+                onClick={handleSendText}
+                disabled={sending || !telefone}
+                className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shrink-0 shadow-sm"
+                title="Enviar mensagem e pausar IA"
+              >
+                {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={startAudioRecording}
+                disabled={sending || !telefone}
+                className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shrink-0 shadow-sm hover:scale-105 active:scale-95"
+                title="Gravar áudio para o cliente"
+              >
+                {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mic className="w-5 h-5" />}
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   )
