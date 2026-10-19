@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { createClient } from "@supabase/supabase-js"
 import { getActiveClientConfig } from "@/lib/auth/helpers"
-import { getClientLeads } from "@/lib/supabase/queries"
+import { getClientLeads, getAllBlockedNumbers } from "@/lib/supabase/queries"
 
 export async function GET(request: Request) {
   try {
@@ -42,16 +42,8 @@ export async function GET(request: Request) {
     // 4. Busca os dados IA
     const leadsIA = await getClientLeads(supabaseAdmin, clientConfig.tabela_leads)
 
-    // Busca bloqueios ativos para o cliente atual
-    const blockedNumbers = new Set<string>()
-    if (clientConfig.tabela_bloqueios) {
-      const { data: bData } = await supabaseAdmin.from(clientConfig.tabela_bloqueios).select('numero_cliente').neq('bloqueio_existe', false)
-      if (bData) {
-        for (const b of bData) {
-          if (b.numero_cliente) blockedNumbers.add(b.numero_cliente.replace(/\D/g, ''))
-        }
-      }
-    }
+    // Busca bloqueios ativos para o cliente atual (paginado sem limite de 1000)
+    const blockedNumbers = await getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios)
 
     // 5. Busca leads manuais
     const { data: leadsManuais } = await supabaseAdmin

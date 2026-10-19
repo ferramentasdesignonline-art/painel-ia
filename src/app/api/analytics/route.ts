@@ -4,6 +4,7 @@ import { cookies } from "next/headers"
 import { createClient } from "@supabase/supabase-js"
 import { getActiveClientConfig } from "@/lib/auth/helpers"
 import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
+import { getAllBlockedNumbers } from "@/lib/supabase/queries"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -164,16 +165,8 @@ export async function GET(request: Request) {
     let emAndamento = 0
     let atendimentoHumano = 0
 
-    // Busca os bloqueios para nao contar como em andamento nem somar followups
-    const blockedNumbers = new Set<string>()
-    if (clientConfig.tabela_bloqueios) {
-      const { data: bData } = await supabaseAdmin.from(clientConfig.tabela_bloqueios).select('numero_cliente').neq('bloqueio_existe', false)
-      if (bData) {
-        for (const b of bData) {
-          if (b.numero_cliente) blockedNumbers.add(b.numero_cliente.replace(/\D/g, ''))
-        }
-      }
-    }
+    // Busca os bloqueios para nao contar como em andamento nem somar followups (paginado sem limite de 1000)
+    const blockedNumbers = await getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios)
 
     totalLeads = allLeads.length
     for (const lead of allLeads) {

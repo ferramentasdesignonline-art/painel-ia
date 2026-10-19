@@ -684,6 +684,12 @@ export default function LeadsPage() {
         lead={selectedLead}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
+        onLeadUpdated={(leadId, updates) => {
+          setLeads(prev => prev.map(l => (l.id === leadId || String(l.original_id) === String(leadId)) ? { ...l, ...updates } : l))
+          if (selectedLead && (selectedLead.id === leadId || String(selectedLead.original_id) === String(leadId))) {
+            setSelectedLead(prev => prev ? { ...prev, ...updates } : null)
+          }
+        }}
       />
     </div>
   )

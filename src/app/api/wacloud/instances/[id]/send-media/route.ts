@@ -40,6 +40,14 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Erro Uazapi: ' + JSON.stringify(data) }, { status: res.status });
     }
 
+    // Bloqueia automaticamente a IA para o lead ao enviar mídia humana
+    const { autoBlockLeadOnHumanMessage } = await import('@/lib/whatsapp/auto-block');
+    await autoBlockLeadOnHumanMessage({
+      instanceIdOrName: params.id,
+      phone: number,
+      content: file || text || '[Mídia]'
+    });
+
     return NextResponse.json({ success: true, data });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

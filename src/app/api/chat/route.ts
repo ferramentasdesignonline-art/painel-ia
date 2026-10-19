@@ -206,14 +206,15 @@ export async function POST(request: Request) {
     }
 
     // 4. Bloqueia a IA automaticamente na tabela_bloqueios
+    const pureWith55 = pureNumbers.startsWith('55') ? pureNumbers : `55${pureNumbers}`
     const instanciaNome = clientConfig.whatsapp_instancia || clientConfig.nome.replace(/\s+/g, '')
-    const numeroClientePadrao = `${instanciaNome} ${pureNumbers}@s.whatsapp.net block`
+    const numeroClientePadrao = `${instanciaNome} ${pureWith55}@s.whatsapp.net block`
 
     try {
       const { data: existente } = await supabaseAdmin
         .from(clientConfig.tabela_bloqueios)
-        .select('id')
-        .or(`numero_cliente.eq.${numeroClientePadrao},numero_cliente.ilike.%${pureNumbers}%`)
+        .select('id, bloqueio_existe')
+        .or(`numero_cliente.eq.${numeroClientePadrao},numero_cliente.ilike.%${pureNumbers}%,numero_cliente.ilike.%${pureWith55}%`)
         .limit(1)
 
       if (!existente || existente.length === 0) {
@@ -223,6 +224,11 @@ export async function POST(request: Request) {
             numero_cliente: numeroClientePadrao,
             bloqueio_existe: true
           })
+      } else if (existente[0].bloqueio_existe === false) {
+        await supabaseAdmin
+          .from(clientConfig.tabela_bloqueios)
+          .update({ bloqueio_existe: true })
+          .eq('id', existente[0].id)
       }
     } catch (e: any) {
       console.error("Erro ao criar bloqueio humano:", e)

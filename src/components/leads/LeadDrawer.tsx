@@ -50,15 +50,17 @@ type LeadDrawerProps = {
   lead: LeadType | null
   isOpen: boolean
   onClose: () => void
+  onLeadUpdated?: (leadId: string, updates: Partial<LeadType>) => void
 }
 
-export function LeadDrawer({ lead, isOpen, onClose }: LeadDrawerProps) {
+export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated }: LeadDrawerProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [history, setHistory] = useState<any[]>([])
   const [loadingChat, setLoadingChat] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [novaNota, setNovaNota] = useState("")
   const [salvandoNota, setSalvandoNota] = useState(false)
+  const [isBlocked, setIsBlocked] = useState<boolean>(lead?.is_blocked ?? false)
 
   const [isEditing, setIsEditing] = useState(false)
   const [editNome, setEditNome] = useState("")
@@ -254,6 +256,12 @@ export function LeadDrawer({ lead, isOpen, onClose }: LeadDrawerProps) {
   }
 
   useEffect(() => {
+    if (lead) {
+      setIsBlocked(lead.is_blocked ?? false)
+    }
+  }, [lead])
+
+  useEffect(() => {
     if (isOpen && lead) {
       fetchChat()
       fetchHistory()
@@ -295,7 +303,7 @@ export function LeadDrawer({ lead, isOpen, onClose }: LeadDrawerProps) {
           </DialogTitle>
           <div className="text-xs text-gray-400 mt-1 flex gap-3 items-center">
             <span>{formatarTelefone(lead.telefone)}</span>
-            {lead.is_blocked && (
+            {isBlocked && (
               <span className="inline-flex items-center gap-1 whitespace-nowrap text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 uppercase tracking-wider">
                 <ShieldBan className="w-2.5 h-2.5" /> Atendimento Humano
               </span>
@@ -322,7 +330,11 @@ export function LeadDrawer({ lead, isOpen, onClose }: LeadDrawerProps) {
                 messages={messages}
                 telefone={lead.telefone}
                 onMessageSent={() => {
-                  lead.is_blocked = true;
+                  setIsBlocked(true);
+                  if (lead) {
+                    lead.is_blocked = true;
+                    onLeadUpdated?.(lead.id, { is_blocked: true });
+                  }
                   fetchChat();
                 }}
               />

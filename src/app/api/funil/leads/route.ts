@@ -4,6 +4,7 @@ import { calcularEtapaIA } from '@/lib/funil/calcular-etapa';
 import { NextResponse } from 'next/server';
 import { criarFunilPadrao } from '@/lib/funil/criar-funil-padrao';
 import { getActiveClientConfig } from '@/lib/auth/helpers';
+import { getAllBlockedNumbers } from '@/lib/supabase/queries';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -75,16 +76,8 @@ export async function GET(request: Request) {
 
   const { data: leads } = await queryLeads.order('created_at', { ascending: false }).limit(10000);
 
-  // Buscar bloqueios ativos
-  const { data: bloqueios } = await supabaseClientDB
-    .from(cliente.tabela_bloqueios)
-    .select('numero_cliente')
-    .neq('bloqueio_existe', false)
-    .limit(10000);
-
-  const numerosBloqueados = new Set(
-    bloqueios?.map(b => b.numero_cliente ? b.numero_cliente.replace(/\D/g, '') : '').filter(Boolean) || []
-  );
+  // Buscar bloqueios ativos (paginado sem limite de 1000)
+  const numerosBloqueados = await getAllBlockedNumbers(supabaseClientDB, cliente.tabela_bloqueios);
 
   // Buscar posições manuais salvas
   const limite30d = new Date();
