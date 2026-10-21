@@ -83,8 +83,12 @@ export async function GET(request: Request) {
       query = query.gte('created_at', dataLimite.toISOString());
     }
 
-    const { data: contatos } = await query.order('created_at', { ascending: false });
-    leads = (contatos || []).map(c => {
+    const contatosFiltrados = (contatos || []).filter(c =>
+      c.is_group !== true &&
+      !c.wa_chatid?.includes('@g.us') &&
+      !c.telefone_contato?.includes('@g.us')
+    );
+    leads = contatosFiltrados.map(c => {
       const telLimpo = String(c.telefone_contato || c.wa_chatid || '').replace(/@.*$/, '').replace(/\D/g, '');
       return {
         id: c.id,
@@ -103,8 +107,9 @@ export async function GET(request: Request) {
         lead_simulacao_aprovada: Boolean(c.lead_simulacao_aprovada),
         lead_simulacao_reprovada: Boolean(c.lead_simulacao_reprovada),
         lead_finalizado: Boolean(c.lead_visita_confirmada || c.lead_simulacao_aprovada),
-        vendedor_lead: c.vendedor_responsavel || 'Vendedor',
+        vendedor_lead: c.vendedor_responsavel || 'Atendente',
         origem_lead: c.origem_lead || 'desconhecido',
+        origem: 'sem_ia',
         origem_detalhe: c.origem_detalhe || null,
         anuncio_id: c.anuncio_id || null,
         anuncio_titulo: c.anuncio_titulo || null,
@@ -412,7 +417,8 @@ export async function GET(request: Request) {
   return NextResponse.json({ 
     colunas, 
     config: { 
-      meta_followup: funil.meta_followup || 5 
+      meta_followup: funil.meta_followup || 5,
+      tipo_atendimento: cliente.tipo_atendimento || (isSemIA ? 'sem_ia' : 'com_ia'),
     } 
   });
 }

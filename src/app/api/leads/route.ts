@@ -55,7 +55,14 @@ export async function GET(request: Request) {
         .eq('nome_instancia', nomeInstancia)
         .order('atualizado_em', { ascending: false });
 
-      leadsIA = (contatos || []).map(c => {
+      const contatosFiltrados = (contatos || []).filter(c =>
+        c.is_group !== true &&
+        !c.wa_chatid?.includes('@g.us') &&
+        !c.telefone_contato?.includes('@g.us') &&
+        !c.telefone?.includes('@g.us')
+      );
+
+      leadsIA = contatosFiltrados.map(c => {
         const rawTel = String(c.telefone_contato || c.wa_chatid || '');
         const phoneClean = rawTel.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
         return {
@@ -75,8 +82,9 @@ export async function GET(request: Request) {
           lead_simulacao_aprovada: Boolean(c.lead_simulacao_aprovada),
           lead_simulacao_reprovada: Boolean(c.lead_simulacao_reprovada),
           lead_finalizado: Boolean(c.lead_visita_confirmada || c.lead_simulacao_aprovada),
-          vendedor_lead: c.vendedor_responsavel || 'Vendedor',
+          vendedor_lead: c.vendedor_responsavel || 'Atendente',
           origem_lead: c.origem_lead || 'desconhecido',
+          origem: 'sem_ia',
           origem_detalhe: c.origem_detalhe || null,
           anuncio_id: c.anuncio_id || null,
           anuncio_titulo: c.anuncio_titulo || null,
@@ -304,7 +312,10 @@ export async function GET(request: Request) {
     // Ordena todos por data de criação mais recente
     todosLeads.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-    return NextResponse.json({ data: todosLeads }, { status: 200 })
+    return NextResponse.json({ 
+      data: todosLeads,
+      tipo_atendimento: clientConfig.tipo_atendimento || (isSemIA ? 'sem_ia' : 'com_ia')
+    }, { status: 200 })
   } catch (error) {
     console.error("Leads API Error:", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })

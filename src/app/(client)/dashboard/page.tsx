@@ -26,6 +26,7 @@ type AnalyticsData = {
     emAndamento: number
     atendimentoHumano: number
   }
+  tipo_atendimento?: 'sem_ia' | 'com_ia'
   chartData: Array<{ day: string; mensagensIA: number; mensagensCliente: number; leads: number }>
   pieData: Array<{ name: string; value: number; color: string }>
 }
@@ -327,12 +328,16 @@ export default function ClientDashboardPage() {
     })
   }, [allLeads, canalFiltro, tagFiltro])
 
+  const isSemIA = data?.tipo_atendimento === 'sem_ia'
+
   return (
     <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 font-poppins pb-10">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900 font-poppins">Visão Geral</h1>
-          <p className="text-gray-500 mt-1">Bem-vindo de volta! Aqui está o resumo de performance da sua IA.</p>
+          <p className="text-gray-500 mt-1">
+            {isSemIA ? 'Bem-vindo de volta! Aqui está o resumo de performance do seu atendimento.' : 'Bem-vindo de volta! Aqui está o resumo de performance da sua IA.'}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <Button 
@@ -415,7 +420,7 @@ export default function ClientDashboardPage() {
             <KpiCard
               title="Total de Leads"
               value={data.kpis.totalLeads.toLocaleString('pt-BR')}
-              subtitle="Captados pela IA"
+              subtitle={isSemIA ? "Novos contatos" : "Captados pela IA"}
               icon={Users}
               color="bg-purple-500"
             />
@@ -427,9 +432,9 @@ export default function ClientDashboardPage() {
               color="bg-amber-500"
             />
             <KpiCard
-              title="Atendimento Humano"
+              title={isSemIA ? "Em Atendimento" : "Atendimento Humano"}
               value={data.kpis.atendimentoHumano.toLocaleString('pt-BR')}
-              subtitle="IA pausada"
+              subtitle={isSemIA ? "Atendimento da Loja" : "IA pausada"}
               icon={ShieldBan}
               color="bg-orange-500"
             />
@@ -464,14 +469,14 @@ export default function ClientDashboardPage() {
             <KpiCard
               title="Follow-ups Feitos"
               value={data.kpis.totalFollowups.toLocaleString('pt-BR')}
-              subtitle="Reativações pela IA"
+              subtitle={isSemIA ? "Mensagens de follow-up" : "Reativações pela IA"}
               icon={TrendingUp}
               color="bg-indigo-500"
             />
             <KpiCard
               title="Mensagens Trocadas"
               value={(data.kpis.aiMessages + data.kpis.humanMessages).toLocaleString('pt-BR')}
-              subtitle="IA + Cliente"
+              subtitle={isSemIA ? "Atendente + Cliente" : "IA + Cliente"}
               icon={Bot}
               color="bg-blue-500"
             />
@@ -485,7 +490,9 @@ export default function ClientDashboardPage() {
              <div className="flex items-center justify-between mb-8">
               <div>
                 <CardTitle className="text-lg font-bold text-gray-900 font-poppins">Captação de Leads</CardTitle>
-                <CardDescription className="text-sm font-medium font-poppins">Novos leads identificados pela IA ao longo do tempo</CardDescription>
+                <CardDescription className="text-sm font-medium font-poppins">
+                  {isSemIA ? "Novos leads ao longo do tempo" : "Novos leads identificados pela IA ao longo do tempo"}
+                </CardDescription>
               </div>
             </div>
             <div className="h-[300px] w-full">
@@ -984,6 +991,7 @@ export default function ClientDashboardPage() {
         lead={selectedLead}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
+        isSemIA={isSemIA}
       />
     </div>
   )

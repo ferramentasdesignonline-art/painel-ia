@@ -62,7 +62,7 @@ export function KanbanBoard() {
   const [novoLeadAberto, setNovoLeadAberto] = useState(false);
   const [leadSelecionado, setLeadSelecionado] = useState<LeadType | null>(null);
   const [colunaPreId, setColunaPreId] = useState<string | undefined>();
-  const [config, setConfig] = useState<{ meta_followup: number }>({ meta_followup: 5 });
+  const [config, setConfig] = useState<{ meta_followup: number; tipo_atendimento?: string }>({ meta_followup: 5 });
 
   // DnD state
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
@@ -91,11 +91,14 @@ export function KanbanBoard() {
       if (data.colunas) {
         setColunas(data.colunas);
       }
+      if (data.config) {
+        setConfig(prev => ({ ...prev, ...data.config }));
+      }
       const resFunil = await fetch('/api/funil');
       const dataFunil = await resFunil.json();
       if (dataFunil.funil) {
         setNomeFunil(dataFunil.funil.nome || 'Funil de Leads');
-        setConfig({ meta_followup: dataFunil.funil.meta_followup || 5 });
+        setConfig(prev => ({ ...prev, meta_followup: dataFunil.funil.meta_followup || 5 }));
       }
     } catch (err) {
       console.error('Erro ao carregar funil:', err);
@@ -842,6 +845,7 @@ export function KanbanBoard() {
         lead={leadSelecionado}
         isOpen={!!leadSelecionado}
         onClose={() => setLeadSelecionado(null)}
+        isSemIA={config.tipo_atendimento === 'sem_ia'}
       />
     </div>
   );

@@ -87,7 +87,6 @@ export default function NovoClientePage() {
   const [loadingTables, setLoadingTables] = useState(true)
   const [instancias, setInstancias] = useState<Array<{ id: string; nome_instancia: string; cliente_id: string | null }>>([])
   const [loadingInstancias, setLoadingInstancias] = useState(true)
-  const [isManualInstancia, setIsManualInstancia] = useState(false)
 
   const [tipoAtendimento, setTipoAtendimento] = useState<'com_ia' | 'sem_ia'>('sem_ia')
 
@@ -277,52 +276,26 @@ export default function NovoClientePage() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-gray-700">Nome da Instância Uazapi</label>
-                <button
-                  type="button"
-                  onClick={() => setIsManualInstancia(!isManualInstancia)}
-                  className="text-[10px] text-indigo-600 hover:underline"
-                >
-                  {isManualInstancia ? "Selecionar da lista" : "Digitar nome"}
-                </button>
-              </div>
-
-              {isManualInstancia ? (
-                <input
-                  type="text"
-                  required
-                  value={formData.nome_instancia}
-                  onChange={(e) => setFormData({ ...formData, nome_instancia: e.target.value })}
-                  className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono"
-                  placeholder="Ex: CarShop"
-                />
-              ) : (
-                <div className="relative">
-                  <select
-                    required
-                    value={formData.nome_instancia}
-                    onChange={(e) => setFormData({ ...formData, nome_instancia: e.target.value })}
-                    className="block w-full rounded-lg border border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 pr-8 bg-white appearance-none"
-                  >
-                    <option value="">
-                      {loadingInstancias ? "Carregando instâncias..." : "-- Selecione a Instância --"}
-                    </option>
-                    {instancias.map((inst) => (
-                      <option key={inst.id} value={inst.nome_instancia}>
-                        {inst.nome_instancia} {inst.cliente_id ? "(Já vinculada)" : "(Disponível)"}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-gray-500">
-                    {loadingInstancias ? (
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                  </div>
-                </div>
-              )}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Instância Uazapi</label>
+              <input
+                type="text"
+                required
+                list="instancias-list"
+                value={formData.nome_instancia}
+                onChange={(e) => setFormData({ ...formData, nome_instancia: e.target.value })}
+                className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono"
+                placeholder="Ex: CarShop"
+              />
+              <datalist id="instancias-list">
+                {instancias.map((inst) => (
+                  <option key={inst.id} value={inst.nome_instancia}>
+                    {inst.nome_instancia} {inst.cliente_id ? "(Já vinculada)" : "(Disponível)"}
+                  </option>
+                ))}
+              </datalist>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Digite o nome da nova instância (será criada na Uazapi) ou selecione da lista.
+              </p>
             </div>
 
             <div>

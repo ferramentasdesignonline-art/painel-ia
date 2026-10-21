@@ -188,7 +188,12 @@ export async function GET(request: Request) {
       if (leadsError) {
         console.error("Erro ao buscar contatos wacloud:", leadsError.message);
       } else if (dbLeads) {
-        allLeads = dbLeads;
+        allLeads = dbLeads.filter(c => 
+          c.is_group !== true && 
+          !c.wa_chatid?.includes('@g.us') && 
+          !c.telefone_contato?.includes('@g.us') && 
+          !c.telefone?.includes('@g.us')
+        );
       }
 
       // Buscar dicionário de etiquetas para cálculo de etapa
@@ -294,6 +299,7 @@ export async function GET(request: Request) {
     }))
 
     return NextResponse.json({
+      tipo_atendimento: isSemIA ? 'sem_ia' : 'com_ia',
       kpis: { aiMessages, humanMessages, totalFollowups, qualifiedLeads, totalLeads, visitasAgendadas, simulacoesAprovadas, simulacoesPreAprovadas, perdas, emAndamento, atendimentoHumano },
       chartData,
       pieData: [

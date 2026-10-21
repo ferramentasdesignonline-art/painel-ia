@@ -18,9 +18,10 @@ type LeadChatProps = {
   messages: ChatMessage[]
   telefone?: string
   onMessageSent?: () => void
+  isSemIA?: boolean
 }
 
-export function LeadChat({ messages, telefone, onMessageSent }: LeadChatProps) {
+export function LeadChat({ messages, telefone, onMessageSent, isSemIA }: LeadChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -419,15 +420,25 @@ export function LeadChat({ messages, telefone, onMessageSent }: LeadChatProps) {
                       )}
                     >
                       {/* Indicador de Remetente */}
-                      {isHumanSeller && (
-                        <div className="flex items-center gap-1 mb-1 border-b border-green-200/50 pb-1">
-                          <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">👤 Atendimento Humano</span>
-                        </div>
-                      )}
-                      {isAi && !isHumanSeller && (
-                        <div className="flex items-center gap-1 mb-1 border-b border-green-200/50 pb-1 opacity-70">
-                          <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">🤖 IA Automática</span>
-                        </div>
+                      {isSemIA ? (
+                        !isClient && (
+                          <div className="flex items-center gap-1 mb-1 border-b border-green-200/50 pb-1">
+                            <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">👤 Atendente</span>
+                          </div>
+                        )
+                      ) : (
+                        <>
+                          {isHumanSeller && (
+                            <div className="flex items-center gap-1 mb-1 border-b border-green-200/50 pb-1">
+                              <span className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">👤 Atendimento Humano</span>
+                            </div>
+                          )}
+                          {isAi && !isHumanSeller && (
+                            <div className="flex items-center gap-1 mb-1 border-b border-green-200/50 pb-1 opacity-70">
+                              <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">🤖 IA Automática</span>
+                            </div>
+                          )}
+                        </>
                       )}
                       
                       <div className="break-words mt-0.5">
@@ -504,7 +515,7 @@ export function LeadChat({ messages, telefone, onMessageSent }: LeadChatProps) {
               type="text"
               value={msgText}
               onChange={(e) => setMsgText(e.target.value)}
-              placeholder={telefone ? "Responder cliente (pausa a IA automaticamente)..." : "Sem telefone"}
+              placeholder={telefone ? (isSemIA ? "Digite uma mensagem para o cliente..." : "Responder cliente (pausa a IA automaticamente)...") : "Sem telefone"}
               disabled={sending || !telefone}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -521,7 +532,7 @@ export function LeadChat({ messages, telefone, onMessageSent }: LeadChatProps) {
                 onClick={handleSendText}
                 disabled={sending || !telefone}
                 className="p-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shrink-0 shadow-sm"
-                title="Enviar mensagem e pausar IA"
+                title={isSemIA ? "Enviar mensagem" : "Enviar mensagem e pausar IA"}
               >
                 {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
               </button>

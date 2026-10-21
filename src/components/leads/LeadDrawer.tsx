@@ -56,9 +56,11 @@ type LeadDrawerProps = {
   isOpen: boolean
   onClose: () => void
   onLeadUpdated?: (leadId: string, updates: Partial<LeadType>) => void
+  isSemIA?: boolean
 }
 
-export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated }: LeadDrawerProps) {
+export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated, isSemIA: propIsSemIA }: LeadDrawerProps) {
+  const isSemIA = Boolean(propIsSemIA || lead?.origem === 'sem_ia');
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [history, setHistory] = useState<any[]>([])
   const [loadingChat, setLoadingChat] = useState(false)
@@ -320,7 +322,7 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated }: LeadDrawerP
         <Tabs defaultValue="info" className="flex-1 flex flex-col overflow-hidden">
           <TabsList className="w-full justify-start rounded-none border-b border-gray-200 px-4 h-9 bg-gray-50/50">
             <TabsTrigger value="info" className="relative h-8 rounded-none border-b-2 border-b-transparent px-3 pb-2 pt-1 text-xs font-semibold text-muted-foreground shadow-none transition-none data-[state=active]:border-b-blue-600 data-[state=active]:text-foreground data-[state=active]:shadow-none">Detalhes & Eventos</TabsTrigger>
-            <TabsTrigger value="chat" className="relative h-8 rounded-none border-b-2 border-b-transparent px-3 pb-2 pt-1 text-xs font-semibold text-muted-foreground shadow-none transition-none data-[state=active]:border-b-blue-600 data-[state=active]:text-foreground data-[state=active]:shadow-none">Histórico (IA)</TabsTrigger>
+            <TabsTrigger value="chat" className="relative h-8 rounded-none border-b-2 border-b-transparent px-3 pb-2 pt-1 text-xs font-semibold text-muted-foreground shadow-none transition-none data-[state=active]:border-b-blue-600 data-[state=active]:text-foreground data-[state=active]:shadow-none">Conversa</TabsTrigger>
           </TabsList>
           
           <TabsContent value="chat" className="flex-1 m-0 min-h-0 overflow-hidden flex flex-col border-t">
@@ -334,6 +336,7 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated }: LeadDrawerP
               <LeadChat
                 messages={messages}
                 telefone={lead.telefone}
+                isSemIA={isSemIA}
                 onMessageSent={() => {
                   setIsBlocked(true);
                   if (lead) {
@@ -479,7 +482,7 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated }: LeadDrawerP
                      placeholder="Veículo de interesse"
                    />
                  ) : (
-                   <p className="font-medium text-blue-900">{lead.veiculoInteressado || 'Não identificado pela IA'}</p>
+                   <p className="font-medium text-blue-900">{lead.veiculoInteressado || 'Não informado'}</p>
                  )}
                </div>
              </div>

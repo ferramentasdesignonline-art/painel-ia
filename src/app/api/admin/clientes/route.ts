@@ -86,17 +86,28 @@ export async function POST(request: Request) {
     if (newClient) {
       await criarFunilPadrao(newClient.id, supabaseAdmin);
 
-      // 4. Se houver nome_instancia, vincular cliente_id na tabela wacloud_instancias
+      // 4. Se houver nome_instancia, vincular ou criar na tabela wacloud_instancias / Uazapi
       if (nome_instancia) {
         try {
           const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
           const wacloudAdmin = getWacloudSupabaseAdmin();
-          await wacloudAdmin
+          const { data: existingInst } = await wacloudAdmin
             .from('wacloud_instancias')
-            .update({ cliente_id: newClient.id })
-            .eq('nome_instancia', nome_instancia);
+            .select('id')
+            .eq('nome_instancia', nome_instancia)
+            .maybeSingle();
+
+          if (existingInst) {
+            await wacloudAdmin
+              .from('wacloud_instancias')
+              .update({ cliente_id: newClient.id, ativo: true })
+              .eq('nome_instancia', nome_instancia);
+          } else {
+            const { createWacloudInstance } = await import('@/lib/wacloud/uazapi');
+            await createWacloudInstance(nome_instancia, newClient.id);
+          }
         } catch (linkErr) {
-          console.warn("Aviso ao vincular wacloud_instancias:", linkErr);
+          console.warn("Aviso ao vincular/criar wacloud_instancias:", linkErr);
         }
       }
     }

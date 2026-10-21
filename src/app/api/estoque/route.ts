@@ -5,6 +5,8 @@ import { createClient } from "@supabase/supabase-js"
 import { getActiveClientConfig } from "@/lib/auth/helpers"
 import { getClientEstoque } from "@/lib/supabase/queries"
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: Request) {
   try {
     const cookieStore = cookies()

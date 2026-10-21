@@ -50,6 +50,7 @@ export default function LeadsPage() {
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
   const [filterDataInicio, setFilterDataInicio] = useState('')
   const [filterDataFim, setFilterDataFim] = useState('')
+  const [tipoAtendimento, setTipoAtendimento] = useState<'com_ia' | 'sem_ia'>('com_ia')
 
   useEffect(() => { fetchLeads() }, [])
 
@@ -106,6 +107,7 @@ export default function LeadsPage() {
       const res = await fetch('/api/leads')
       const json = await res.json()
       if (json.data) setLeads(json.data)
+      if (json.tipo_atendimento) setTipoAtendimento(json.tipo_atendimento)
     } catch (err) {
       console.error("Failed to fetch leads", err)
     } finally {
@@ -216,7 +218,10 @@ export default function LeadsPage() {
       );
 
       const matchData = (() => {
-        const d = new Date(sortBy === 'ultima_mensagem' ? (l.ultima_mensagem || l.created_at) : l.created_at);
+        const rawDate = sortBy === 'ultima_mensagem' ? (l.updated_at || l.created_at) : l.created_at;
+        if (!rawDate) return true;
+        const d = new Date(rawDate);
+        if (isNaN(d.getTime())) return true;
         const iso = d.toISOString();
         if (filterDataInicio && iso < filterDataInicio) return false;
         if (filterDataFim && iso > filterDataFim + 'T23:59:59.999Z') return false;
@@ -227,12 +232,14 @@ export default function LeadsPage() {
     });
 
     result.sort((a, b) => {
-      const aVal = sortBy === 'ultima_mensagem'
-        ? new Date(a.ultima_mensagem || a.created_at || 0).getTime()
-        : new Date(a.created_at || 0).getTime();
-      const bVal = sortBy === 'ultima_mensagem'
-        ? new Date(b.ultima_mensagem || b.created_at || 0).getTime()
-        : new Date(b.created_at || 0).getTime();
+      const getTimestamp = (lead: any) => {
+        const raw = sortBy === 'ultima_mensagem' ? (lead.updated_at || lead.created_at) : lead.created_at;
+        if (!raw) return 0;
+        const t = new Date(raw).getTime();
+        return isNaN(t) ? 0 : t;
+      };
+      const aVal = getTimestamp(a);
+      const bVal = getTimestamp(b);
       return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
     });
 
@@ -250,7 +257,9 @@ export default function LeadsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-900">Gestão de Leads</h1>
-          <p className="text-gray-500 mt-1 text-sm">Acompanhe as oportunidades captadas pela IA em tempo real.</p>
+          <p className="text-gray-500 mt-1 text-sm">
+            {tipoAtendimento === 'sem_ia' ? 'Acompanhe todos os contatos e oportunidades em tempo real.' : 'Acompanhe as oportunidades captadas pela IA em tempo real.'}
+          </p>
         </div>
         <Button
           onClick={() => setIsAddModalOpen(true)}
@@ -630,7 +639,7 @@ export default function LeadsPage() {
                           ) : null}
                           <span className="text-[10px] font-bold text-gray-400 mt-1 uppercase">
                             Criado: {formatTs(lead.created_at, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} • 
-                            Últ: {formatTs(lead.ultima_mensagem || lead.created_at, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            Últ: {formatTs(lead.updated_at || lead.created_at, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                       </td>
@@ -694,6 +703,7 @@ export default function LeadsPage() {
         lead={selectedLead}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
+        isSemIA={tipoAtendimento === 'sem_ia'}
         onLeadUpdated={(leadId, updates) => {
           setLeads(prev => prev.map(l => (l.id === leadId || String(l.original_id) === String(leadId)) ? { ...l, ...updates } : l))
           if (selectedLead && (selectedLead.id === leadId || String(selectedLead.original_id) === String(leadId))) {
