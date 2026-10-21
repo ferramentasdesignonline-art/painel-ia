@@ -26,6 +26,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    if (clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_bloqueios) {
+      return NextResponse.json({ data: [] }, { status: 200 })
+    }
+
     const supabaseAdmin = createClient(clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!, clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     )

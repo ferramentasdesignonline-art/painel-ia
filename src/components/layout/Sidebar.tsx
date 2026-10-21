@@ -16,8 +16,15 @@ const navigation = [
   { name: "Conexão WhatsApp", href: "/whatsapp", icon: MessageCircle },
 ]
 
-export function Sidebar({ className }: { className?: string }) {
+export function Sidebar({ className, tipoAtendimento }: { className?: string; tipoAtendimento?: string }) {
   const pathname = usePathname()
+
+  const navItems = navigation.filter(item => {
+    if (tipoAtendimento === 'sem_ia' && item.href === '/bloqueios') {
+      return false
+    }
+    return true
+  })
 
   return (
     <div className={cn("flex flex-col bg-[#0a0a0b] border-r border-[#1e1e20] text-gray-400 h-full", className || "hidden md:flex w-72")}>
@@ -32,7 +39,7 @@ export function Sidebar({ className }: { className?: string }) {
 
       <div className="flex flex-1 flex-col overflow-y-auto px-4 py-6">
         <nav className="space-y-1.5 flex-1">
-          {navigation.map((item) => {
+          {navItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"))
             
             return (

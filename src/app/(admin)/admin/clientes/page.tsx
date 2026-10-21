@@ -67,8 +67,24 @@ export default async function ClientesPage() {
                   </span>
                 </td>
                 <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                  <div className="text-xs">Leads: <code className="bg-gray-100 px-1 rounded">{client.tabela_leads}</code></div>
-                  <div className="text-xs mt-1">Bloqueios: <code className="bg-gray-100 px-1 rounded">{client.tabela_bloqueios}</code></div>
+                  {client.tipo_atendimento === 'sem_ia' ? (
+                    <div>
+                      <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20 mb-1">
+                        👤 Sem IA (Humano)
+                      </span>
+                      <div className="text-xs text-gray-600 font-mono">
+                        Instância: <strong>{client.nome_instancia || 'Padrão'}</strong>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold bg-purple-50 text-purple-700 ring-1 ring-inset ring-purple-600/20 mb-1">
+                        🤖 Com IA
+                      </span>
+                      <div className="text-xs text-gray-500">Leads: <code className="bg-gray-100 px-1 rounded">{client.tabela_leads || '-'}</code></div>
+                      <div className="text-xs mt-0.5 text-gray-500">Bloqueios: <code className="bg-gray-100 px-1 rounded">{client.tabela_bloqueios || '-'}</code></div>
+                    </div>
+                  )}
                 </td>
                 <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                   <ClientActions client={{ id: client.id, active: client.active }} />

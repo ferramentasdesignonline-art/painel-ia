@@ -34,7 +34,10 @@ export async function GET(request: Request) {
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    // ── 1. Mensagens (tabela_memoria) ─────────────────────────────────────────
+    const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_leads;
+    const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome;
+
+    // ── 1. Mensagens ──────────────────────────────────────────────────────────
     let aiMessages = 0
     let humanMessages = 0
     const messagesByDay: Record<string, { ai: number; human: number }> = {}
@@ -42,9 +45,39 @@ export async function GET(request: Request) {
     const fromDate = from ? new Date(from) : null
     const toDate   = to   ? new Date(to)   : null
 
-    if (clientConfig.tabela_memoria) {
+    if (isSemIA) {
+      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+      const wacloudAdmin = getWacloudSupabaseAdmin();
+
+      let msgQuery = wacloudAdmin
+        .from('wacloud_mensagens')
+        .select('id, mensagem, enviado_por_mim, created_at')
+        .eq('nome_instancia', nomeInstancia);
+
+      if (from) msgQuery = msgQuery.gte('created_at', from);
+      if (to)   msgQuery = msgQuery.lte('created_at', to);
+
+      const { data: cloudMsgs, error: cloudMsgErr } = await msgQuery.limit(10000);
+      if (cloudMsgErr) {
+        console.error("Erro ao buscar mensagens wacloud:", cloudMsgErr.message);
+      }
+
+      for (const m of cloudMsgs || []) {
+        const isSentByAttendant = m.enviado_por_mim === true;
+        if (isSentByAttendant) aiMessages++;
+        else humanMessages++;
+
+        if (m.created_at) {
+          const day = new Date(m.created_at).toLocaleDateString('pt-BR', {
+            timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit'
+          });
+          if (!messagesByDay[day]) messagesByDay[day] = { ai: 0, human: 0 };
+          const type = isSentByAttendant ? 'ai' : 'human';
+          messagesByDay[day][type]++;
+        }
+      }
+    } else if (clientConfig.tabela_memoria) {
       console.log('Buscando mensagens da tabela:', clientConfig.tabela_memoria);
-      // Tenta buscar com filtro de data em created_at
       let msgQuery = supabaseAdmin
         .from(clientConfig.tabela_memoria)
         .select('id, message, created_at')
@@ -53,21 +86,14 @@ export async function GET(request: Request) {
       if (to)   msgQuery = msgQuery.lte('created_at', to)
 
       const { data: allMessages, error: msgError } = await msgQuery
-      console.log(`Resumo mensagens (${clientConfig.tabela_memoria}):`, { 
-        count: allMessages?.length || 0, 
-        error: msgError?.message || null 
-      });
 
       if (msgError) {
-        // Fallback: busca sem filtro de data e filtra em memória
         console.warn("Memoria query with date failed, retrying without date filter:", msgError.message)
-        const { data: allMsgsFallback, error: fallbackErr } = await supabaseAdmin
+        const { data: allMsgsFallback } = await supabaseAdmin
           .from(clientConfig.tabela_memoria)
           .select('*')
-          .limit(5000) // Evitar estouro de memória em bases gigantes
+          .limit(5000)
           
-        if (fallbackErr) console.error("Fallback query failed as well:", fallbackErr.message);
-
         for (const row of allMsgsFallback || []) {
           const rowDate = row.created_at 
             ? new Date(row.created_at) 
@@ -84,7 +110,6 @@ export async function GET(request: Request) {
             ? (() => { try { return JSON.parse(row.message) } catch { return {} } })()
             : row.message
 
-          // Detecção robusta de tipo
           const isHuman = 
             msgData?.type === 'human' || 
             msgData?.role === 'user' || 
@@ -93,7 +118,6 @@ export async function GET(request: Request) {
             msgData?.sender === 'user'
 
           const type = isHuman ? 'human' : 'ai'
-          
           if (type === 'ai') aiMessages++
           else humanMessages++
 
@@ -134,7 +158,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // ── 2. Leads (tabela_leads) ───────────────────────────────────────────────
+    // ── 2. Leads ─────────────────────────────────────────────────────────────
     let totalFollowups = 0
     let qualifiedLeads = 0
     let totalLeads = 0
@@ -146,7 +170,37 @@ export async function GET(request: Request) {
     let simulacoesPreAprovadas = 0
     let perdas = 0
 
-    if (clientConfig.tabela_leads) {
+    let mapaNomes = new Map<string, string>();
+
+    if (isSemIA) {
+      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+      const wacloudAdmin = getWacloudSupabaseAdmin();
+
+      let leadsQuery = wacloudAdmin
+        .from('wacloud_contatos')
+        .select('*')
+        .eq('nome_instancia', nomeInstancia);
+
+      if (from) leadsQuery = leadsQuery.gte('created_at', from);
+      if (to)   leadsQuery = leadsQuery.lte('created_at', to);
+
+      const { data: dbLeads, error: leadsError } = await leadsQuery.order('created_at', { ascending: false });
+      if (leadsError) {
+        console.error("Erro ao buscar contatos wacloud:", leadsError.message);
+      } else if (dbLeads) {
+        allLeads = dbLeads;
+      }
+
+      // Buscar dicionário de etiquetas para cálculo de etapa
+      const { data: dbLabels } = await wacloudAdmin
+        .from('wacloud_etiquetas_instancia')
+        .select('*')
+        .eq('nome_instancia', nomeInstancia);
+
+      for (const lbl of dbLabels || []) {
+        mapaNomes.set(String(lbl.uazapi_label_id), lbl.nome);
+      }
+    } else if (clientConfig.tabela_leads) {
       let leadsQuery = supabaseAdmin
         .from(clientConfig.tabela_leads)
         .select('*')
@@ -165,12 +219,14 @@ export async function GET(request: Request) {
     let emAndamento = 0
     let atendimentoHumano = 0
 
-    // Busca os bloqueios para nao contar como em andamento nem somar followups (paginado sem limite de 1000)
-    const blockedNumbers = await getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios)
+    // Busca os bloqueios para nao contar como em andamento nem somar followups
+    const blockedNumbers = (isSemIA || !clientConfig.tabela_bloqueios)
+      ? new Set<string>()
+      : await getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios);
 
     totalLeads = allLeads.length
     for (const lead of allLeads) {
-      const rawPhone = lead.telefone || lead.phone || ''
+      const rawPhone = lead.telefone || lead.phone || lead.telefone_contato || ''
       const phoneClean = rawPhone.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '')
       const isBlocked = blockedNumbers.has(phoneClean)
 
@@ -179,18 +235,32 @@ export async function GET(request: Request) {
         totalFollowups += parseInt(lead.quantidade_followup || '0')
       }
       
-      const etapa = lead.lead_perda === true ? 'ia_perda' : calcularEtapaIA(lead, 5)
+      const etapa = lead.lead_perda === true 
+        ? 'ia_perda' 
+        : calcularEtapaIA(lead, 5, mapaNomes)
       
-      if (etapa === 'ia_qualificado' || lead.horario_lead_qualificado != null) qualifiedLeads++
-      else if (etapa === 'visita_confirmada') visitasAgendadas++
-      else if (etapa === 'simulacao_aprovada') simulacoesAprovadas++
-      else if (etapa === 'simulacao_pre_aprovada') simulacoesPreAprovadas++
-      else if (etapa === 'simulacao_reprovada') { /* ignorado */ }
-      else if (etapa === 'ia_perda') perdas++
-      else {
-        // Se sobrou aqui, estaria "Em Andamento". 
-        // Mas se estiver bloqueado, vai para Atendimento Humano.
-        if (isBlocked) {
+      if (
+        etapa === 'ia_qualificado' || 
+        etapa === 'cliente' || 
+        etapa === 'visita_realizada' ||
+        etapa === 'oportunidade' ||
+        lead.horario_lead_qualificado != null ||
+        lead.lead_simulacao_aprovada === true
+      ) {
+        qualifiedLeads++
+        if (etapa === 'oportunidade' || lead.lead_simulacao_aprovada === true) {
+          simulacoesAprovadas++
+        }
+      } else if (etapa === 'visita_confirmada' || etapa === 'visita_agendada' || lead.lead_visita_confirmada === true) {
+        visitasAgendadas++
+      } else if (etapa === 'simulacao_pre_aprovada' || lead.lead_simulacao_pre_aprovada === true) {
+        simulacoesPreAprovadas++
+      } else if (etapa === 'ficha_reprovada' || lead.lead_simulacao_reprovada === true) {
+        // Ficha reprovada
+      } else if (etapa === 'ia_perda' || etapa === 'perdido_desqualificado' || etapa === 'perdido_qualificado') {
+        perdas++
+      } else {
+        if (isBlocked || isSemIA) {
           atendimentoHumano++
         } else {
           emAndamento++

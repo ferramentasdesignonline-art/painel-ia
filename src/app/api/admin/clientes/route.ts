@@ -13,11 +13,13 @@ export async function POST(request: Request) {
       tabela_leads, 
       tabela_bloqueios, 
       tabela_memoria,
-      tabela_estoque, // Novo campo
+      tabela_estoque,
       supabase_url,
       supabase_anon_key,
       supabase_service_role_key,
-      whatsapp_token
+      whatsapp_token,
+      tipo_atendimento = 'com_ia',
+      nome_instancia
     } = body
 
     const supabaseAdmin = createClient(
@@ -44,6 +46,8 @@ export async function POST(request: Request) {
     }
 
     // 2. Inserir o registro na tabela de clientes
+    const isSemIA = tipo_atendimento === 'sem_ia'
+
     const { data: dbData, error: dbError } = await supabaseAdmin
       .from('sistema-dash-ia_clientes')
       .insert([
@@ -52,14 +56,16 @@ export async function POST(request: Request) {
           nome,
           slug,
           email,
-          tabela_leads,
-          tabela_bloqueios,
-          tabela_memoria,
-          tabela_estoque, // Enviando para o banco
-          supabase_url,
-          supabase_anon_key,
-          supabase_service_role_key,
-          whatsapp_token,
+          tabela_leads: isSemIA ? null : tabela_leads,
+          tabela_bloqueios: isSemIA ? null : tabela_bloqueios,
+          tabela_memoria: isSemIA ? null : tabela_memoria,
+          tabela_estoque: isSemIA ? null : tabela_estoque,
+          supabase_url: isSemIA ? null : supabase_url,
+          supabase_anon_key: isSemIA ? null : supabase_anon_key,
+          supabase_service_role_key: isSemIA ? null : supabase_service_role_key,
+          whatsapp_token: whatsapp_token || null,
+          tipo_atendimento: isSemIA ? 'sem_ia' : 'com_ia',
+          nome_instancia: nome_instancia || null,
           active: true
         }
       ])
@@ -71,7 +77,6 @@ export async function POST(request: Request) {
     }
 
     // 3. Criar Funil Padrão para o novo cliente
-    // Precisamos de um objeto cliente com a ID recém criada
     const { data: newClient } = await supabaseAdmin
       .from('sistema-dash-ia_clientes')
       .select('id')
@@ -80,6 +85,20 @@ export async function POST(request: Request) {
 
     if (newClient) {
       await criarFunilPadrao(newClient.id, supabaseAdmin);
+
+      // 4. Se houver nome_instancia, vincular cliente_id na tabela wacloud_instancias
+      if (nome_instancia) {
+        try {
+          const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+          const wacloudAdmin = getWacloudSupabaseAdmin();
+          await wacloudAdmin
+            .from('wacloud_instancias')
+            .update({ cliente_id: newClient.id })
+            .eq('nome_instancia', nome_instancia);
+        } catch (linkErr) {
+          console.warn("Aviso ao vincular wacloud_instancias:", linkErr);
+        }
+      }
     }
 
     return NextResponse.json({ success: true, data: dbData }, { status: 201 })

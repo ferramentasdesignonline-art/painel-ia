@@ -60,25 +60,78 @@ export async function GET(request: Request) {
   const dataInicioStr = searchParams.get('dataInicio');
   const dataFimStr = searchParams.get('dataFim');
 
-  let queryLeads = supabaseClientDB
-    .from(cliente.tabela_leads)
-    .select('*');
+  const isSemIA = cliente.tipo_atendimento === 'sem_ia' || !cliente.tabela_leads;
+  let leads: any[] = [];
+  let numerosBloqueados = new Set<string>();
 
-  if (dataInicioStr && dataFimStr) {
-    queryLeads = queryLeads
-      .gte('created_at', dataInicioStr)
-      .lte('created_at', dataFimStr);
+  if (isSemIA) {
+    const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+    const wacloudAdmin = getWacloudSupabaseAdmin();
+    const nomeInstancia = cliente.nome_instancia || cliente.nome;
+
+    let query = wacloudAdmin
+      .from('wacloud_contatos')
+      .select('*')
+      .eq('nome_instancia', nomeInstancia);
+
+    if (dataInicioStr && dataFimStr) {
+      query = query.gte('created_at', dataInicioStr).lte('created_at', dataFimStr);
+    } else {
+      const diasAtras = periodo === '7d' ? 7 : periodo === '30d' ? 30 : 90;
+      const dataLimite = new Date();
+      dataLimite.setDate(dataLimite.getDate() - diasAtras);
+      query = query.gte('created_at', dataLimite.toISOString());
+    }
+
+    const { data: contatos } = await query.order('created_at', { ascending: false });
+    leads = (contatos || []).map(c => {
+      const telLimpo = String(c.telefone_contato || c.wa_chatid || '').replace(/@.*$/, '').replace(/\D/g, '');
+      return {
+        id: c.id,
+        nome: c.nome_contato || 'Cliente',
+        telefone: telLimpo,
+        phone: telLimpo,
+        created_at: c.created_at,
+        updated_at: c.atualizado_em,
+        ultima_mensagem: c.ultima_mensagem || null,
+        data_agendamento_visita: c.data_agendamento_visita || null,
+        horario_agendamento_visita: c.horario_agendamento_visita || null,
+        lead_visita_confirmada: Boolean(c.lead_visita_confirmada),
+        veiculo_interessado: c.veiculo_interessado || null,
+        veiculo_troca: c.veiculo_troca || null,
+        observacao_lead_qualificado: c.observacao_lead_qualificado || c.resumo_ia || null,
+        lead_simulacao_aprovada: Boolean(c.lead_simulacao_aprovada),
+        lead_simulacao_reprovada: Boolean(c.lead_simulacao_reprovada),
+        lead_finalizado: Boolean(c.lead_visita_confirmada || c.lead_simulacao_aprovada),
+        vendedor_lead: c.vendedor_responsavel || 'Vendedor',
+        origem_lead: c.origem_lead || 'desconhecido',
+        origem_detalhe: c.origem_detalhe || null,
+        anuncio_id: c.anuncio_id || null,
+        anuncio_titulo: c.anuncio_titulo || null,
+        anuncio_url: c.anuncio_url || null,
+        whatsapp_labels: Array.isArray(c.whatsapp_labels) ? c.whatsapp_labels : [],
+      };
+    });
   } else {
-    const diasAtras = periodo === '7d' ? 7 : periodo === '30d' ? 30 : 90;
-    const dataLimite = new Date();
-    dataLimite.setDate(dataLimite.getDate() - diasAtras);
-    queryLeads = queryLeads.gte('created_at', dataLimite.toISOString());
+    let queryLeads = supabaseClientDB
+      .from(cliente.tabela_leads)
+      .select('*');
+
+    if (dataInicioStr && dataFimStr) {
+      queryLeads = queryLeads
+        .gte('created_at', dataInicioStr)
+        .lte('created_at', dataFimStr);
+    } else {
+      const diasAtras = periodo === '7d' ? 7 : periodo === '30d' ? 30 : 90;
+      const dataLimite = new Date();
+      dataLimite.setDate(dataLimite.getDate() - diasAtras);
+      queryLeads = queryLeads.gte('created_at', dataLimite.toISOString());
+    }
+
+    const { data: leadsData } = await queryLeads.order('created_at', { ascending: false }).limit(10000);
+    leads = leadsData || [];
+    numerosBloqueados = await getAllBlockedNumbers(supabaseClientDB, cliente.tabela_bloqueios);
   }
-
-  const { data: leads } = await queryLeads.order('created_at', { ascending: false }).limit(10000);
-
-  // Buscar bloqueios ativos (paginado sem limite de 1000)
-  const numerosBloqueados = await getAllBlockedNumbers(supabaseClientDB, cliente.tabela_bloqueios);
 
   // Buscar posições manuais salvas
   const limite30d = new Date();
@@ -119,11 +172,17 @@ export async function GET(request: Request) {
       .select('id, nome_instancia, token')
       .limit(50);
 
-    // Prioriza correspondência exata sem acentos/espaços
-    let instanciaMatch = instancias?.find(i => {
-      const instNorm = normalizeStr(i.nome_instancia);
-      return instNorm === nomeNorm || instNorm === slugNorm;
-    });
+    // Prioriza correspondência exata por cliente.nome_instancia
+    let instanciaMatch = cliente.nome_instancia
+      ? instancias?.find(i => normalizeStr(i.nome_instancia) === normalizeStr(cliente.nome_instancia))
+      : null;
+
+    if (!instanciaMatch) {
+      instanciaMatch = instancias?.find(i => {
+        const instNorm = normalizeStr(i.nome_instancia);
+        return instNorm === nomeNorm || instNorm === slugNorm;
+      });
+    }
 
     if (!instanciaMatch) {
       instanciaMatch = instancias?.find(i => {
@@ -176,6 +235,24 @@ export async function GET(request: Request) {
           });
         }
       }
+
+      // Complementar com etiquetas salvas em wacloud_etiquetas_instancia
+      const { data: dbLabels } = await wacloudAdmin
+        .from('wacloud_etiquetas_instancia')
+        .select('*')
+        .eq('nome_instancia', instanciaMatch.nome_instancia);
+
+      for (const lbl of dbLabels || []) {
+        const key = String(lbl.uazapi_label_id);
+        if (!mapaUazapiLabels.has(key)) {
+          mapaUazapiLabels.set(key, {
+            id: key,
+            name: lbl.nome,
+            colorHex: lbl.cor_hex || '#ccc',
+            color: 0,
+          });
+        }
+      }
     }
   } catch (err) {
     console.warn('Erro ao carregar etiquetas do wacloud:', err);
@@ -190,6 +267,10 @@ export async function GET(request: Request) {
 
   const colunasPorId = new Map(colunas.map(c => [c.id, c]));
 
+  // Mapa de IDs numéricos -> Nomes de etiquetas para inferência dinâmica de etapas
+  const mapaNomes = new Map<string, string>();
+  mapaUazapiLabels.forEach((val, key) => mapaNomes.set(key, val.name));
+
   // 9. Distribuir leads pelas etapas
   for (const lead of leads || []) {
     // IA Leads
@@ -198,7 +279,9 @@ export async function GET(request: Request) {
     const bloqueado = numerosBloqueados.has(phoneClean);
 
     // Correlaciona etiquetas do WhatsApp
-    const leadWaLabels = mapaWhatsappLabels.get(phoneClean) || [];
+    const leadWaLabels = (lead.whatsapp_labels && Array.isArray(lead.whatsapp_labels) && lead.whatsapp_labels.length > 0)
+      ? lead.whatsapp_labels
+      : (mapaWhatsappLabels.get(phoneClean) || []);
 
     // Descobrir Canal de Atendimento (via etiqueta WhatsApp 'Canal | ...' ou campo origem_lead)
     let canal_origem: string = lead.origem_lead || 'desconhecido';
@@ -231,7 +314,7 @@ export async function GET(request: Request) {
 
     // Verificar se tem posição manual recente (30 dias)
     const etapaManualId = mapaPosicoesManuais.get(String(lead.id));
-    const tipoCalculado = calcularEtapaIA(leadComLabels, funil.meta_followup || 5);
+    const tipoCalculado = calcularEtapaIA(leadComLabels, funil.meta_followup || 5, mapaNomes);
     const etapaIdCalculada = etapaPorTipo.get(tipoCalculado);
     
     // Se foi movido manualmente, respeita. Caso contrário, lógica das etiquetas / IA.

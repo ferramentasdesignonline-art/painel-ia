@@ -139,11 +139,65 @@ export async function runAnalise(clientConfig: any, openAiKey: string, log: (s: 
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
-  // 1. TODOS os leads e TODAS as mensagens em paralelo ultrarrápido
-  const leadsPromise = fetchParallel(clientDb, clientConfig.tabela_leads, "*", 10000)
-  const msgsPromise = clientConfig.tabela_memoria
-    ? fetchParallel(clientDb, clientConfig.tabela_memoria, "id, session_id, message", 50000)
-    : Promise.resolve([])
+  const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_leads;
+  const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome;
+
+  let leadsPromise: Promise<any[]>;
+  let msgsPromise: Promise<any[]>;
+
+  if (isSemIA) {
+    const { getWacloudSupabaseAdmin } = await import("@/lib/wacloud/supabase");
+    const wacloudAdmin = getWacloudSupabaseAdmin();
+
+    leadsPromise = (async () => {
+      const { data: contatos } = await wacloudAdmin
+        .from('wacloud_contatos')
+        .select('*')
+        .eq('nome_instancia', nomeInstancia)
+        .order('atualizado_em', { ascending: false })
+        .limit(5000);
+
+      return (contatos || []).map(c => ({
+        id: c.id,
+        nome: c.nome_contato || 'Cliente',
+        telefone: c.telefone_contato,
+        phone: c.telefone_contato,
+        veiculo_interessado: c.veiculo_interessado,
+        veiculo_troca: c.veiculo_troca,
+        origem_lead: c.origem_lead,
+        origem_detalhe: c.origem_detalhe,
+        anuncio_titulo: c.anuncio_titulo,
+        lead_visita_confirmada: Boolean(c.lead_visita_confirmada),
+        data_agendamento_visita: c.data_agendamento_visita,
+        horario_agendamento_visita: c.horario_agendamento_visita,
+        whatsapp_labels: Array.isArray(c.whatsapp_labels) ? c.whatsapp_labels : []
+      }));
+    })();
+
+    msgsPromise = (async () => {
+      const { data: cloudMsgs } = await wacloudAdmin
+        .from('wacloud_mensagens')
+        .select('id, telefone_contato, mensagem, enviado_por_mim, created_at')
+        .eq('nome_instancia', nomeInstancia)
+        .order('created_at', { ascending: true })
+        .limit(20000);
+
+      return (cloudMsgs || []).map(m => ({
+        id: m.id,
+        session_id: m.telefone_contato,
+        message: {
+          type: m.enviado_por_mim ? 'ai' : 'human',
+          content: m.mensagem || ''
+        }
+      }));
+    })();
+  } else {
+    // 1. TODOS os leads e TODAS as mensagens em paralelo ultrarrápido
+    leadsPromise = fetchParallel(clientDb, clientConfig.tabela_leads, "*", 10000);
+    msgsPromise = clientConfig.tabela_memoria
+      ? fetchParallel(clientDb, clientConfig.tabela_memoria, "id, session_id, message", 50000)
+      : Promise.resolve([]);
+  }
 
   // 2. Buscar contatos e etiquetas do Wacloud para correlação precisa de canais e agendamento de visitas
   const agendamentoPhones = new Set<string>()
@@ -157,7 +211,7 @@ export async function runAnalise(clientConfig: any, openAiKey: string, log: (s: 
 
       const { data: insts } = await wacloudAdmin.from("wacloud_instancias").select("id, nome_instancia, token, cliente_id")
       const instNorm = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase()
-      const clientNameNorm = instNorm(clientConfig.whatsapp_instancia || clientConfig.nome || "")
+      const clientNameNorm = instNorm(clientConfig.nome_instancia || clientConfig.whatsapp_instancia || clientConfig.nome || "")
 
       const instMatch = insts?.find((i: any) => {
         if (i.cliente_id && (i.cliente_id === clientConfig.id || i.cliente_id === clientConfig.auth_user_id)) return true

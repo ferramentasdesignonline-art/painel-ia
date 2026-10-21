@@ -42,6 +42,8 @@ export async function POST(request: Request) {
     let errorUpdate = null;
     let oldLead = null;
 
+    const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_leads;
+
     if (origem === 'manual') {
       const { data: old } = await supabaseAdmin
         .from('sistema-dash-ia_leads_manuais')
@@ -55,6 +57,50 @@ export async function POST(request: Request) {
         .update(novasInformacoes)
         .eq('id', leadId);
       errorUpdate = error;
+    } else if (isSemIA) {
+      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+      const wacloudAdmin = getWacloudSupabaseAdmin();
+
+      const { data: old } = await wacloudAdmin
+        .from('wacloud_contatos')
+        .select('*')
+        .eq('id', leadId)
+        .maybeSingle();
+      oldLead = old ? { nome: old.nome_contato, veiculo_interessado: old.veiculo_interessado } : null;
+
+      const payload: any = {};
+      if (novasInformacoes.nome) payload.nome_contato = novasInformacoes.nome;
+      if ('veiculo_interessado' in novasInformacoes) payload.veiculo_interessado = novasInformacoes.veiculo_interessado;
+      if ('veiculo_troca' in novasInformacoes) payload.veiculo_troca = novasInformacoes.veiculo_troca;
+      if ('observacao_lead_qualificado' in novasInformacoes) payload.observacao_lead_qualificado = novasInformacoes.observacao_lead_qualificado;
+
+      if ('data_agendamento' in novasInformacoes) {
+        if (novasInformacoes.data_agendamento) {
+          const d = new Date(novasInformacoes.data_agendamento);
+          const brasilStr = d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+          const parts = brasilStr.replace(',', '').split(' ');
+          const dateParts = (parts[0] || '').split('/');
+          const timeParts = (parts[1] || '').split(':');
+          if (dateParts.length === 3) {
+            payload.data_agendamento_visita = `${dateParts[2]}-${dateParts[1].padStart(2, '0')}-${dateParts[0].padStart(2, '0')}`;
+          }
+          if (timeParts.length >= 2) {
+            payload.horario_agendamento_visita = `${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}`;
+          }
+          payload.lead_visita_confirmada = true;
+        } else {
+          payload.data_agendamento_visita = null;
+          payload.horario_agendamento_visita = null;
+        }
+      }
+
+      payload.atualizado_em = new Date().toISOString();
+
+      const { error } = await wacloudAdmin
+        .from('wacloud_contatos')
+        .update(payload)
+        .eq('id', leadId);
+      errorUpdate = error;
     } else {
       // IA Lead
       const { data: old } = await supabaseAdmin
@@ -63,16 +109,6 @@ export async function POST(request: Request) {
         .eq('id', leadId)
         .single();
       oldLead = old;
-
-      // Recupera etapa do IA Lead apenas para o constraint de histórico
-      const { data: pos } = await supabaseAdmin
-        .from('sistema-dash-ia_lead_posicoes')
-        .select('etapa_id')
-        .eq('cliente_id', clientConfig.id)
-        .eq('lead_id', leadId)
-        .single();
-      
-      if (oldLead) oldLead.etapa_id = pos?.etapa_id;
 
       const payload = { ...novasInformacoes };
       if ('data_agendamento' in payload) {
@@ -113,19 +149,23 @@ export async function POST(request: Request) {
     if (novasInformacoes.veiculo_interessado && novasInformacoes.veiculo_interessado !== oldLead?.veiculo_interessado) mudancas.push(`Veículo alterado de '${oldLead?.veiculo_interessado || "Vazio"}' para '${novasInformacoes.veiculo_interessado}'`);
 
     if (mudancas.length > 0) {
-      await supabaseAdmin
-        .from('sistema-dash-ia_lead_historico')
-        .insert({
-          cliente_id: clientConfig.id,
-          lead_id: leadId.toString(),
-          tipo_lead: origem || 'ia',
-          etapa_origem_id: oldLead?.etapa_id || null,
-          etapa_destino_id: oldLead?.etapa_id || null,
-          vendedor_nome: emailPrefix,
-          evento: 'update',
-          descricao: mudancas.join(' | '),
-          created_at: new Date().toISOString()
-        });
+      try {
+        await supabaseAdmin
+          .from('sistema-dash-ia_lead_historico')
+          .insert({
+            cliente_id: clientConfig.id,
+            lead_id: leadId.toString(),
+            tipo_lead: origem || 'ia',
+            etapa_origem_id: oldLead?.etapa_id || null,
+            etapa_destino_id: oldLead?.etapa_id || null,
+            vendedor_nome: emailPrefix,
+            evento: 'update',
+            descricao: mudancas.join(' | '),
+            created_at: new Date().toISOString()
+          });
+      } catch (histErr) {
+        console.warn("Aviso ao salvar histórico:", histErr);
+      }
     }
 
     return NextResponse.json({ success: true });

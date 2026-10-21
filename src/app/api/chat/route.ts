@@ -38,16 +38,43 @@ export async function GET(request: Request) {
       }
     )
 
-    // O formato na tabela parece ser exatamente o JID do WhatsApp
-    // Ex: 5527999287028@s.whatsapp.net
-    // Vamos buscar pelo número puro dentro do session_id
     const pureNumbers = telefone.replace(/\D/g, '')
+    const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_memoria;
+
+    if (isSemIA) {
+      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+      const wacloudAdmin = getWacloudSupabaseAdmin();
+      const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome;
+
+      const { data: mensagens, error } = await wacloudAdmin
+        .from('wacloud_mensagens')
+        .select('*')
+        .eq('nome_instancia', nomeInstancia)
+        .or(`telefone_contato.ilike.%${pureNumbers}%,telefone_contato.ilike.%${pureNumbers.slice(-8)}%`)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error("Error fetching chat from wacloud_mensagens:", error);
+        return NextResponse.json({ error: "Erro ao buscar mensagens", details: error.message }, { status: 400 });
+      }
+
+      const formattedMessages = mensagens?.map((row) => ({
+        id: row.id ? row.id.toString() : `${row.telefone_contato}-${row.created_at}`,
+        type: row.enviado_por_mim ? 'ai' : 'human',
+        message: row.mensagem || '',
+        created_at: row.created_at,
+        tipo_mensagem: row.tipo_mensagem,
+        url_midia: row.url_midia,
+      }));
+
+      return NextResponse.json({ data: formattedMessages || [] }, { status: 200 });
+    }
 
     const { data: mensagens, error } = await supabaseAdmin
       .from(clientConfig.tabela_memoria)
       .select('*')
       .ilike('session_id', `%${pureNumbers}%`)
-      .order('created_at', { ascending: true }) // Ordenando rigorosamente pela coluna de horário
+      .order('created_at', { ascending: true })
 
     if (error) {
       console.error(`Error fetching chat from ${clientConfig.tabela_memoria}:`, error)
@@ -130,9 +157,12 @@ export async function POST(request: Request) {
     const clientSlugNorm = normalize(clientConfig.slug || '')
     const clientInstNorm = normalize(clientConfig.whatsapp_instancia || '')
 
+    const clientInstanciaCustom = normalize(clientConfig.nome_instancia || '')
+
     const instance = instances?.find((inst: any) => {
       if (inst.cliente_id && (inst.cliente_id === clientConfig.id || inst.cliente_id === clientConfig.auth_user_id)) return true
       const instNorm = normalize(inst.nome_instancia || '')
+      if (clientInstanciaCustom && instNorm === clientInstanciaCustom) return true
       if (clientInstNorm && instNorm === clientInstNorm) return true
       if (clientNameNorm && (instNorm === clientNameNorm || instNorm.includes(clientNameNorm) || clientNameNorm.includes(instNorm))) return true
       if (clientSlugNorm && (instNorm === clientSlugNorm || instNorm.includes(clientSlugNorm))) return true
@@ -177,61 +207,83 @@ export async function POST(request: Request) {
       }
     }
 
-    // 3. Registra na tabela de memória da IA com prefixo [ATENDIMENTO HUMANO]
+    // 3. Registra na tabela correspondente
+    const isSemIAClient = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_memoria;
     const contentToStore = type && type !== 'text' && mediaUrl
       ? `[ATENDIMENTO HUMANO] ${text ? text.trim() + ' ' : ''}${mediaUrl}`
-      : `[ATENDIMENTO HUMANO] ${text ? text.trim() : ''}`
+      : `[ATENDIMENTO HUMANO] ${text ? text.trim() : ''}`;
 
-    const messageJson = {
-      type: "ai",
-      content: contentToStore,
-      additional_kwargs: {
-        is_human: true,
-        media_url: mediaUrl || null,
-        media_type: type || 'text'
-      }
-    }
-
-    const sessionIdCandidate = pureNumbers.startsWith('55') ? whatsappJid : `55${whatsappJid}`
-
-    try {
-      await supabaseAdmin
-        .from(clientConfig.tabela_memoria)
-        .insert({
-          session_id: sessionIdCandidate,
-          message: messageJson
-        })
-    } catch (e: any) {
-      console.error("Erro ao salvar mensagem na tabela de memória:", e)
-    }
-
-    // 4. Bloqueia a IA automaticamente na tabela_bloqueios
-    const pureWith55 = pureNumbers.startsWith('55') ? pureNumbers : `55${pureNumbers}`
-    const instanciaNome = clientConfig.whatsapp_instancia || clientConfig.nome.replace(/\s+/g, '')
-    const numeroClientePadrao = `${instanciaNome} ${pureWith55}@s.whatsapp.net block`
-
-    try {
-      const { data: existente } = await supabaseAdmin
-        .from(clientConfig.tabela_bloqueios)
-        .select('id, bloqueio_existe')
-        .or(`numero_cliente.eq.${numeroClientePadrao},numero_cliente.ilike.%${pureNumbers}%,numero_cliente.ilike.%${pureWith55}%`)
-        .limit(1)
-
-      if (!existente || existente.length === 0) {
-        await supabaseAdmin
-          .from(clientConfig.tabela_bloqueios)
+    if (isSemIAClient) {
+      try {
+        await wacloudAdmin
+          .from('wacloud_mensagens')
           .insert({
-            numero_cliente: numeroClientePadrao,
-            bloqueio_existe: true
-          })
-      } else if (existente[0].bloqueio_existe === false) {
-        await supabaseAdmin
-          .from(clientConfig.tabela_bloqueios)
-          .update({ bloqueio_existe: true })
-          .eq('id', existente[0].id)
+            nome_instancia: instance?.nome_instancia || clientConfig.nome_instancia || clientConfig.nome,
+            telefone_contato: pureNumbers,
+            nome_contato: 'Atendente',
+            mensagem: text || fileName || '',
+            enviado_por_mim: true,
+            tipo_mensagem: type || 'text',
+            url_midia: mediaUrl || null,
+            created_at: new Date().toISOString()
+          });
+      } catch (wErr) {
+        console.warn("Aviso ao salvar mensagem em wacloud_mensagens:", wErr);
       }
-    } catch (e: any) {
-      console.error("Erro ao criar bloqueio humano:", e)
+    } else if (clientConfig.tabela_memoria) {
+      const messageJson = {
+        type: "ai",
+        content: contentToStore,
+        additional_kwargs: {
+          is_human: true,
+          media_url: mediaUrl || null,
+          media_type: type || 'text'
+        }
+      }
+
+      const sessionIdCandidate = pureNumbers.startsWith('55') ? whatsappJid : `55${whatsappJid}`
+
+      try {
+        await supabaseAdmin
+          .from(clientConfig.tabela_memoria)
+          .insert({
+            session_id: sessionIdCandidate,
+            message: messageJson
+          })
+      } catch (memErr) {
+        console.warn("Aviso ao salvar mensagem na memória da IA:", memErr);
+      }
+    }
+
+    // 4. Bloqueia a IA automaticamente na tabela_bloqueios apenas para clientes com IA
+    if (!isSemIAClient && clientConfig.tabela_bloqueios) {
+      const pureWith55 = pureNumbers.startsWith('55') ? pureNumbers : `55${pureNumbers}`
+      const instanciaNome = clientConfig.whatsapp_instancia || clientConfig.nome.replace(/\s+/g, '')
+      const numeroClientePadrao = `${instanciaNome} ${pureWith55}@s.whatsapp.net block`
+
+      try {
+        const { data: existente } = await supabaseAdmin
+          .from(clientConfig.tabela_bloqueios)
+          .select('id, bloqueio_existe')
+          .or(`numero_cliente.eq.${numeroClientePadrao},numero_cliente.ilike.%${pureNumbers}%,numero_cliente.ilike.%${pureWith55}%`)
+          .limit(1)
+
+        if (!existente || existente.length === 0) {
+          await supabaseAdmin
+            .from(clientConfig.tabela_bloqueios)
+            .insert({
+              numero_cliente: numeroClientePadrao,
+              bloqueio_existe: true
+            })
+        } else if (existente[0].bloqueio_existe === false) {
+          await supabaseAdmin
+            .from(clientConfig.tabela_bloqueios)
+            .update({ bloqueio_existe: true })
+            .eq('id', existente[0].id)
+        }
+      } catch (e: any) {
+        console.error("Erro ao criar bloqueio humano:", e)
+      }
     }
 
     return NextResponse.json({

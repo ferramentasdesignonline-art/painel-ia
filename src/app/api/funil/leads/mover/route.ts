@@ -33,24 +33,21 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
   } else {
-    // Lead da IA: registrar posição manual (upsert)
-    // Isso faz com que na próxima carga o sistema respeite a posição manual
-    // ao invés da posição calculada pela IA
-    const { error: upsertError } = await supabaseAdmin
-      .from('sistema-dash-ia_lead_posicoes')
-      .upsert({
-        cliente_id: cliente.id,
-        lead_id: Number(lead_id),
-        etapa_id,
-        movido_manualmente_em: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'cliente_id,lead_id',
-      });
-      
-    if (upsertError) {
-      console.error('Erro ao salvar posição do lead IA:', upsertError);
-      return NextResponse.json({ error: upsertError.message }, { status: 500 });
+    // Lead da IA / Cloud: registrar posição manual (upsert) se a tabela existir
+    try {
+      await supabaseAdmin
+        .from('sistema-dash-ia_lead_posicoes')
+        .upsert({
+          cliente_id: cliente.id,
+          lead_id: Number(lead_id) || 0,
+          etapa_id,
+          movido_manualmente_em: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'cliente_id,lead_id',
+        });
+    } catch (upsertError) {
+      console.warn('Aviso ao salvar posição do lead:', upsertError);
     }
   }
 
@@ -62,26 +59,40 @@ export async function PUT(request: Request) {
       .eq('id', etapa_id)
       .maybeSingle();
 
+    const isSemIA = cliente.tipo_atendimento === 'sem_ia' || !cliente.tabela_leads;
+
     if (origem !== 'manual' && etapaDestino) {
       const dbEtapaTipo = etapaDestino.tipo || '';
       const updateFlags: any = {
-        lead_visita_confirmada: dbEtapaTipo === 'visita_confirmada',
+        lead_visita_confirmada: dbEtapaTipo === 'visita_confirmada' || dbEtapaTipo === 'visita_agendada',
         lead_simulacao_pre_aprovada: dbEtapaTipo === 'simulacao_pre_aprovada',
-        lead_simulacao_aprovada: dbEtapaTipo === 'simulacao_aprovada',
-        lead_simulacao_reprovada: dbEtapaTipo === 'simulacao_reprovada',
-        update_lead: new Date().toISOString()
+        lead_simulacao_aprovada: dbEtapaTipo === 'simulacao_aprovada' || dbEtapaTipo === 'oportunidade',
+        lead_simulacao_reprovada: dbEtapaTipo === 'simulacao_reprovada' || dbEtapaTipo === 'ficha_reprovada',
       };
-      
-      if (dbEtapaTipo === 'ia_qualificado') {
-        updateFlags.lead_finalizado = true;
-      } else if (['visita_confirmada', 'simulacao_pre_aprovada', 'simulacao_aprovada', 'simulacao_reprovada', 'ia_sem_contato', 'ia_em_andamento', 'ia_followup', 'ia_perda'].includes(dbEtapaTipo)) {
-        updateFlags.lead_finalizado = false;
-      }
 
-      await supabaseAdmin
-        .from(cliente.tabela_leads)
-        .update(updateFlags)
-        .eq('id', lead_id);
+      if (isSemIA) {
+        const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+        const wacloudAdmin = getWacloudSupabaseAdmin();
+        await wacloudAdmin
+          .from('wacloud_contatos')
+          .update({
+            ...updateFlags,
+            atualizado_em: new Date().toISOString(),
+          })
+          .eq('id', lead_id);
+      } else if (cliente.tabela_leads) {
+        if (dbEtapaTipo === 'ia_qualificado') {
+          updateFlags.lead_finalizado = true;
+        } else if (['visita_confirmada', 'simulacao_pre_aprovada', 'simulacao_aprovada', 'simulacao_reprovada', 'ia_sem_contato', 'ia_em_andamento', 'ia_followup', 'ia_perda'].includes(dbEtapaTipo)) {
+          updateFlags.lead_finalizado = false;
+        }
+        updateFlags.update_lead = new Date().toISOString();
+
+        await supabaseAdmin
+          .from(cliente.tabela_leads)
+          .update(updateFlags)
+          .eq('id', lead_id);
+      }
     }
 
     const { error: histError } = await supabaseAdmin

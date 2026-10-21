@@ -50,7 +50,7 @@ export default async function WhatsAppWebPage({ searchParams }: { searchParams?:
 
   const clientNameNormalized = normalize(clientConfig.nome || "")
   const clientSlugNormalized = normalize(clientConfig.slug || "")
-  const clientInstanciaNormalized = normalize(clientConfig.whatsapp_instancia || "")
+  const clientInstanciaNormalized = normalize(clientConfig.nome_instancia || clientConfig.whatsapp_instancia || "")
 
   const instance = instances?.find((inst: any) => {
     // 1. Vínculo direto por cliente_id se existir

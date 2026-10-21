@@ -40,11 +40,55 @@ export async function GET(request: Request) {
       }
     )
 
-    // 4. Busca os dados IA
-    const leadsIA = await getClientLeads(supabaseAdmin, clientConfig.tabela_leads)
+    const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_leads;
+    let leadsIA: any[] = [];
+    let blockedNumbers = new Set<string>();
 
-    // Busca bloqueios ativos para o cliente atual (paginado sem limite de 1000)
-    const blockedNumbers = await getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios)
+    if (isSemIA) {
+      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+      const wacloudAdmin = getWacloudSupabaseAdmin();
+      const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome;
+
+      const { data: contatos } = await wacloudAdmin
+        .from('wacloud_contatos')
+        .select('*')
+        .eq('nome_instancia', nomeInstancia)
+        .order('atualizado_em', { ascending: false });
+
+      leadsIA = (contatos || []).map(c => {
+        const rawTel = String(c.telefone_contato || c.wa_chatid || '');
+        const phoneClean = rawTel.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
+        return {
+          id: c.id,
+          nome: c.nome_contato || 'Cliente',
+          telefone: phoneClean,
+          phone: phoneClean,
+          created_at: c.created_at,
+          updated_at: c.atualizado_em,
+          ultima_mensagem: c.ultima_mensagem || null,
+          data_agendamento_visita: c.data_agendamento_visita || null,
+          horario_agendamento_visita: c.horario_agendamento_visita || null,
+          lead_visita_confirmada: Boolean(c.lead_visita_confirmada),
+          veiculo_interessado: c.veiculo_interessado || null,
+          veiculo_troca: c.veiculo_troca || null,
+          observacao_lead_qualificado: c.observacao_lead_qualificado || c.resumo_ia || null,
+          lead_simulacao_aprovada: Boolean(c.lead_simulacao_aprovada),
+          lead_simulacao_reprovada: Boolean(c.lead_simulacao_reprovada),
+          lead_finalizado: Boolean(c.lead_visita_confirmada || c.lead_simulacao_aprovada),
+          vendedor_lead: c.vendedor_responsavel || 'Vendedor',
+          origem_lead: c.origem_lead || 'desconhecido',
+          origem_detalhe: c.origem_detalhe || null,
+          anuncio_id: c.anuncio_id || null,
+          anuncio_titulo: c.anuncio_titulo || null,
+          anuncio_url: c.anuncio_url || null,
+          anuncio_descricao: c.anuncio_descricao || null,
+          whatsapp_labels: Array.isArray(c.whatsapp_labels) ? c.whatsapp_labels : [],
+        };
+      });
+    } else {
+      leadsIA = await getClientLeads(supabaseAdmin, clientConfig.tabela_leads);
+      blockedNumbers = await getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios);
+    }
 
     // 5. Busca leads manuais
     const { data: leadsManuais } = await supabaseAdmin
@@ -92,10 +136,16 @@ export async function GET(request: Request) {
         .select('id, nome_instancia, token')
         .limit(50);
 
-      let instanciaMatch = instancias?.find(i => {
-        const instNorm = normalizeStr(i.nome_instancia);
-        return instNorm === nomeNorm || instNorm === slugNorm;
-      });
+      let instanciaMatch = clientConfig.nome_instancia 
+        ? instancias?.find(i => normalizeStr(i.nome_instancia) === normalizeStr(clientConfig.nome_instancia))
+        : null;
+
+      if (!instanciaMatch) {
+        instanciaMatch = instancias?.find(i => {
+          const instNorm = normalizeStr(i.nome_instancia);
+          return instNorm === nomeNorm || instNorm === slugNorm;
+        });
+      }
 
       if (!instanciaMatch) {
         instanciaMatch = instancias?.find(i => {
@@ -146,6 +196,24 @@ export async function GET(request: Request) {
             });
           }
         }
+
+        // Complementar com etiquetas salvas em wacloud_etiquetas_instancia
+        const { data: dbLabels } = await wacloudAdmin
+          .from('wacloud_etiquetas_instancia')
+          .select('*')
+          .eq('nome_instancia', instanciaMatch.nome_instancia);
+
+        for (const lbl of dbLabels || []) {
+          const key = String(lbl.uazapi_label_id);
+          if (!mapaUazapiLabels.has(key)) {
+            mapaUazapiLabels.set(key, {
+              id: key,
+              name: lbl.nome,
+              colorHex: lbl.cor_hex || '#ccc',
+              color: 0,
+            });
+          }
+        }
       }
     } catch (err) {
       console.warn('Erro ao carregar etiquetas do wacloud em /api/leads:', err);
@@ -162,8 +230,10 @@ export async function GET(request: Request) {
       const phoneClean = rawPhone.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
       const isBlocked = blockedNumbers.has(phoneClean);
 
-      // Correlaciona etiquetas do WhatsApp
-      const leadWaLabels = mapaWhatsappLabels.get(phoneClean) || [];
+      // Correlaciona etiquetas do WhatsApp (usa do lead se já vier do wacloud_contatos)
+      const leadWaLabels = (lead.whatsapp_labels && Array.isArray(lead.whatsapp_labels) && lead.whatsapp_labels.length > 0)
+        ? lead.whatsapp_labels
+        : (mapaWhatsappLabels.get(phoneClean) || []);
 
       // Descobrir Canal de Atendimento (via etiqueta WhatsApp 'Canal | ...' ou campo origem_lead)
       let canal_origem: string = lead.origem_lead || 'desconhecido';

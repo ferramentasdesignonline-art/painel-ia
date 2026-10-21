@@ -51,48 +51,76 @@ export type TipoEtapaIA =
  * 7. Perdido | Desqualificado | Sem resposta (ID 58)
  * 8. Em atendimento | Recontratar (ID 56)
  */
-export function calcularEtapaPorLabels(labelIds: string[] = []): TipoEtapaIA | null {
+export function calcularEtapaPorLabels(
+  labelIds: string[] = [],
+  mapaNomes?: Map<string, string>
+): TipoEtapaIA | null {
   if (!labelIds || labelIds.length === 0) return null;
 
   // Extrair apenas os IDs numéricos finais (ex: "5511977063365:55" -> "55")
-  const ids = new Set(
-    labelIds.map(l => {
-      const s = String(l);
-      return s.includes(':') ? s.split(':')[1] : s;
-    })
+  const ids = Array.from(
+    new Set(
+      labelIds.map(l => {
+        const s = String(l);
+        return s.includes(':') ? s.split(':')[1] : s;
+      })
+    )
   );
 
-  // 1. Cliente
-  if (ids.has('52')) return 'cliente';
+  // Se tiver mapa de nomes (id -> nome), avalia por nome com prioridade absoluta
+  if (mapaNomes && mapaNomes.size > 0) {
+    const nomesPresentes = ids
+      .map(id => mapaNomes.get(id) || '')
+      .filter(Boolean)
+      .map(n => n.toLowerCase());
 
-  // 2. Visita - Realizada
-  if (ids.has('54')) return 'visita_realizada';
+    // 1. Cliente
+    if (nomesPresentes.some(n => n === 'cliente' || n.startsWith('cliente '))) return 'cliente';
 
-  // 3. Visita - Agendada (53 ou 6 legado)
-  if (ids.has('53') || ids.has('6')) return 'visita_agendada';
+    // 2. Visita - Realizada
+    if (nomesPresentes.some(n => n.includes('visita - realizada') || n.includes('visita realizada'))) return 'visita_realizada';
 
-  // 4. Oportunidade (55)
-  if (ids.has('55')) return 'oportunidade';
+    // 3. Visita - Agendada
+    if (nomesPresentes.some(n => n.includes('visita - agendada') || n.includes('visita agendada'))) return 'visita_agendada';
 
-  // 5. Ficha Reprovada (57)
-  if (ids.has('57')) return 'ficha_reprovada';
+    // 4. Oportunidade
+    if (nomesPresentes.some(n => n.includes('oportunidade'))) return 'oportunidade';
 
-  // 6. Perdido Qualificado (59)
-  if (ids.has('59')) return 'perdido_qualificado';
+    // 5. Ficha Reprovada
+    if (nomesPresentes.some(n => n.includes('ficha reprovada'))) return 'ficha_reprovada';
 
-  // 7. Perdido Desqualificado (58)
-  if (ids.has('58')) return 'perdido_desqualificado';
+    // 6. Perdido Qualificado
+    if (nomesPresentes.some(n => n.includes('perdido | qualificado') || n.includes('perdido qualificado'))) return 'perdido_qualificado';
 
-  // 8. Em atendimento (56)
-  if (ids.has('56')) return 'em_atendimento';
+    // 7. Perdido Desqualificado
+    if (nomesPresentes.some(n => n.includes('perdido') || n.includes('desqualificado') || n.includes('sem resposta'))) return 'perdido_desqualificado';
+
+    // 8. Em atendimento
+    if (nomesPresentes.some(n => n.includes('em atendimento') || n.includes('recontratar') || n.includes('recontatar'))) return 'em_atendimento';
+  }
+
+  // Fallback por IDs legados da Auto Prosperitá
+  const idsSet = new Set(ids);
+  if (idsSet.has('52')) return 'cliente';
+  if (idsSet.has('54')) return 'visita_realizada';
+  if (idsSet.has('53') || idsSet.has('6')) return 'visita_agendada';
+  if (idsSet.has('55')) return 'oportunidade';
+  if (idsSet.has('57')) return 'ficha_reprovada';
+  if (idsSet.has('59')) return 'perdido_qualificado';
+  if (idsSet.has('58')) return 'perdido_desqualificado';
+  if (idsSet.has('56')) return 'em_atendimento';
 
   return null;
 }
 
-export function calcularEtapaIA(lead: Lead, meta_followup = 5): TipoEtapaIA {
+export function calcularEtapaIA(
+  lead: Lead,
+  meta_followup = 5,
+  mapaNomes?: Map<string, string>
+): TipoEtapaIA {
   // 1. Prioridade máxima: Etiquetas do WhatsApp do lead
   if (lead.whatsapp_labels && lead.whatsapp_labels.length > 0) {
-    const etapaLabel = calcularEtapaPorLabels(lead.whatsapp_labels);
+    const etapaLabel = calcularEtapaPorLabels(lead.whatsapp_labels, mapaNomes);
     if (etapaLabel) return etapaLabel;
   }
 

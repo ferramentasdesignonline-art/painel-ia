@@ -32,9 +32,9 @@ export default async function ClientLayout({
       {isImpersonating && clientConfig && <AdminBar clientName={clientConfig.nome} />}
       
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
+        <Sidebar tipoAtendimento={clientConfig?.tipo_atendimento} />
         <div className="flex flex-col flex-1 w-full overflow-hidden">
-          <Header clientName={clientConfig?.nome} clientEmail={clientConfig?.email} />
+          <Header clientName={clientConfig?.nome} clientEmail={clientConfig?.email} tipoAtendimento={clientConfig?.tipo_atendimento} />
           <main className="flex-1 relative overflow-y-auto focus:outline-none">
             <div className="py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
               {children}

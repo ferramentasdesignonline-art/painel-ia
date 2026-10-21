@@ -23,7 +23,24 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    if (!clientConfig.whatsapp_token) {
+    let token = clientConfig.whatsapp_token
+    if (!token) {
+      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase')
+      const wacloudAdmin = getWacloudSupabaseAdmin()
+      const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome
+      const { data: inst } = await wacloudAdmin
+        .from('wacloud_instancias')
+        .select('token')
+        .or(`nome_instancia.eq.${nomeInstancia},cliente_id.eq.${clientConfig.id}`)
+        .limit(1)
+        .maybeSingle()
+
+      if (inst?.token) {
+        token = inst.token
+      }
+    }
+
+    if (!token) {
       return NextResponse.json({ error: "WhatsApp token não configurado" }, { status: 400 })
     }
 
@@ -31,7 +48,7 @@ export async function GET(request: Request) {
       method: "GET",
       headers: {
         "Accept": "application/json",
-        "token": clientConfig.whatsapp_token
+        "token": token
       }
     })
 
@@ -63,7 +80,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    if (!clientConfig.whatsapp_token) {
+    let token = clientConfig.whatsapp_token
+    if (!token) {
+      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase')
+      const wacloudAdmin = getWacloudSupabaseAdmin()
+      const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome
+      const { data: inst } = await wacloudAdmin
+        .from('wacloud_instancias')
+        .select('token')
+        .or(`nome_instancia.eq.${nomeInstancia},cliente_id.eq.${clientConfig.id}`)
+        .limit(1)
+        .maybeSingle()
+
+      if (inst?.token) {
+        token = inst.token
+      }
+    }
+
+    if (!token) {
       return NextResponse.json({ error: "WhatsApp token não configurado" }, { status: 400 })
     }
 
@@ -72,7 +106,7 @@ export async function POST(request: Request) {
       headers: {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "token": clientConfig.whatsapp_token
+        "token": token
       }
     })
 
