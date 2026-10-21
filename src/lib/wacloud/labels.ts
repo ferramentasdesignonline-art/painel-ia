@@ -1,5 +1,6 @@
 import { getWacloudSupabaseAdmin } from './supabase';
-import { fetchUazapiLabels } from './uazapi';
+import { fetchUazapiChats, fetchUazapiLabels } from './uazapi';
+import { createClient } from '@supabase/supabase-js';
 
 function normalizeStr(str: string) {
   return (str || '')
@@ -16,6 +17,10 @@ export type UazapiLabelItem = {
   colorHex: string;
   color?: number;
 };
+
+// Cache em memória para controlar o Lazy-Sync por cliente (TTL de 15 minutos)
+const syncTimestamps = new Map<string, number>();
+const SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutos
 
 export async function getClientWhatsappLabelsData(clientConfig: any): Promise<{
   mapaWhatsappLabels: Map<string, string[]>;
@@ -56,28 +61,100 @@ export async function getClientWhatsappLabelsData(clientConfig: any): Promise<{
       });
     }
 
-    if (instanciaMatch) {
-      const nomeInstancia = instanciaMatch.nome_instancia;
+    const token = instanciaMatch?.token || clientConfig.whatsapp_token;
+    const nomeInstancia = instanciaMatch?.nome_instancia || clientConfig.nome_instancia || clientConfig.whatsapp_instancia;
 
-      // 1. Carregar contatos com etiquetas da instância
-      let allContatosCloud: any[] = [];
-      const pageSize = 1000;
-      let page = 0;
-      while (page < 10) {
-        const { data: chunk, error: chunkErr } = await wacloudAdmin
-          .from('wacloud_contatos')
-          .select('telefone_contato, whatsapp_labels')
-          .eq('nome_instancia', nomeInstancia)
-          .neq('whatsapp_labels', '[]')
-          .range(page * pageSize, (page + 1) * pageSize - 1);
+    // 1. Carregar definições oficiais de etiquetas via UAZAPI (se tiver token)
+    if (token) {
+      try {
+        const labelsList = await fetchUazapiLabels(token);
+        for (const lbl of labelsList || []) {
+          const rawKey = String(lbl.labelid || lbl.id);
+          const cleanKey = rawKey.includes(':') ? rawKey.split(':')[1] : rawKey;
+          
+          mapaNomes.set(cleanKey, lbl.name);
+          mapaNomes.set(rawKey, lbl.name);
 
-        if (chunkErr || !chunk || chunk.length === 0) break;
-        allContatosCloud.push(...chunk);
-        if (chunk.length < pageSize) break;
-        page++;
+          const item: UazapiLabelItem = {
+            id: rawKey,
+            labelid: cleanKey,
+            name: lbl.name,
+            colorHex: lbl.colorHex || '#6366f1',
+            color: lbl.color,
+          };
+
+          mapaUazapiLabels.set(cleanKey, item);
+          mapaUazapiLabels.set(rawKey, item);
+        }
+      } catch (uazErr) {
+        console.warn('Erro ao carregar etiquetas da UAZAPI:', uazErr);
       }
 
-      for (const cc of allContatosCloud) {
+      // 2. Lazy-Sync Automático sob demanda (apenas 1 vez a cada 15 min quando o Dashboard/Leads for acessado)
+      const cacheKey = String(clientConfig.id || clientConfig.slug || clientConfig.nome || 'default');
+      const lastSync = syncTimestamps.get(cacheKey) || 0;
+      const now = Date.now();
+      const shouldSync = (now - lastSync) > SYNC_INTERVAL_MS;
+
+      if (shouldSync) {
+        syncTimestamps.set(cacheKey, now);
+        try {
+          // Puxa os 150 chats mais recentes com wa_label ativo
+          const chatResult = await fetchUazapiChats(token, 0, 150);
+          const rawChats = chatResult.chats || [];
+          const labeledChats = rawChats.filter((c: any) => 
+            Array.isArray(c?.wa_label) && c.wa_label.length > 0 && !c?.wa_isGroup
+          );
+
+          // Alimenta o mapa em memória imediatamente
+          for (const c of labeledChats) {
+            const cleanPhone = String(c.wa_chatid || '').split('@')[0].replace(/\D/g, '');
+            if (cleanPhone) {
+              mapaWhatsappLabels.set(cleanPhone, c.wa_label);
+              if (cleanPhone.startsWith('55')) {
+                mapaWhatsappLabels.set(cleanPhone.slice(2), c.wa_label);
+              } else {
+                mapaWhatsappLabels.set(`55${cleanPhone}`, c.wa_label);
+              }
+            }
+          }
+
+          // Se o cliente tem IA e tabela de leads própria (ex: auto_prosperita_leads, domine_leads, titanium_leads):
+          // Atualiza em lote diretamente na coluna whatsapp_labels do Supabase do cliente
+          if (clientConfig.tabela_leads && labeledChats.length > 0) {
+            const clientDb = createClient(
+              clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
+              clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!
+            );
+
+            // Atualiza leads de forma assíncrona/batch
+            Promise.allSettled(
+              labeledChats.map((c: any) => {
+                const cleanPhone = String(c.wa_chatid || '').split('@')[0].replace(/\D/g, '');
+                const tailPhone = cleanPhone.slice(-8);
+                return clientDb
+                  .from(clientConfig.tabela_leads)
+                  .update({ whatsapp_labels: c.wa_label })
+                  .ilike('telefone', `%${tailPhone}%`);
+              })
+            ).catch(dbErr => console.warn('Aviso: sync whatsapp_labels na tabela de leads:', dbErr));
+          }
+        } catch (syncErr) {
+          console.warn('Aviso no Lazy-Sync da Uazapi:', syncErr);
+        }
+      }
+    }
+
+    // 3. Fallback: carregar contatos com etiquetas de wacloud_contatos (para clientes sem IA)
+    if (nomeInstancia && mapaWhatsappLabels.size === 0) {
+      const { data: chunk } = await wacloudAdmin
+        .from('wacloud_contatos')
+        .select('telefone_contato, whatsapp_labels')
+        .eq('nome_instancia', nomeInstancia)
+        .neq('whatsapp_labels', '[]')
+        .limit(2000);
+
+      for (const cc of chunk || []) {
         if (cc.telefone_contato && Array.isArray(cc.whatsapp_labels) && cc.whatsapp_labels.length > 0) {
           const rawTel = String(cc.telefone_contato).replace(/\D/g, '');
           mapaWhatsappLabels.set(rawTel, cc.whatsapp_labels);
@@ -88,36 +165,10 @@ export async function getClientWhatsappLabelsData(clientConfig: any): Promise<{
           }
         }
       }
+    }
 
-      // 2. Carregar definições oficiais de etiquetas via UAZAPI (se tiver token)
-      const token = instanciaMatch.token || clientConfig.whatsapp_token;
-      if (token) {
-        try {
-          const labelsList = await fetchUazapiLabels(token);
-          for (const lbl of labelsList || []) {
-            const rawKey = String(lbl.labelid || lbl.id);
-            const cleanKey = rawKey.includes(':') ? rawKey.split(':')[1] : rawKey;
-            
-            mapaNomes.set(cleanKey, lbl.name);
-            mapaNomes.set(rawKey, lbl.name);
-
-            const item: UazapiLabelItem = {
-              id: rawKey,
-              labelid: cleanKey,
-              name: lbl.name,
-              colorHex: lbl.colorHex || '#6366f1',
-              color: lbl.color,
-            };
-
-            mapaUazapiLabels.set(cleanKey, item);
-            mapaUazapiLabels.set(rawKey, item);
-          }
-        } catch (uazErr) {
-          console.warn('Erro ao carregar etiquetas da UAZAPI:', uazErr);
-        }
-      }
-
-      // 3. Complementar com banco wacloud_etiquetas_instancia
+    // 4. Complementar com banco wacloud_etiquetas_instancia
+    if (nomeInstancia) {
       const { data: dbLabels } = await wacloudAdmin
         .from('wacloud_etiquetas_instancia')
         .select('*')
