@@ -250,24 +250,26 @@ export default function ClientDashboardPage() {
     let totalComCanal = 0
 
     for (const lead of allLeads) {
-      const canalKey = lead.canal_origem || 'desconhecido'
+      const canalKey = lead.canal_origem || 'sem_origem'
       const canalNome = lead.canal_label_name || (
         canalKey === 'facebook_ads' ? 'Facebook Ads' :
         canalKey === 'instagram_ads' ? 'Instagram Ads' :
         canalKey === 'meta_ads' ? 'Meta Ads' :
         canalKey === 'facebook_marketplace' ? 'Marketplace' :
-        canalKey === 'mercado_livre' ? 'Mercado Livre' :
+        canalKey === 'mercado_livre' || canalKey === 'mercadolivre' ? 'Mercado Livre' :
         canalKey === 'webmotors' ? 'WebMotors' :
         canalKey === 'olx' ? 'OLX' :
         canalKey === 'icarros' ? 'iCarros' :
-        'Direto / Desconhecido'
+        canalKey === 'desconhecido' ? 'Desconhecido' :
+        canalKey === 'sem_origem' ? 'Sem Origem' :
+        canalKey
       )
 
       if (!map.has(canalKey)) {
         map.set(canalKey, {
           nome: canalNome,
           count: 0,
-          color: lead.canal_color || undefined,
+          color: lead.canal_color || (canalKey === 'sem_origem' ? '#94a3b8' : canalKey === 'desconhecido' ? '#64748b' : undefined),
         })
       }
       map.get(canalKey)!.count += 1
@@ -363,7 +365,7 @@ export default function ClientDashboardPage() {
 
     // Se houver canal selecionado nos cards de canais, o modal de KPI deve respeitar esse canal!
     if (canalFiltro && canalFiltro !== 'todos') {
-      list = list.filter(l => (l.canal_origem || 'desconhecido') === canalFiltro)
+      list = list.filter(l => (l.canal_origem || 'sem_origem') === canalFiltro)
     }
 
     if (kpiModal.key === 'todos') {

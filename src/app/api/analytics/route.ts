@@ -210,25 +210,35 @@ export async function GET(request: Request) {
 
       lead.whatsapp_labels = leadWaLabels;
 
-      let canal_origem: string = lead.origem_lead || 'desconhecido';
+      let canal_origem: string = lead.origem_lead || '';
       let canal_label_name: string | null = null;
 
-      for (const lId of leadWaLabels) {
-        const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
-        const nomeLbl = mapaNomes.get(cleanId);
-        if (nomeLbl && nomeLbl.toLowerCase().startsWith('canal')) {
-          canal_label_name = nomeLbl.replace(/^canal\s*\|\s*/i, '').trim();
-          canal_origem = canal_label_name.toLowerCase().replace(/\s+/g, '_');
-          break;
+      if (!canal_origem) {
+        for (const lId of leadWaLabels) {
+          const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
+          const nomeLbl = mapaNomes.get(cleanId);
+          if (nomeLbl && nomeLbl.toLowerCase().startsWith('canal')) {
+            canal_label_name = nomeLbl.replace(/^canal\s*\|\s*/i, '').trim();
+            canal_origem = canal_label_name.toLowerCase().replace(/\s+/g, '_');
+            break;
+          }
         }
       }
+
+      if (!canal_origem) {
+        canal_origem = 'sem_origem';
+        canal_label_name = 'Sem Origem';
+      } else if (canal_origem === 'desconhecido') {
+        canal_label_name = 'Desconhecido';
+      }
+
       lead.canal_origem = canal_origem;
       lead.canal_label_name = canal_label_name;
     }
 
     // Filtrar por canal se solicitado
     const leadsFiltrados = (canalParam && canalParam !== 'todos')
-      ? allLeads.filter(l => (l.canal_origem || 'desconhecido') === canalParam)
+      ? allLeads.filter(l => (l.canal_origem || 'sem_origem') === canalParam)
       : allLeads;
 
     let totalLeads = leadsFiltrados.length;
