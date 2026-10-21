@@ -8,11 +8,13 @@ import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area
 } from "recharts"
-import { Users, Bot, MessageSquare, Trophy, RefreshCw, Calendar, TrendingUp, ShieldBan, ExternalLink, Megaphone, Tag, Filter, UserCheck } from "lucide-react"
+import { Users, Bot, MessageSquare, Trophy, RefreshCw, Calendar, TrendingUp, ShieldBan, ExternalLink, Megaphone, Tag, Filter, UserCheck, Search } from "lucide-react"
 import { LeadDrawer, LeadType } from "@/components/leads/LeadDrawer"
 import { formatarVisitaDashboard, matchesVisitasDate } from "@/lib/agendamento-utils"
 import { VisualFunnel, FunnelData } from "@/components/dashboard/VisualFunnel"
 import { ChannelIcon } from "@/components/common/ChannelIcon"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 
 type AnalyticsData = {
   kpis: {
@@ -90,8 +92,14 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null
 }
 
-const KpiCard = ({ title, value, subtitle, icon: Icon, color, trend }: any) => (
-  <Card className="relative overflow-hidden border-none soft-shadow transition-all duration-300 hover:premium-shadow hover:-translate-y-1 bg-white group select-none">
+const KpiCard = ({ title, value, subtitle, icon: Icon, color, trend, onClick }: any) => (
+  <Card 
+    onClick={onClick}
+    className={cn(
+      "relative overflow-hidden border-none soft-shadow transition-all duration-300 bg-white group select-none",
+      onClick && "cursor-pointer hover:premium-shadow hover:-translate-y-1 hover:ring-2 hover:ring-indigo-500/20 active:scale-[0.99]"
+    )}
+  >
     <div className={`absolute top-0 left-0 w-1.5 h-full ${color}`} />
     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
       <CardTitle className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em]">{title}</CardTitle>
@@ -101,11 +109,11 @@ const KpiCard = ({ title, value, subtitle, icon: Icon, color, trend }: any) => (
     </CardHeader>
     <CardContent>
       <div className="text-3xl font-bold text-gray-900 tracking-tight">{value}</div>
-      <div className="flex items-center gap-2 mt-1.5">
+      <div className="flex items-center justify-between gap-2 mt-1.5">
         <p className="text-xs text-muted-foreground font-medium">{subtitle}</p>
-        {trend && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-600 font-bold">
-            +{trend}%
+        {onClick && (
+          <span className="text-[10px] font-bold text-indigo-600 group-hover:underline flex items-center gap-0.5">
+            Ver leads &rarr;
           </span>
         )}
       </div>
@@ -122,6 +130,8 @@ export default function ClientDashboardPage() {
   const [visitasDate, setVisitasDate] = useState('')
   const [selectedLead, setSelectedLead] = useState<LeadType | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [kpiModal, setKpiModal] = useState<{ key: string; title: string; color: string; subtitle?: string } | null>(null)
+  const [kpiSearch, setKpiSearch] = useState('')
   
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState<DateRange>('7d')
@@ -346,6 +356,44 @@ export default function ClientDashboardPage() {
     })
   }, [allLeads, canalFiltro, tagFiltro])
 
+  // Leads filtrados pelo KPI card clicado
+  const leadsFiltradosPorKpi = useMemo(() => {
+    if (!kpiModal) return []
+    let list = allLeads
+
+    if (kpiModal.key === 'todos') {
+      list = allLeads
+    } else if (kpiModal.key === 'em_atendimento') {
+      list = allLeads.filter(l => l.etapa === 'em_atendimento' || (!l.etapa && !l.lead_finalizado))
+    } else if (kpiModal.key === 'oportunidades') {
+      list = allLeads.filter(l => l.etapa === 'oportunidade' || l.etapa === 'ia_qualificado' || l.etapa === 'simulacao_pre_aprovada')
+    } else if (kpiModal.key === 'visitas_agendadas') {
+      list = allLeads.filter(l => l.etapa === 'visita_agendada' || l.etapa === 'visita_confirmada')
+    } else if (kpiModal.key === 'visitas_realizadas') {
+      list = allLeads.filter(l => l.etapa === 'visita_realizada')
+    } else if (kpiModal.key === 'simulacoes_aprovadas') {
+      list = allLeads.filter(l => l.etapa === 'simulacao_aprovada')
+    } else if (kpiModal.key === 'perdidos_qualificados') {
+      list = allLeads.filter(l => l.etapa === 'perdido_qualificado')
+    } else if (kpiModal.key === 'perdidos_desqualificados') {
+      list = allLeads.filter(l => l.etapa === 'perdido_desqualificado')
+    } else if (kpiModal.key === 'clientes') {
+      list = allLeads.filter(l => l.etapa === 'cliente')
+    }
+
+    if (kpiSearch.trim()) {
+      const q = kpiSearch.toLowerCase()
+      list = list.filter(l =>
+        (l.nome && l.nome.toLowerCase().includes(q)) ||
+        (l.telefone && l.telefone.includes(q)) ||
+        (l.veiculo_interessado && l.veiculo_interessado.toLowerCase().includes(q)) ||
+        (l.tags && l.tags.some((t: any) => t.nome && t.nome.toLowerCase().includes(q)))
+      )
+    }
+
+    return list
+  }, [kpiModal, allLeads, kpiSearch])
+
   const isSemIA = data?.tipo_atendimento === 'sem_ia'
 
   return (
@@ -442,6 +490,10 @@ export default function ClientDashboardPage() {
                 subtitle={isSemIA ? "Novos contatos" : "Captados pela IA"}
                 icon={Users}
                 color="bg-purple-500"
+                onClick={() => {
+                  setKpiSearch('')
+                  setKpiModal({ key: 'todos', title: 'Total de Leads', color: 'bg-purple-500', subtitle: 'Todos os leads do período selecionado' })
+                }}
               />
               <KpiCard
                 title="Em Atendimento"
@@ -449,6 +501,10 @@ export default function ClientDashboardPage() {
                 subtitle="Atendimento da Loja"
                 icon={RefreshCw}
                 color="bg-blue-500"
+                onClick={() => {
+                  setKpiSearch('')
+                  setKpiModal({ key: 'em_atendimento', title: 'Em Atendimento', color: 'bg-blue-500', subtitle: 'Leads em atendimento ativo pela loja' })
+                }}
               />
               <KpiCard
                 title="Oportunidades"
@@ -456,6 +512,10 @@ export default function ClientDashboardPage() {
                 subtitle="Ficha | Troca | Entrada"
                 icon={Trophy}
                 color="bg-amber-500"
+                onClick={() => {
+                  setKpiSearch('')
+                  setKpiModal({ key: 'oportunidades', title: 'Oportunidades', color: 'bg-amber-500', subtitle: 'Ficha aprovada, troca ou entrada' })
+                }}
               />
               <KpiCard
                 title="Visitas Agendadas"
@@ -463,6 +523,10 @@ export default function ClientDashboardPage() {
                 subtitle="Agendamentos feitos"
                 icon={Calendar}
                 color="bg-cyan-500"
+                onClick={() => {
+                  setKpiSearch('')
+                  setKpiModal({ key: 'visitas_agendadas', title: 'Visitas Agendadas', color: 'bg-cyan-500', subtitle: 'Visitas agendadas na loja' })
+                }}
               />
               <KpiCard
                 title="Visitas Realizadas"
@@ -470,6 +534,10 @@ export default function ClientDashboardPage() {
                 subtitle="Presencial na loja"
                 icon={UserCheck}
                 color="bg-teal-500"
+                onClick={() => {
+                  setKpiSearch('')
+                  setKpiModal({ key: 'visitas_realizadas', title: 'Visitas Realizadas', color: 'bg-teal-500', subtitle: 'Clientes que compareceram à loja' })
+                }}
               />
               <KpiCard
                 title="Simulações Aprovadas"
@@ -477,6 +545,10 @@ export default function ClientDashboardPage() {
                 subtitle="Crédito aprovado"
                 icon={Trophy}
                 color="bg-green-500"
+                onClick={() => {
+                  setKpiSearch('')
+                  setKpiModal({ key: 'simulacoes_aprovadas', title: 'Simulações Aprovadas', color: 'bg-green-500', subtitle: 'Leads com simulação de crédito aprovada' })
+                }}
               />
               <KpiCard
                 title="Perdidos Qualificados"
@@ -484,6 +556,10 @@ export default function ClientDashboardPage() {
                 subtitle="Desistiram / Adiaram"
                 icon={ShieldBan}
                 color="bg-orange-500"
+                onClick={() => {
+                  setKpiSearch('')
+                  setKpiModal({ key: 'perdidos_qualificados', title: 'Perdidos Qualificados', color: 'bg-orange-500', subtitle: 'Etiqueta: Perdido | Qualificado' })
+                }}
               />
               <KpiCard
                 title="Perdidos Desqualificados"
@@ -491,6 +567,10 @@ export default function ClientDashboardPage() {
                 subtitle="Sem perfil / Sem resposta"
                 icon={MessageSquare}
                 color="bg-red-500"
+                onClick={() => {
+                  setKpiSearch('')
+                  setKpiModal({ key: 'perdidos_desqualificados', title: 'Perdidos Desqualificados', color: 'bg-red-500', subtitle: 'Etiqueta: Perdido | Desqualificado | Sem resposta' })
+                }}
               />
             </div>
 
@@ -999,6 +1079,99 @@ export default function ClientDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Modal Interativo ao Clicar em Qualquer Card de KPI */}
+      <Dialog open={!!kpiModal} onOpenChange={(open) => { if (!open) setKpiModal(null) }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden font-poppins rounded-2xl">
+          <DialogHeader className="p-6 pb-4 border-b border-gray-100 bg-gray-50/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-3 h-8 rounded-full ${kpiModal?.color || 'bg-indigo-600'}`} />
+                <div>
+                  <DialogTitle className="text-xl font-bold text-gray-900">
+                    {kpiModal?.title}
+                  </DialogTitle>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {kpiModal?.subtitle} &bull; {leadsFiltradosPorKpi.length} {leadsFiltradosPorKpi.length === 1 ? 'lead' : 'leads'} encontrados
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="relative mt-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Buscar por nome, telefone, veículo ou etiqueta..."
+                value={kpiSearch}
+                onChange={(e) => setKpiSearch(e.target.value)}
+                className="pl-9 h-10 text-sm bg-white rounded-xl border-gray-200"
+              />
+            </div>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-3">
+            {leadsFiltradosPorKpi.length === 0 ? (
+              <div className="text-center py-12 text-gray-400 text-sm">
+                Nenhum lead encontrado nesta categoria no período selecionado.
+              </div>
+            ) : (
+              leadsFiltradosPorKpi.map((lead: any) => (
+                <div
+                  key={lead.id}
+                  onClick={() => handleCardClick(lead)}
+                  className="p-4 rounded-xl border border-gray-100 bg-white hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-4 group"
+                >
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors">
+                        {lead.nome || 'Cliente sem nome'}
+                      </span>
+                      <span className="text-xs text-gray-400 font-mono">
+                        {formatarTelefone(lead.telefone)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                      {lead.veiculo_interessado && (
+                        <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-medium">
+                          🚗 {lead.veiculo_interessado}
+                        </span>
+                      )}
+                      {lead.canal_label_name && (
+                        <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium text-[11px]">
+                          📢 {lead.canal_label_name}
+                        </span>
+                      )}
+                      {lead.created_at && (
+                        <span className="text-gray-400 text-[11px]">
+                          {new Date(lead.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+
+                    {lead.tags && lead.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {lead.tags.map((t: any, i: number) => (
+                          <span
+                            key={i}
+                            style={{ backgroundColor: `${t.cor}15`, color: t.cor || '#4f46e5' }}
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          >
+                            {t.nome}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <span className="text-xs font-bold text-indigo-600 group-hover:translate-x-1 transition-transform shrink-0">
+                    Abrir &rarr;
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <LeadDrawer
         lead={selectedLead}

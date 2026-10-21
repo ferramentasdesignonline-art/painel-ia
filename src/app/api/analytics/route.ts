@@ -261,15 +261,14 @@ export async function GET(request: Request) {
         clientes++;
       } else if (etapa === 'visita_realizada') {
         visitasRealizadas++;
-      } else if (etapa === 'simulacao_aprovada' || lead.lead_simulacao_aprovada === true) {
-        simulacoesAprovadas++;
-      } else if (etapa === 'visita_confirmada' || etapa === 'visita_agendada' || lead.lead_visita_confirmada === true) {
+      } else if (etapa === 'visita_confirmada' || etapa === 'visita_agendada') {
         visitasAgendadas++;
+      } else if (etapa === 'simulacao_aprovada') {
+        simulacoesAprovadas++;
       } else if (
         etapa === 'oportunidade' ||
         etapa === 'ia_qualificado' ||
-        etapa === 'simulacao_pre_aprovada' ||
-        (lead.veiculo_troca && String(lead.veiculo_troca).trim().length > 0)
+        etapa === 'simulacao_pre_aprovada'
       ) {
         oportunidades++;
       } else if (etapa === 'perdido_qualificado') {

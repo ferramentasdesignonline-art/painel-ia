@@ -74,8 +74,8 @@ export function calcularEtapaPorLabels(
       .filter(Boolean)
       .map(n => n.toLowerCase());
 
-    // 1. Clientes = Vendas
-    if (nomesPresentes.some(n => n === 'cliente' || n.startsWith('cliente ') || n === 'clientes' || n.includes('vendido'))) {
+    // 1. Clientes = Vendas (estritamente etiqueta "Cliente")
+    if (nomesPresentes.some(n => n === 'cliente' || n.startsWith('cliente ') || n === 'clientes')) {
       return 'cliente';
     }
 
@@ -94,11 +94,10 @@ export function calcularEtapaPorLabels(
       return 'oportunidade';
     }
 
-    // 5. Perdido | Qualificado ou Ficha Reprovada
+    // 5. Perdido | Qualificado (estritamente apenas etiqueta "Perdido | Qualificado")
     if (nomesPresentes.some(n => 
       n.includes('perdido | qualificado') || 
-      n.includes('perdido qualificado') || 
-      n.includes('ficha reprovada')
+      n.includes('perdido qualificado')
     )) {
       return 'perdido_qualificado';
     }
@@ -111,20 +110,20 @@ export function calcularEtapaPorLabels(
     }
 
     // 7. Em atendimento | Recontatar
-    if (nomesPresentes.some(n => n.includes('em atendimento') || n.includes('recontatar') || n.includes('recontratar'))) {
+    if (nomesPresentes.some(n => n.includes('em atendimento') || n.includes('recontatar') || n.includes('recontratar') || n.includes('ficha reprovada') || n.includes('interessado'))) {
       return 'em_atendimento';
     }
   }
 
   // Fallback por IDs padrão das instâncias
   const idsSet = new Set(ids);
-  if (idsSet.has('52') || idsSet.has('17')) return 'cliente';
+  if (idsSet.has('52')) return 'cliente';
   if (idsSet.has('54')) return 'visita_realizada';
   if (idsSet.has('53') || idsSet.has('6')) return 'visita_agendada';
   if (idsSet.has('55')) return 'oportunidade';
-  if (idsSet.has('59') || idsSet.has('57')) return 'perdido_qualificado';
+  if (idsSet.has('59')) return 'perdido_qualificado';
   if (idsSet.has('58')) return 'perdido_desqualificado';
-  if (idsSet.has('56')) return 'em_atendimento';
+  if (idsSet.has('56') || idsSet.has('57') || idsSet.has('50')) return 'em_atendimento';
 
   return null;
 }
@@ -134,15 +133,15 @@ export function calcularEtapaIA(
   meta_followup = 5,
   mapaNomes?: Map<string, string>
 ): TipoEtapaIA {
-  // 1. Simulação aprovada: estritamente se marcado como true na tabela (lead_simulacao_aprovada)
-  if (lead.lead_simulacao_aprovada === true) {
-    return 'simulacao_aprovada';
-  }
-
-  // 2. Prioridade máxima: Etiquetas padrão oficiais do WhatsApp do lead
+  // 1. Prioridade máxima: Etiquetas padrão oficiais do WhatsApp do lead
   if (lead.whatsapp_labels && lead.whatsapp_labels.length > 0) {
     const etapaLabel = calcularEtapaPorLabels(lead.whatsapp_labels, mapaNomes);
     if (etapaLabel) return etapaLabel;
+  }
+
+  // 2. Simulação aprovada: se marcado como true na tabela
+  if (lead.lead_simulacao_aprovada === true) {
+    return 'simulacao_aprovada';
   }
 
   // 3. Fallback pelas colunas da tabela do lead
@@ -152,7 +151,7 @@ export function calcularEtapaIA(
   if (lead.lead_simulacao_pre_aprovada === true) {
     return 'oportunidade';
   }
-  if (lead.veiculo_troca && lead.veiculo_troca.trim().length > 0) {
+  if (lead.veiculo_troca && String(lead.veiculo_troca).trim().length > 0) {
     return 'oportunidade';
   }
 

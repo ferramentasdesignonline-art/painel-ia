@@ -6,6 +6,7 @@ import { getActiveClientConfig } from "@/lib/auth/helpers"
 import { getClientLeads, getAllBlockedNumbers } from "@/lib/supabase/queries"
 import { construirDataAgendamentoIso } from "@/lib/agendamento-utils"
 import { getClientWhatsappLabelsData } from "@/lib/wacloud/labels"
+import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
 
 export async function GET(request: Request) {
   try {
@@ -141,7 +142,7 @@ export async function GET(request: Request) {
     });
 
     // 6. Buscar contatos e etiquetas do WhatsApp Cloud para enriquecer leads
-    const { mapaWhatsappLabels, mapaUazapiLabels } = await getClientWhatsappLabelsData(clientConfig);
+    const { mapaWhatsappLabels, mapaNomes, mapaUazapiLabels } = await getClientWhatsappLabelsData(clientConfig);
 
     // Formata leads IA para garantir mesmo padrão q usamos no funil
     const iaFormatados = (leadsIA || []).map((lead: any) => {
@@ -223,6 +224,7 @@ export async function GET(request: Request) {
         }
       }
       lead.tags = [...crmTags, ...waTags];
+      lead.etapa = calcularEtapaIA(lead, 5, mapaNomes);
     }
 
     // Ordena todos por data de criação mais recente
