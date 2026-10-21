@@ -75,7 +75,7 @@ export function calcularEtapaPorLabels(
       .map(n => n.toLowerCase());
 
     // 1. Clientes = Vendas (estritamente etiqueta "Cliente")
-    if (nomesPresentes.some(n => n === 'cliente' || n.startsWith('cliente ') || n === 'clientes')) {
+    if (nomesPresentes.some(n => n === 'cliente' || n === 'clientes')) {
       return 'cliente';
     }
 
