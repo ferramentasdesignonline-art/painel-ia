@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js"
 import { getActiveClientConfig } from "@/lib/auth/helpers"
 import { getClientLeads, getAllBlockedNumbers } from "@/lib/supabase/queries"
 import { construirDataAgendamentoIso } from "@/lib/agendamento-utils"
+import { getClientWhatsappLabelsData } from "@/lib/wacloud/labels"
 
 export async function GET(request: Request) {
   try {
@@ -40,6 +41,10 @@ export async function GET(request: Request) {
       }
     )
 
+    const { searchParams } = new URL(request.url);
+    const from = searchParams.get('from');
+    const to = searchParams.get('to');
+
     const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_leads;
     let leadsIA: any[] = [];
     let blockedNumbers = new Set<string>();
@@ -49,11 +54,16 @@ export async function GET(request: Request) {
       const wacloudAdmin = getWacloudSupabaseAdmin();
       const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome;
 
-      const { data: contatos } = await wacloudAdmin
+      let contatosQuery = wacloudAdmin
         .from('wacloud_contatos')
         .select('*')
         .eq('nome_instancia', nomeInstancia)
         .order('atualizado_em', { ascending: false });
+
+      if (from) contatosQuery = contatosQuery.gte('created_at', from);
+      if (to) contatosQuery = contatosQuery.lte('created_at', to);
+
+      const { data: contatos } = await contatosQuery.limit(50000);
 
       const contatosFiltrados = (contatos || []).filter(c =>
         c.is_group !== true &&
@@ -94,15 +104,20 @@ export async function GET(request: Request) {
         };
       });
     } else {
-      leadsIA = await getClientLeads(supabaseAdmin, clientConfig.tabela_leads);
+      leadsIA = await getClientLeads(supabaseAdmin, clientConfig.tabela_leads, { from, to });
       blockedNumbers = await getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios);
     }
 
     // 5. Busca leads manuais
-    const { data: leadsManuais } = await supabaseAdmin
+    let manuaisQuery = supabaseAdmin
       .from('sistema-dash-ia_leads_manuais')
       .select('*, etapa:etapa_id(nome)')
       .eq('cliente_id', clientConfig.id);
+
+    if (from) manuaisQuery = manuaisQuery.gte('created_at', from);
+    if (to) manuaisQuery = manuaisQuery.lte('created_at', to);
+
+    const { data: leadsManuais } = await manuaisQuery;
 
     // Formata leads manuais para padrão compatível com a UI
     const manuaisFormatados = (leadsManuais || []).map(lead => {
@@ -126,106 +141,7 @@ export async function GET(request: Request) {
     });
 
     // 6. Buscar contatos e etiquetas do WhatsApp Cloud para enriquecer leads
-    let mapaWhatsappLabels = new Map<string, string[]>();
-    let mapaUazapiLabels = new Map<string, { id: string; name: string; colorHex: string; color: number }>();
-
-    try {
-      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
-      const wacloudAdmin = getWacloudSupabaseAdmin();
-
-      const normalizeStr = (str: string) =>
-        (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-
-      const nomeNorm = normalizeStr(clientConfig.nome);
-      const slugNorm = normalizeStr(clientConfig.slug || '');
-
-      const { data: instancias } = await wacloudAdmin
-        .from('wacloud_instancias')
-        .select('id, nome_instancia, token')
-        .limit(50);
-
-      let instanciaMatch = clientConfig.nome_instancia 
-        ? instancias?.find(i => normalizeStr(i.nome_instancia) === normalizeStr(clientConfig.nome_instancia))
-        : null;
-
-      if (!instanciaMatch) {
-        instanciaMatch = instancias?.find(i => {
-          const instNorm = normalizeStr(i.nome_instancia);
-          return instNorm === nomeNorm || instNorm === slugNorm;
-        });
-      }
-
-      if (!instanciaMatch) {
-        instanciaMatch = instancias?.find(i => {
-          const instNorm = normalizeStr(i.nome_instancia);
-          return instNorm.includes(nomeNorm) || nomeNorm.includes(instNorm);
-        });
-      }
-
-      if (instanciaMatch) {
-        let allContatosCloud: any[] = [];
-        const pageSize = 1000;
-        let page = 0;
-        while (page < 10) {
-          const { data: chunk, error: chunkErr } = await wacloudAdmin
-            .from('wacloud_contatos')
-            .select('telefone_contato, whatsapp_labels')
-            .eq('nome_instancia', instanciaMatch.nome_instancia)
-            .neq('whatsapp_labels', '[]')
-            .range(page * pageSize, (page + 1) * pageSize - 1);
-          if (chunkErr || !chunk || chunk.length === 0) break;
-          allContatosCloud.push(...chunk);
-          if (chunk.length < pageSize) break;
-          page++;
-        }
-
-        for (const cc of allContatosCloud) {
-          if (cc.telefone_contato && Array.isArray(cc.whatsapp_labels) && cc.whatsapp_labels.length > 0) {
-            const rawTel = String(cc.telefone_contato).replace(/\D/g, '');
-            mapaWhatsappLabels.set(rawTel, cc.whatsapp_labels);
-            if (rawTel.startsWith('55')) {
-              mapaWhatsappLabels.set(rawTel.slice(2), cc.whatsapp_labels);
-            } else {
-              mapaWhatsappLabels.set(`55${rawTel}`, cc.whatsapp_labels);
-            }
-          }
-        }
-
-        if (instanciaMatch.token) {
-          const { fetchUazapiLabels } = await import('@/lib/wacloud/uazapi');
-          const labelsList = await fetchUazapiLabels(instanciaMatch.token);
-          for (const lbl of labelsList || []) {
-            const key = String(lbl.labelid || lbl.id);
-            mapaUazapiLabels.set(key, {
-              id: key,
-              name: lbl.name,
-              colorHex: lbl.colorHex || '#ccc',
-              color: lbl.color,
-            });
-          }
-        }
-
-        // Complementar com etiquetas salvas em wacloud_etiquetas_instancia
-        const { data: dbLabels } = await wacloudAdmin
-          .from('wacloud_etiquetas_instancia')
-          .select('*')
-          .eq('nome_instancia', instanciaMatch.nome_instancia);
-
-        for (const lbl of dbLabels || []) {
-          const key = String(lbl.uazapi_label_id);
-          if (!mapaUazapiLabels.has(key)) {
-            mapaUazapiLabels.set(key, {
-              id: key,
-              name: lbl.nome,
-              colorHex: lbl.cor_hex || '#ccc',
-              color: 0,
-            });
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Erro ao carregar etiquetas do wacloud em /api/leads:', err);
-    }
+    const { mapaWhatsappLabels, mapaUazapiLabels } = await getClientWhatsappLabelsData(clientConfig);
 
     // Formata leads IA para garantir mesmo padrão q usamos no funil
     const iaFormatados = (leadsIA || []).map((lead: any) => {

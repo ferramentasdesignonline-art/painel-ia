@@ -52,7 +52,11 @@ export async function getAllBlockedNumbers(supabaseAdmin: SupabaseClient, bloque
   return blockedNumbers
 }
 
-export async function getClientLeads(supabaseAdmin: SupabaseClient, leadsTableName: string) {
+export async function getClientLeads(
+  supabaseAdmin: SupabaseClient, 
+  leadsTableName: string,
+  options?: { from?: string | null; to?: string | null }
+) {
   if (!leadsTableName) return []
   const allLeads: any[] = []
   const pageSize = 1000
@@ -61,18 +65,29 @@ export async function getClientLeads(supabaseAdmin: SupabaseClient, leadsTableNa
 
   while (from < maxRows) {
     try {
-      const { data, error } = await supabaseAdmin
+      let query = supabaseAdmin
         .from(leadsTableName)
         .select('*')
         .order('id', { ascending: false })
-        .range(from, from + pageSize - 1)
+
+      if (options?.from) {
+        query = query.gte('created_at', options.from)
+      }
+      if (options?.to) {
+        query = query.lte('created_at', options.to)
+      }
+
+      const { data, error } = await query.range(from, from + pageSize - 1)
         
       if (error) {
         // Fallback sem ordenação por 'id' caso a tabela não tenha coluna 'id'
-        const { data: fallbackData, error: fbErr } = await supabaseAdmin
+        let fallbackQuery = supabaseAdmin
           .from(leadsTableName)
           .select('*')
-          .range(from, from + pageSize - 1)
+        if (options?.from) fallbackQuery = fallbackQuery.gte('created_at', options.from)
+        if (options?.to) fallbackQuery = fallbackQuery.lte('created_at', options.to)
+
+        const { data: fallbackData, error: fbErr } = await fallbackQuery.range(from, from + pageSize - 1)
         if (fbErr || !fallbackData || fallbackData.length === 0) break
         allLeads.push(...fallbackData)
         if (fallbackData.length < pageSize) break

@@ -39,25 +39,34 @@ type AnalyticsData = {
   pieData: Array<{ name: string; value: number; color: string }>
 }
 
-type DateRange = '7d' | '30d' | 'custom'
+type DateRange = '7d' | '30d' | 'total' | 'custom'
 
 function getDateRange(range: DateRange, customFrom?: string, customTo?: string) {
+  if (range === 'total') {
+    return { from: '', to: '' }
+  }
+
   const now = new Date()
-  const to = now.toISOString()
 
   if (range === '7d') {
     const from = new Date(now)
     from.setDate(from.getDate() - 7)
-    return { from: from.toISOString(), to }
+    from.setHours(0, 0, 0, 0)
+    const to = new Date(now)
+    to.setHours(23, 59, 59, 999)
+    return { from: from.toISOString(), to: to.toISOString() }
   }
   if (range === '30d') {
     const from = new Date(now)
     from.setDate(from.getDate() - 30)
-    return { from: from.toISOString(), to }
+    from.setHours(0, 0, 0, 0)
+    const to = new Date(now)
+    to.setHours(23, 59, 59, 999)
+    return { from: from.toISOString(), to: to.toISOString() }
   }
   return {
     from: customFrom ? new Date(customFrom + 'T00:00:00').toISOString() : '',
-    to: customTo ? new Date(customTo + 'T23:59:59').toISOString() : to
+    to: customTo ? new Date(customTo + 'T23:59:59.999').toISOString() : ''
   }
 }
 
@@ -184,7 +193,7 @@ export default function ClientDashboardPage() {
 
       const [resAnalytics, resLeads] = await Promise.all([
         fetch(`/api/analytics?${params}`),
-        fetch(`/api/leads`) // Busca todos os leads para filtrar os qualificados
+        fetch(`/api/leads?${params}`) // Filtra leads pelo mesmo período para sincronizar canais e anúncios
       ])
 
       const json = await resAnalytics.json()
@@ -365,7 +374,7 @@ export default function ClientDashboardPage() {
       <div className="grid gap-6">
         <Card className="p-2 bg-white/50 border-gray-100 soft-shadow backdrop-blur-sm rounded-2xl">
           <div className="flex flex-wrap items-center gap-2">
-            {(['7d', '30d'] as DateRange[]).map(r => (
+            {(['7d', '30d', 'total'] as DateRange[]).map(r => (
               <Button
                 key={r}
                 variant={range === r ? 'default' : 'ghost'}
@@ -378,7 +387,7 @@ export default function ClientDashboardPage() {
                     : "text-gray-500 hover:bg-white hover:text-indigo-600"
                 )}
               >
-                {r === '7d' ? 'Últimos 7 dias' : 'Últimos 30 dias'}
+                {r === '7d' ? 'Últimos 7 dias' : r === '30d' ? 'Últimos 30 dias' : 'Período Total'}
               </Button>
             ))}
             <Button

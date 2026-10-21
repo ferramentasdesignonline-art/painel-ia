@@ -4,7 +4,8 @@ import { cookies } from "next/headers"
 import { createClient } from "@supabase/supabase-js"
 import { getActiveClientConfig } from "@/lib/auth/helpers"
 import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
-import { getAllBlockedNumbers } from "@/lib/supabase/queries"
+import { getAllBlockedNumbers, getClientLeads } from "@/lib/supabase/queries"
+import { getClientWhatsappLabelsData } from "@/lib/wacloud/labels"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -166,8 +167,6 @@ export async function GET(request: Request) {
     let simulacoesPreAprovadas = 0
     let perdas = 0
 
-    let mapaNomes = new Map<string, string>();
-
     if (isSemIA) {
       const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
       const wacloudAdmin = getWacloudSupabaseAdmin();
@@ -180,7 +179,7 @@ export async function GET(request: Request) {
       if (from) leadsQuery = leadsQuery.gte('created_at', from);
       if (to)   leadsQuery = leadsQuery.lte('created_at', to);
 
-      const { data: dbLeads, error: leadsError } = await leadsQuery.order('created_at', { ascending: false });
+      const { data: dbLeads, error: leadsError } = await leadsQuery.order('created_at', { ascending: false }).limit(50000);
       if (leadsError) {
         console.error("Erro ao buscar contatos wacloud:", leadsError.message);
       } else if (dbLeads) {
@@ -191,40 +190,28 @@ export async function GET(request: Request) {
           !c.telefone?.includes('@g.us')
         );
       }
-
-      // Buscar dicionário de etiquetas para cálculo de etapa
-      const { data: dbLabels } = await wacloudAdmin
-        .from('wacloud_etiquetas_instancia')
-        .select('*')
-        .eq('nome_instancia', nomeInstancia);
-
-      for (const lbl of dbLabels || []) {
-        mapaNomes.set(String(lbl.uazapi_label_id), lbl.nome);
-      }
     } else if (clientConfig.tabela_leads) {
-      let leadsQuery = supabaseAdmin
-        .from(clientConfig.tabela_leads)
-        .select('*')
-
-      if (from) leadsQuery = leadsQuery.gte('created_at', from)
-      if (to)   leadsQuery = leadsQuery.lte('created_at', to)
-
-      const { data: dbLeads, error: leadsError } = await leadsQuery
-      if (leadsError) {
-        console.error("Erro ao buscar leads do cliente:", leadsError.message)
-      } else if (dbLeads) {
-        allLeads = dbLeads
-      }
+      allLeads = await getClientLeads(supabaseAdmin, clientConfig.tabela_leads, { from, to });
     }
+
+    // Carregar todas as etiquetas da instância para enriquecer leads (com e sem IA)
+    const { mapaWhatsappLabels, mapaNomes } = await getClientWhatsappLabelsData(clientConfig);
 
     const canalParam = searchParams.get('canal');
 
-    // Mapear canal_origem de cada lead
+    // Mapear canal_origem e garantir etiquetas reais do WhatsApp em cada lead
     for (const lead of allLeads) {
-      const leadWaLabels = lead.whatsapp_labels && Array.isArray(lead.whatsapp_labels) ? lead.whatsapp_labels : [];
+      const rawPhone = lead.telefone || lead.phone || lead.telefone_contato || '';
+      const phoneClean = String(rawPhone).replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
+
+      const leadWaLabels = (lead.whatsapp_labels && Array.isArray(lead.whatsapp_labels) && lead.whatsapp_labels.length > 0)
+        ? lead.whatsapp_labels
+        : (mapaWhatsappLabels.get(phoneClean) || []);
+
+      lead.whatsapp_labels = leadWaLabels;
+
       let canal_origem: string = lead.origem_lead || 'desconhecido';
       let canal_label_name: string | null = null;
-      let canal_color: string | null = null;
 
       for (const lId of leadWaLabels) {
         const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
