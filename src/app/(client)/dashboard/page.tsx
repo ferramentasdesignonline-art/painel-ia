@@ -361,24 +361,29 @@ export default function ClientDashboardPage() {
     if (!kpiModal) return []
     let list = allLeads
 
+    // Se houver canal selecionado nos cards de canais, o modal de KPI deve respeitar esse canal!
+    if (canalFiltro && canalFiltro !== 'todos') {
+      list = list.filter(l => (l.canal_origem || 'desconhecido') === canalFiltro)
+    }
+
     if (kpiModal.key === 'todos') {
-      list = allLeads
+      // mantém a lista do canal
     } else if (kpiModal.key === 'em_atendimento') {
-      list = allLeads.filter(l => l.etapa === 'em_atendimento' || (!l.etapa && !l.lead_finalizado))
+      list = list.filter(l => l.etapa === 'em_atendimento' || (!l.etapa && !l.lead_finalizado))
     } else if (kpiModal.key === 'oportunidades') {
-      list = allLeads.filter(l => l.etapa === 'oportunidade' || l.etapa === 'ia_qualificado' || l.etapa === 'simulacao_pre_aprovada')
+      list = list.filter(l => l.etapa === 'oportunidade' || l.etapa === 'ia_qualificado' || l.etapa === 'simulacao_pre_aprovada')
     } else if (kpiModal.key === 'visitas_agendadas') {
-      list = allLeads.filter(l => l.etapa === 'visita_agendada' || l.etapa === 'visita_confirmada')
+      list = list.filter(l => l.etapa === 'visita_agendada' || l.etapa === 'visita_confirmada')
     } else if (kpiModal.key === 'visitas_realizadas') {
-      list = allLeads.filter(l => l.etapa === 'visita_realizada')
+      list = list.filter(l => l.etapa === 'visita_realizada')
     } else if (kpiModal.key === 'simulacoes_aprovadas') {
-      list = allLeads.filter(l => l.etapa === 'simulacao_aprovada')
+      list = list.filter(l => l.etapa === 'simulacao_aprovada')
     } else if (kpiModal.key === 'perdidos_qualificados') {
-      list = allLeads.filter(l => l.etapa === 'perdido_qualificado')
+      list = list.filter(l => l.etapa === 'perdido_qualificado')
     } else if (kpiModal.key === 'perdidos_desqualificados') {
-      list = allLeads.filter(l => l.etapa === 'perdido_desqualificado')
+      list = list.filter(l => l.etapa === 'perdido_desqualificado')
     } else if (kpiModal.key === 'clientes') {
-      list = allLeads.filter(l => l.etapa === 'cliente')
+      list = list.filter(l => l.etapa === 'cliente')
     }
 
     if (kpiSearch.trim()) {
@@ -392,7 +397,7 @@ export default function ClientDashboardPage() {
     }
 
     return list
-  }, [kpiModal, allLeads, kpiSearch])
+  }, [kpiModal, allLeads, canalFiltro, kpiSearch])
 
   const isSemIA = data?.tipo_atendimento === 'sem_ia'
 
@@ -1092,7 +1097,12 @@ export default function ClientDashboardPage() {
                     {kpiModal?.title}
                   </DialogTitle>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    {kpiModal?.subtitle} &bull; {leadsFiltradosPorKpi.length} {leadsFiltradosPorKpi.length === 1 ? 'lead' : 'leads'} encontrados
+                    {kpiModal?.subtitle}
+                    {canalFiltro && (
+                      <span className="ml-1 font-semibold text-indigo-600">
+                        (Filtrado por: {canaisMetrics.list.find(c => c.key === canalFiltro)?.nome || canalFiltro})
+                      </span>
+                    )} &bull; {leadsFiltradosPorKpi.length} {leadsFiltradosPorKpi.length === 1 ? 'lead' : 'leads'} encontrados
                   </p>
                 </div>
               </div>
