@@ -74,54 +74,51 @@ export function calcularEtapaPorLabels(
       .filter(Boolean)
       .map(n => n.toLowerCase());
 
-    // 1. Cliente
-    if (nomesPresentes.some(n => n === 'cliente' || n.startsWith('cliente '))) return 'cliente';
+    // 1. Clientes = Vendas
+    if (nomesPresentes.some(n => n === 'cliente' || n.startsWith('cliente ') || n === 'clientes' || n.includes('vendido'))) {
+      return 'cliente';
+    }
 
     // 2. Visita - Realizada
-    if (nomesPresentes.some(n => n.includes('visita - realizada') || n.includes('visita realizada'))) return 'visita_realizada';
+    if (nomesPresentes.some(n => n.includes('visita - realizada') || n.includes('visita realizada'))) {
+      return 'visita_realizada';
+    }
 
     // 3. Visita - Agendada
-    if (nomesPresentes.some(n => n.includes('visita - agendada') || n.includes('visita agendada'))) return 'visita_agendada';
+    if (nomesPresentes.some(n => n.includes('visita - agendada') || n.includes('visita agendada') || n.includes('cliente agendado'))) {
+      return 'visita_agendada';
+    }
 
-    // 4. Oportunidade (tem precedência se contiver a palavra "oportunidade", como "Oportunidade - Ficha Aprovada | Troca | Entrada")
-    if (nomesPresentes.some(n => n.includes('oportunidade'))) return 'oportunidade';
+    // 4. Oportunidade - Ficha Aprovada | Troca | Entrada
+    if (nomesPresentes.some(n => n.includes('oportunidade'))) {
+      return 'oportunidade';
+    }
 
-    // 5. Simulação Aprovada (específica de simulação aprovada sem ser etiqueta de oportunidade geral)
-    if (nomesPresentes.some(n => 
-      n.includes('simulação aprovada') || 
-      n.includes('simulacao aprovada') || 
-      (n.includes('ficha aprovada') && !n.includes('oportunidade'))
-    )) return 'simulacao_aprovada';
-
-    // 6. Perdido Qualificado (Etiquetas: Perdido Qualificado, Ficha Reprovada, etc.)
+    // 5. Perdido | Qualificado ou Ficha Reprovada
     if (nomesPresentes.some(n => 
       n.includes('perdido | qualificado') || 
       n.includes('perdido qualificado') || 
-      n.includes('ficha reprovada') || 
-      n.includes('simulação reprovada') || 
-      n.includes('simulacao reprovada') ||
-      n.includes('achou caro') ||
-      n.includes('concorrente') ||
-      n.includes('desistiu')
-    )) return 'perdido_qualificado';
+      n.includes('ficha reprovada')
+    )) {
+      return 'perdido_qualificado';
+    }
 
-    // 7. Perdido Desqualificado (Etiquetas: Perdido Desqualificado, Sem resposta, Sem perfil, Número errado)
+    // 6. Perdido | Desqualificado | Sem resposta
     if (nomesPresentes.some(n => 
-      n.includes('desqualificado') || 
-      n.includes('sem resposta') || 
-      n.includes('sem perfil') || 
-      n.includes('número errado') || 
-      n.includes('numero errado') || 
-      (n.includes('perdido') && !n.includes('qualificado'))
-    )) return 'perdido_desqualificado';
+      n.includes('desqualificado')
+    )) {
+      return 'perdido_desqualificado';
+    }
 
-    // 8. Em atendimento
-    if (nomesPresentes.some(n => n.includes('em atendimento') || n.includes('recontratar') || n.includes('recontatar'))) return 'em_atendimento';
+    // 7. Em atendimento | Recontatar
+    if (nomesPresentes.some(n => n.includes('em atendimento') || n.includes('recontatar') || n.includes('recontratar'))) {
+      return 'em_atendimento';
+    }
   }
 
-  // Fallback por IDs legados da Auto Prosperitá
+  // Fallback por IDs padrão das instâncias
   const idsSet = new Set(ids);
-  if (idsSet.has('52')) return 'cliente';
+  if (idsSet.has('52') || idsSet.has('17')) return 'cliente';
   if (idsSet.has('54')) return 'visita_realizada';
   if (idsSet.has('53') || idsSet.has('6')) return 'visita_agendada';
   if (idsSet.has('55')) return 'oportunidade';
@@ -137,18 +134,20 @@ export function calcularEtapaIA(
   meta_followup = 5,
   mapaNomes?: Map<string, string>
 ): TipoEtapaIA {
-  // 1. Prioridade máxima: Etiquetas do WhatsApp do lead (perdidos SEMPRE por etiqueta)
+  // 1. Simulação aprovada: estritamente se marcado como true na tabela (lead_simulacao_aprovada)
+  if (lead.lead_simulacao_aprovada === true) {
+    return 'simulacao_aprovada';
+  }
+
+  // 2. Prioridade máxima: Etiquetas padrão oficiais do WhatsApp do lead
   if (lead.whatsapp_labels && lead.whatsapp_labels.length > 0) {
     const etapaLabel = calcularEtapaPorLabels(lead.whatsapp_labels, mapaNomes);
     if (etapaLabel) return etapaLabel;
   }
 
-  // 2. Fallback pelas colunas da tabela do lead (apenas etapas ativas; perdidos apenas se houver etiqueta)
+  // 3. Fallback pelas colunas da tabela do lead
   if (lead.lead_visita_confirmada === true) {
     return 'visita_agendada';
-  }
-  if (lead.lead_simulacao_aprovada === true) {
-    return 'simulacao_aprovada';
   }
   if (lead.lead_simulacao_pre_aprovada === true) {
     return 'oportunidade';
