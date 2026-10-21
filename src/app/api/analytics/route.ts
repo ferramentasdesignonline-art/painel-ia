@@ -287,13 +287,15 @@ export async function GET(request: Request) {
         (lead.veiculo_troca && String(lead.veiculo_troca).trim().length > 0)
       ) {
         oportunidades++;
-      } else if (etapa === 'perdido_qualificado') {
+      } else if (
+        etapa === 'perdido_qualificado' ||
+        etapa === 'ficha_reprovada' ||
+        lead.lead_simulacao_reprovada === true
+      ) {
         perdidosQualificados++;
       } else if (
         etapa === 'perdido_desqualificado' ||
-        etapa === 'ia_perda' ||
-        etapa === 'ficha_reprovada' ||
-        lead.lead_simulacao_reprovada === true
+        etapa === 'ia_perda'
       ) {
         perdidosDesqualificados++;
       } else {

@@ -61,9 +61,9 @@ export function VisualFunnel({ funnel, loading }: VisualFunnelProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center pt-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center pt-6">
         {/* Lado Esquerdo: Funil Vertical Cônico */}
-        <div className="lg:col-span-8 flex flex-col items-center justify-center py-2">
+        <div className="lg:col-span-7 flex flex-col items-center justify-center py-2">
           {stages.map((stage, idx) => {
             const config = STAGE_CONFIGS[idx] || {
               width: "w-[60%]",
@@ -107,57 +107,57 @@ export function VisualFunnel({ funnel, loading }: VisualFunnelProps) {
         </div>
 
         {/* Lado Direito: Resumo de Métricas Globais */}
-        <div className="lg:col-span-4 flex flex-col gap-4 justify-center">
+        <div className="lg:col-span-5 flex flex-col gap-4 justify-center pl-0 lg:pl-6">
           {/* Card Total */}
-          <div className="bg-gray-50/70 border border-gray-100 rounded-2xl p-4.5 flex items-center justify-between shadow-2xs hover:bg-gray-50 transition-colors">
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+          <div className="bg-gray-50/80 border border-gray-100 rounded-2xl p-5 flex items-center justify-between shadow-2xs hover:bg-gray-50 transition-colors">
+            <div className="space-y-1">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
                 Total de Leads
               </span>
               <span className="text-2xl font-black text-gray-900 tracking-tight">
                 {total.toLocaleString("pt-BR")}
               </span>
-              <span className="text-[11px] text-gray-500 font-medium block">
+              <span className="text-xs text-gray-500 font-medium block">
                 Volume de entrada no período
               </span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-blue-100/60 text-blue-600 flex items-center justify-center shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-blue-100/60 text-blue-600 flex items-center justify-center shrink-0">
               <Users className="w-5 h-5" />
             </div>
           </div>
 
           {/* Card Conversão Geral */}
-          <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4.5 flex items-center justify-between shadow-2xs hover:bg-amber-50/70 transition-colors">
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">
+          <div className="bg-amber-50/60 border border-amber-100 rounded-2xl p-5 flex items-center justify-between shadow-2xs hover:bg-amber-50/80 transition-colors">
+            <div className="space-y-1">
+              <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider block">
                 Taxa de Conversão Geral
               </span>
               <span className="text-2xl font-black text-amber-900 tracking-tight">
                 {globalConversionRate}%
               </span>
-              <span className="text-[11px] text-amber-800/80 font-medium block">
+              <span className="text-xs text-amber-800/80 font-medium block">
                 Leads que fecharam negócio
               </span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
               <TrendingUp className="w-5 h-5" />
             </div>
           </div>
 
           {/* Card Vendas / Clientes */}
-          <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4.5 flex items-center justify-between shadow-2xs hover:bg-emerald-50/70 transition-colors">
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">
+          <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-5 flex items-center justify-between shadow-2xs hover:bg-emerald-50/80 transition-colors">
+            <div className="space-y-1">
+              <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">
                 Vendas / Clientes
               </span>
               <span className="text-2xl font-black text-emerald-900 tracking-tight">
                 {totalVendas.toLocaleString("pt-BR")}
               </span>
-              <span className="text-[11px] text-emerald-800/80 font-medium block">
+              <span className="text-xs text-emerald-800/80 font-medium block">
                 Contratos e compras concluídas
               </span>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
               <Trophy className="w-5 h-5" />
             </div>
           </div>
