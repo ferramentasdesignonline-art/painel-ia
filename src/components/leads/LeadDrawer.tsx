@@ -9,6 +9,7 @@ import { LeadChat, ChatMessage } from "./LeadChat"
 import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { formatarVisitaDashboard } from "@/lib/agendamento-utils"
+import { ChannelIcon } from "@/components/common/ChannelIcon"
 
 export type LeadType = {
   id: string
@@ -49,6 +50,9 @@ export type LeadType = {
   anuncio_id?: string | null
   anuncio_url?: string | null
   origem_detalhe?: string | null
+  lead_simulacao_aprovada?: boolean | null
+  lead_simulacao_reprovada?: boolean | null
+  lead_visita_confirmada?: boolean | null
 }
 
 type LeadDrawerProps = {
@@ -81,6 +85,8 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated, isSemIA: prop
   const [editEndereco, setEditEndereco] = useState("")
   const [editPossuiCnh, setEditPossuiCnh] = useState<boolean | null>(null)
   const [editGenero, setEditGenero] = useState("")
+  const [editSimulacaoStatus, setEditSimulacaoStatus] = useState<'pendente' | 'aprovada' | 'reprovada'>('pendente')
+  const [editVisitaConfirmada, setEditVisitaConfirmada] = useState<boolean>(false)
   const [etapas, setEtapas] = useState<any[]>([])
   const [editEtapaId, setEditEtapaId] = useState("")
   const [salvandoEdicao, setSalvandoEdicao] = useState(false)
@@ -107,6 +113,11 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated, isSemIA: prop
     setEditEndereco(lead.endereco || "")
     setEditPossuiCnh(lead.possuiCnh !== undefined ? lead.possuiCnh : null)
     setEditGenero(lead.genero || "")
+    setEditSimulacaoStatus(
+      lead.lead_simulacao_aprovada ? 'aprovada' :
+      lead.lead_simulacao_reprovada ? 'reprovada' : 'pendente'
+    )
+    setEditVisitaConfirmada(Boolean(lead.lead_visita_confirmada))
     
     // Tenta encontrar a etapa correspondente ao status atual
     const etapaAtual = etapas.find(e => e.nome.toLowerCase() === lead.status.toLowerCase() || (lead.status === '✓ Qualificado' && e.nome.toLowerCase() === 'qualificado'))
@@ -143,6 +154,9 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated, isSemIA: prop
             endereço: editEndereco || null,
             possui_cnh: editPossuiCnh,
             genero: editGenero || null,
+            lead_simulacao_aprovada: editSimulacaoStatus === 'aprovada',
+            lead_simulacao_reprovada: editSimulacaoStatus === 'reprovada',
+            lead_visita_confirmada: editVisitaConfirmada,
           }
         })
       });
@@ -175,6 +189,21 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated, isSemIA: prop
         lead.endereco = editEndereco || null;
         lead.possuiCnh = editPossuiCnh;
         lead.genero = editGenero || null;
+        lead.lead_simulacao_aprovada = editSimulacaoStatus === 'aprovada';
+        lead.lead_simulacao_reprovada = editSimulacaoStatus === 'reprovada';
+        lead.lead_visita_confirmada = editVisitaConfirmada;
+
+        if (onLeadUpdated) {
+          onLeadUpdated(lead.id, {
+            nome: editNome,
+            veiculoInteressado: editVeiculo,
+            veiculo: editVeiculo,
+            dataAgendamento: editDataAgendamento ? new Date(editDataAgendamento).toISOString() : null,
+            lead_simulacao_aprovada: editSimulacaoStatus === 'aprovada',
+            lead_simulacao_reprovada: editSimulacaoStatus === 'reprovada',
+            lead_visita_confirmada: editVisitaConfirmada,
+          });
+        }
         if (editEtapaId) {
           const etapaSelecionada = etapas.find(e => e.id === editEtapaId);
           if (etapaSelecionada) {
@@ -420,10 +449,7 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated, isSemIA: prop
                  <div className="bg-gray-50 rounded-lg p-3">
                    <p className="text-gray-400 text-[11px] uppercase tracking-wider font-medium mb-1">Canal de Entrada</p>
                    <div className="flex items-center gap-2 mt-1">
-                     <span
-                       className="w-2.5 h-2.5 rounded-full shrink-0"
-                       style={{ backgroundColor: lead.canal_color || '#6366f1' }}
-                     />
+                     <ChannelIcon canal={lead.canal_origem} label={lead.canal_label_name} className="w-4 h-4 shrink-0" />
                      <span className="font-bold text-sm text-gray-900">
                        {lead.canal_label_name || (
                          lead.canal_origem === 'facebook_ads' ? 'Facebook Ads' :
@@ -510,6 +536,75 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated, isSemIA: prop
                      </p>
                    )}
                  </div>
+                  {/* Simulação de Financiamento */}
+                  <div className="bg-emerald-50/50 rounded-lg p-3 text-sm border border-emerald-100">
+                    <p className="text-emerald-700 text-[11px] uppercase tracking-wider font-bold mb-1.5 flex items-center gap-1.5">
+                      Simulação de Financiamento
+                    </p>
+                    {isEditing ? (
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={editSimulacaoStatus}
+                          onChange={e => setEditSimulacaoStatus(e.target.value as any)}
+                          className="w-full md:w-1/2 h-8 px-2 bg-white border border-emerald-200 rounded-md text-xs font-semibold text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                        >
+                          <option value="pendente">⏳ Em Análise / Não Iniciada</option>
+                          <option value="aprovada">✅ Ficha Aprovada</option>
+                          <option value="reprovada">❌ Ficha Reprovada</option>
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {lead.lead_simulacao_aprovada ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            ✅ Ficha Aprovada
+                          </span>
+                        ) : lead.lead_simulacao_reprovada ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                            ❌ Ficha Reprovada
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                            ⏳ Em Análise / Não Iniciada
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Confirmação de Visita na Loja */}
+                  <div className="bg-sky-50/50 rounded-lg p-3 text-sm border border-sky-100">
+                    <p className="text-sky-700 text-[11px] uppercase tracking-wider font-bold mb-1.5 flex items-center gap-1.5">
+                      Confirmação da Visita
+                    </p>
+                    {isEditing ? (
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={editVisitaConfirmada}
+                          onChange={e => setEditVisitaConfirmada(e.target.checked)}
+                          className="rounded border-sky-300 text-sky-600 focus:ring-sky-500 h-4 w-4"
+                        />
+                        <span className="text-xs font-semibold text-gray-800">
+                          Visita realizada presencialmente na concessionária
+                        </span>
+                      </label>
+                    ) : (
+                      <div>
+                        {lead.lead_visita_confirmada ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-100 text-sky-800 border border-sky-200">
+                            🚗 Visita Confirmada / Realizada
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-500 italic">
+                            Aguardando confirmação de comparecimento
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+
                  <div className="bg-gray-50 rounded-lg p-3 text-sm border border-gray-100">
                    <p className="text-gray-500 text-[11px] uppercase tracking-wider font-bold mb-1">Observações da Qualificação</p>
                    {isEditing ? (

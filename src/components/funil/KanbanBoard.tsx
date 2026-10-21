@@ -18,6 +18,7 @@ import {
   X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ChannelIcon } from '@/components/common/ChannelIcon';
 import Link from 'next/link';
 import { 
   DndContext, 
@@ -646,7 +647,7 @@ export function KanbanBoard() {
                           >
                             {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
                           </span>
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.color || '#6366f1' }} />
+                          <ChannelIcon canal={c.key} label={c.nome} className="w-3.5 h-3.5 shrink-0" />
                           <span className="truncate">{c.nome}</span>
                         </div>
                         <span className="text-[10px] font-bold text-gray-400 ml-2 shrink-0">{c.count}</span>

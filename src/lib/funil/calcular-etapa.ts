@@ -83,19 +83,22 @@ export function calcularEtapaPorLabels(
     // 3. Visita - Agendada
     if (nomesPresentes.some(n => n.includes('visita - agendada') || n.includes('visita agendada'))) return 'visita_agendada';
 
-    // 4. Oportunidade
+    // 4. Simulação Aprovada
+    if (nomesPresentes.some(n => n.includes('simulação aprovada') || n.includes('simulacao aprovada') || n.includes('ficha aprovada'))) return 'simulacao_aprovada';
+
+    // 5. Oportunidade
     if (nomesPresentes.some(n => n.includes('oportunidade'))) return 'oportunidade';
 
-    // 5. Ficha Reprovada
-    if (nomesPresentes.some(n => n.includes('ficha reprovada'))) return 'ficha_reprovada';
+    // 6. Ficha Reprovada
+    if (nomesPresentes.some(n => n.includes('ficha reprovada') || n.includes('simulação reprovada') || n.includes('simulacao reprovada'))) return 'ficha_reprovada';
 
-    // 6. Perdido Qualificado
+    // 7. Perdido Qualificado
     if (nomesPresentes.some(n => n.includes('perdido | qualificado') || n.includes('perdido qualificado'))) return 'perdido_qualificado';
 
-    // 7. Perdido Desqualificado
+    // 8. Perdido Desqualificado
     if (nomesPresentes.some(n => n.includes('perdido') || n.includes('desqualificado') || n.includes('sem resposta'))) return 'perdido_desqualificado';
 
-    // 8. Em atendimento
+    // 9. Em atendimento
     if (nomesPresentes.some(n => n.includes('em atendimento') || n.includes('recontratar') || n.includes('recontatar'))) return 'em_atendimento';
   }
 
@@ -128,7 +131,10 @@ export function calcularEtapaIA(
   if (lead.lead_visita_confirmada === true) {
     return 'visita_agendada';
   }
-  if (lead.lead_simulacao_aprovada === true || lead.lead_simulacao_pre_aprovada === true) {
+  if (lead.lead_simulacao_aprovada === true) {
+    return 'simulacao_aprovada';
+  }
+  if (lead.lead_simulacao_pre_aprovada === true) {
     return 'oportunidade';
   }
   if (lead.lead_simulacao_reprovada === true) {

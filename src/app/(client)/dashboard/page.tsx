@@ -8,25 +8,33 @@ import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area
 } from "recharts"
-import { Users, Bot, MessageSquare, Trophy, RefreshCw, Calendar, TrendingUp, ShieldBan, ExternalLink, Megaphone, Tag, Filter } from "lucide-react"
+import { Users, Bot, MessageSquare, Trophy, RefreshCw, Calendar, TrendingUp, ShieldBan, ExternalLink, Megaphone, Tag, Filter, UserCheck } from "lucide-react"
 import { LeadDrawer, LeadType } from "@/components/leads/LeadDrawer"
 import { formatarVisitaDashboard, matchesVisitasDate } from "@/lib/agendamento-utils"
+import { VisualFunnel, FunnelData } from "@/components/dashboard/VisualFunnel"
+import { ChannelIcon } from "@/components/common/ChannelIcon"
 
 type AnalyticsData = {
   kpis: {
-    aiMessages: number
-    humanMessages: number
-    totalFollowups: number
-    qualifiedLeads: number
     totalLeads: number
-    visitasAgendadas: number
-    simulacoesAprovadas: number
-    simulacoesPreAprovadas: number
-    perdas: number
-    emAndamento: number
+    emAtendimento: number
     atendimentoHumano: number
+    oportunidades: number
+    visitasAgendadas: number
+    visitasRealizadas: number
+    simulacoesAprovadas: number
+    perdidosQualificados: number
+    perdidosDesqualificados: number
+    clientes: number
+    qualifiedLeads?: number
+    perdas?: number
+    emAndamento?: number
+    totalFollowups?: number
+    aiMessages?: number
+    humanMessages?: number
   }
   tipo_atendimento?: 'sem_ia' | 'com_ia'
+  funnel?: FunnelData
   chartData: Array<{ day: string; mensagensIA: number; mensagensCliente: number; leads: number }>
   pieData: Array<{ name: string; value: number; color: string }>
 }
@@ -171,6 +179,7 @@ export default function ClientDashboardPage() {
       const params = new URLSearchParams()
       if (from) params.set('from', from)
       if (to) params.set('to', to)
+      if (canalFiltro) params.set('canal', canalFiltro)
       params.set('_t', Date.now().toString()) // Cache buster
 
       const [resAnalytics, resLeads] = await Promise.all([
@@ -210,7 +219,7 @@ export default function ClientDashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [range, customFrom, customTo])
+  }, [range, customFrom, customTo, canalFiltro])
 
   useEffect(() => {
     fetchData()
@@ -410,76 +419,74 @@ export default function ClientDashboardPage() {
         </Card>
 
         {loading ? (
-          <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-3">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-32 bg-gray-100 rounded-2xl animate-pulse soft-shadow" />
+          <div className="grid gap-3.5 grid-cols-2 md:grid-cols-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="h-28 bg-gray-100 rounded-2xl animate-pulse soft-shadow" />
             ))}
           </div>
         ) : data ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 font-poppins">
-            <KpiCard
-              title="Total de Leads"
-              value={data.kpis.totalLeads.toLocaleString('pt-BR')}
-              subtitle={isSemIA ? "Novos contatos" : "Captados pela IA"}
-              icon={Users}
-              color="bg-purple-500"
-            />
-            <KpiCard
-              title="Em Andamento"
-              value={data.kpis.emAndamento.toLocaleString('pt-BR')}
-              subtitle="Leads sendo nutridos"
-              icon={RefreshCw}
-              color="bg-amber-500"
-            />
-            <KpiCard
-              title={isSemIA ? "Em Atendimento" : "Atendimento Humano"}
-              value={data.kpis.atendimentoHumano.toLocaleString('pt-BR')}
-              subtitle={isSemIA ? "Atendimento da Loja" : "IA pausada"}
-              icon={ShieldBan}
-              color="bg-orange-500"
-            />
-            <KpiCard
-              title="Leads Qualificados"
-              value={data.kpis.qualifiedLeads.toLocaleString('pt-BR')}
-              subtitle={`Aguardando equipe`}
-              icon={Trophy}
-              color="bg-emerald-500"
-            />
-            <KpiCard
-              title="Visitas Agendadas"
-              value={data.kpis.visitasAgendadas.toLocaleString('pt-BR')}
-              subtitle="Agendamentos feitos"
-              icon={Calendar}
-              color="bg-cyan-500"
-            />
-            <KpiCard
-              title="Simulações Aprovadas"
-              value={(data.kpis.simulacoesAprovadas + data.kpis.simulacoesPreAprovadas).toLocaleString('pt-BR')}
-              subtitle="Pré ou Aprovadas"
-              icon={Trophy}
-              color="bg-green-500"
-            />
-            <KpiCard
-              title="Leads Perdidos"
-              value={data.kpis.perdas.toLocaleString('pt-BR')}
-              subtitle="Finalizados sem sucesso"
-              icon={MessageSquare}
-              color="bg-red-500"
-            />
-            <KpiCard
-              title="Follow-ups Feitos"
-              value={data.kpis.totalFollowups.toLocaleString('pt-BR')}
-              subtitle={isSemIA ? "Mensagens de follow-up" : "Reativações pela IA"}
-              icon={TrendingUp}
-              color="bg-indigo-500"
-            />
-            <KpiCard
-              title="Mensagens Trocadas"
-              value={(data.kpis.aiMessages + data.kpis.humanMessages).toLocaleString('pt-BR')}
-              subtitle={isSemIA ? "Atendente + Cliente" : "IA + Cliente"}
-              icon={Bot}
-              color="bg-blue-500"
-            />
+          <div className="space-y-6">
+            <div className="grid gap-3.5 grid-cols-2 md:grid-cols-4 font-poppins">
+              <KpiCard
+                title="Total de Leads"
+                value={data.kpis.totalLeads.toLocaleString('pt-BR')}
+                subtitle={isSemIA ? "Novos contatos" : "Captados pela IA"}
+                icon={Users}
+                color="bg-purple-500"
+              />
+              <KpiCard
+                title="Em Atendimento"
+                value={(data.kpis.emAtendimento ?? data.kpis.atendimentoHumano ?? 0).toLocaleString('pt-BR')}
+                subtitle="Atendimento da Loja"
+                icon={RefreshCw}
+                color="bg-blue-500"
+              />
+              <KpiCard
+                title="Oportunidades"
+                value={(data.kpis.oportunidades ?? 0).toLocaleString('pt-BR')}
+                subtitle="Ficha | Troca | Entrada"
+                icon={Trophy}
+                color="bg-amber-500"
+              />
+              <KpiCard
+                title="Visitas Agendadas"
+                value={data.kpis.visitasAgendadas.toLocaleString('pt-BR')}
+                subtitle="Agendamentos feitos"
+                icon={Calendar}
+                color="bg-cyan-500"
+              />
+              <KpiCard
+                title="Visitas Realizadas"
+                value={(data.kpis.visitasRealizadas ?? 0).toLocaleString('pt-BR')}
+                subtitle="Presencial na loja"
+                icon={UserCheck}
+                color="bg-teal-500"
+              />
+              <KpiCard
+                title="Simulações Aprovadas"
+                value={(data.kpis.simulacoesAprovadas ?? 0).toLocaleString('pt-BR')}
+                subtitle="Crédito aprovado"
+                icon={Trophy}
+                color="bg-green-500"
+              />
+              <KpiCard
+                title="Perdidos Qualificados"
+                value={(data.kpis.perdidosQualificados ?? 0).toLocaleString('pt-BR')}
+                subtitle="Desistiram / Adiaram"
+                icon={ShieldBan}
+                color="bg-orange-500"
+              />
+              <KpiCard
+                title="Perdidos Desqualificados"
+                value={(data.kpis.perdidosDesqualificados ?? 0).toLocaleString('pt-BR')}
+                subtitle="Sem perfil / Sem resposta"
+                icon={MessageSquare}
+                color="bg-red-500"
+              />
+            </div>
+
+            {/* Novo Funil Comercial Cônico por Etapas */}
+            <VisualFunnel funnel={data.funnel} loading={loading} />
           </div>
         ) : null}
       </div>
@@ -617,10 +624,7 @@ export default function ClientDashboardPage() {
                   />
                   <div className="flex flex-col justify-between h-full space-y-2">
                     <div className="flex items-center gap-2">
-                      <span
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: c.color || '#6366f1' }}
-                      />
+                      <ChannelIcon canal={c.key} label={c.nome} className="w-3.5 h-3.5 shrink-0" />
                       <span className="text-xs font-bold text-gray-700 truncate line-clamp-1">{c.nome}</span>
                     </div>
                     <div>

@@ -161,12 +161,8 @@ export async function GET(request: Request) {
     // ── 2. Leads ─────────────────────────────────────────────────────────────
     let totalFollowups = 0
     let qualifiedLeads = 0
-    let totalLeads = 0
     const leadsByDay: Record<string, number> = {}
     let allLeads: any[] = []
-
-    let visitasAgendadas = 0
-    let simulacoesAprovadas = 0
     let simulacoesPreAprovadas = 0
     let perdas = 0
 
@@ -221,60 +217,121 @@ export async function GET(request: Request) {
       }
     }
 
-    let emAndamento = 0
-    let atendimentoHumano = 0
+    const canalParam = searchParams.get('canal');
+
+    // Mapear canal_origem de cada lead
+    for (const lead of allLeads) {
+      const leadWaLabels = lead.whatsapp_labels && Array.isArray(lead.whatsapp_labels) ? lead.whatsapp_labels : [];
+      let canal_origem: string = lead.origem_lead || 'desconhecido';
+      let canal_label_name: string | null = null;
+      let canal_color: string | null = null;
+
+      for (const lId of leadWaLabels) {
+        const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
+        const nomeLbl = mapaNomes.get(cleanId);
+        if (nomeLbl && nomeLbl.toLowerCase().startsWith('canal')) {
+          canal_label_name = nomeLbl.replace(/^canal\s*\|\s*/i, '').trim();
+          canal_origem = canal_label_name.toLowerCase().replace(/\s+/g, '_');
+          break;
+        }
+      }
+      lead.canal_origem = canal_origem;
+      lead.canal_label_name = canal_label_name;
+    }
+
+    // Filtrar por canal se solicitado
+    const leadsFiltrados = (canalParam && canalParam !== 'todos')
+      ? allLeads.filter(l => (l.canal_origem || 'desconhecido') === canalParam)
+      : allLeads;
+
+    let totalLeads = leadsFiltrados.length;
+    let emAtendimento = 0;
+    let oportunidades = 0;
+    let visitasAgendadas = 0;
+    let visitasRealizadas = 0;
+    let simulacoesAprovadas = 0;
+    let perdidosQualificados = 0;
+    let perdidosDesqualificados = 0;
+    let clientes = 0;
 
     // Busca os bloqueios para nao contar como em andamento nem somar followups
     const blockedNumbers = (isSemIA || !clientConfig.tabela_bloqueios)
       ? new Set<string>()
       : await getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios);
 
-    totalLeads = allLeads.length
-    for (const lead of allLeads) {
-      const rawPhone = lead.telefone || lead.phone || lead.telefone_contato || ''
-      const phoneClean = rawPhone.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '')
-      const isBlocked = blockedNumbers.has(phoneClean)
+    for (const lead of leadsFiltrados) {
+      const rawPhone = lead.telefone || lead.phone || lead.telefone_contato || '';
+      const phoneClean = rawPhone.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
+      const isBlocked = blockedNumbers.has(phoneClean);
 
-      // Nao soma followup se estiver bloqueado
       if (!isBlocked) {
-        totalFollowups += parseInt(lead.quantidade_followup || '0')
+        totalFollowups += parseInt(lead.quantidade_followup || '0');
       }
-      
-      const etapa = lead.lead_perda === true 
-        ? 'ia_perda' 
-        : calcularEtapaIA(lead, 5, mapaNomes)
-      
-      if (
-        etapa === 'ia_qualificado' || 
-        etapa === 'cliente' || 
-        etapa === 'visita_realizada' ||
-        etapa === 'oportunidade' ||
-        lead.horario_lead_qualificado != null ||
-        lead.lead_simulacao_aprovada === true
-      ) {
-        qualifiedLeads++
-        if (etapa === 'oportunidade' || lead.lead_simulacao_aprovada === true) {
-          simulacoesAprovadas++
-        }
+
+      const etapa = lead.lead_perda === true
+        ? 'ia_perda'
+        : calcularEtapaIA(lead, 5, mapaNomes);
+
+      if (etapa === 'cliente') {
+        clientes++;
+      } else if (etapa === 'visita_realizada') {
+        visitasRealizadas++;
+      } else if (etapa === 'simulacao_aprovada' || lead.lead_simulacao_aprovada === true) {
+        simulacoesAprovadas++;
       } else if (etapa === 'visita_confirmada' || etapa === 'visita_agendada' || lead.lead_visita_confirmada === true) {
-        visitasAgendadas++
-      } else if (etapa === 'simulacao_pre_aprovada' || lead.lead_simulacao_pre_aprovada === true) {
-        simulacoesPreAprovadas++
-      } else if (etapa === 'ficha_reprovada' || lead.lead_simulacao_reprovada === true) {
-        // Ficha reprovada
-      } else if (etapa === 'ia_perda' || etapa === 'perdido_desqualificado' || etapa === 'perdido_qualificado') {
-        perdas++
+        visitasAgendadas++;
+      } else if (
+        etapa === 'oportunidade' ||
+        etapa === 'ia_qualificado' ||
+        etapa === 'simulacao_pre_aprovada' ||
+        (lead.veiculo_troca && String(lead.veiculo_troca).trim().length > 0)
+      ) {
+        oportunidades++;
+      } else if (etapa === 'perdido_qualificado') {
+        perdidosQualificados++;
+      } else if (
+        etapa === 'perdido_desqualificado' ||
+        etapa === 'ia_perda' ||
+        etapa === 'ficha_reprovada' ||
+        lead.lead_simulacao_reprovada === true
+      ) {
+        perdidosDesqualificados++;
       } else {
-        if (isBlocked || isSemIA) {
-          atendimentoHumano++
-        } else {
-          emAndamento++
-        }
+        emAtendimento++;
       }
     }
 
+    // Cálculos das 5 Etapas do Funil Visual
+    const stage1_novoLead = totalLeads;
+    const stage2_emAtendimento = Math.min(
+      stage1_novoLead,
+      emAtendimento + oportunidades + visitasAgendadas + visitasRealizadas + simulacoesAprovadas + clientes + perdidosQualificados
+    );
+    const stage3_oportunidade = oportunidades + visitasAgendadas + visitasRealizadas + simulacoesAprovadas + clientes;
+    const stage4_simulacaoAprovada = simulacoesAprovadas + clientes;
+    const stage5_cliente = clientes;
+
+    const c1to2 = stage1_novoLead > 0 ? (stage2_emAtendimento / stage1_novoLead) * 100 : 0;
+    const c2to3 = stage2_emAtendimento > 0 ? (stage3_oportunidade / stage2_emAtendimento) * 100 : 0;
+    const c3to4 = stage3_oportunidade > 0 ? (stage4_simulacaoAprovada / stage3_oportunidade) * 100 : 0;
+    const c4to5 = stage4_simulacaoAprovada > 0 ? (stage5_cliente / stage4_simulacaoAprovada) * 100 : 0;
+    const taxaConversaoGeral = stage1_novoLead > 0 ? (stage5_cliente / stage1_novoLead) * 100 : 0;
+
+    const funnel = {
+      stages: [
+        { id: 'novo_lead', nome: 'NOVO LEAD', count: stage1_novoLead, conversionRate: null, cor: '#3b82f6' },
+        { id: 'em_atendimento', nome: 'EM ATENDIMENTO', count: stage2_emAtendimento, conversionRate: Number(c1to2.toFixed(1)), cor: '#06b6d4' },
+        { id: 'oportunidade', nome: 'OPORTUNIDADE', count: stage3_oportunidade, conversionRate: Number(c2to3.toFixed(1)), cor: '#8b5cf6' },
+        { id: 'simulacao_aprovada', nome: 'SIMULAÇÃO APROVADA', count: stage4_simulacaoAprovada, conversionRate: Number(c3to4.toFixed(1)), cor: '#f59e0b' },
+        { id: 'cliente', nome: 'CLIENTES / VENDA', count: stage5_cliente, conversionRate: Number(c4to5.toFixed(1)), cor: '#22c55e' },
+      ],
+      total: stage1_novoLead,
+      globalConversionRate: Number(taxaConversaoGeral.toFixed(1)),
+      totalVendas: stage5_cliente,
+    };
+
     // Leads por dia
-    for (const lead of allLeads || []) {
+    for (const lead of leadsFiltrados || []) {
       const day = new Date(lead.created_at).toLocaleDateString('pt-BR', {
         timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit'
       })
@@ -284,7 +341,6 @@ export async function GET(request: Request) {
     // Montar séries cronológicas ordenadas
     const allDays = Array.from(new Set([...Object.keys(messagesByDay), ...Object.keys(leadsByDay)]))
       .sort((a, b) => {
-        // Ordenar por data: "dd/mm" format
         const [da, ma] = a.split('/').map(Number)
         const [db, mb] = b.split('/').map(Number)
         if (ma !== mb) return ma - mb
@@ -300,12 +356,31 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       tipo_atendimento: isSemIA ? 'sem_ia' : 'com_ia',
-      kpis: { aiMessages, humanMessages, totalFollowups, qualifiedLeads, totalLeads, visitasAgendadas, simulacoesAprovadas, simulacoesPreAprovadas, perdas, emAndamento, atendimentoHumano },
+      kpis: {
+        totalLeads,
+        emAtendimento,
+        atendimentoHumano: emAtendimento,
+        oportunidades,
+        visitasAgendadas,
+        visitasRealizadas,
+        simulacoesAprovadas,
+        perdidosQualificados,
+        perdidosDesqualificados,
+        clientes,
+        // Compatibilidade retroativa
+        qualifiedLeads: oportunidades + simulacoesAprovadas + visitasAgendadas + visitasRealizadas + clientes,
+        perdas: perdidosQualificados + perdidosDesqualificados,
+        emAndamento: 0,
+        totalFollowups,
+        aiMessages,
+        humanMessages,
+      },
+      funnel,
       chartData,
       pieData: [
-        { name: 'Qualificados', value: qualifiedLeads, color: '#22c55e' },
-        { name: 'Em Andamento', value: emAndamento, color: '#f59e0b' },
-        { name: 'Em Atendimento', value: atendimentoHumano, color: '#ef4444' },
+        { name: 'Oportunidades', value: oportunidades + simulacoesAprovadas + visitasAgendadas + visitasRealizadas, color: '#22c55e' },
+        { name: 'Em Atendimento', value: emAtendimento, color: '#f59e0b' },
+        { name: 'Perdidos', value: perdidosQualificados + perdidosDesqualificados, color: '#ef4444' },
       ]
     }, { status: 200 })
 

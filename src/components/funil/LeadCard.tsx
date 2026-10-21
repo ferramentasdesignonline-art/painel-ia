@@ -16,6 +16,7 @@ import {
   ShieldBan
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ChannelIcon } from '@/components/common/ChannelIcon';
 
 export type Lead = {
   id: number | string;
@@ -166,7 +167,7 @@ export function LeadCard({ lead, onClick, formatarTelefone, metaFollowup, nomeEt
                 }}
                 title={`Canal: ${lead.canal_label_name || lead.canal_origem}`}
               >
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lead.canal_color || '#9ca3af' }} />
+                <ChannelIcon canal={lead.canal_origem} label={lead.canal_label_name} className="w-3 h-3 shrink-0" />
                 <span>{lead.canal_label_name || lead.canal_origem.replace(/_/g, ' ')}</span>
               </div>
             )}

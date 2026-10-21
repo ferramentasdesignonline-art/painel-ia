@@ -10,6 +10,7 @@ import { AddLeadModal } from "@/components/leads/AddLeadModal"
 import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
 import { cn } from "@/lib/utils"
 import { formatarVisitaDashboard } from "@/lib/agendamento-utils"
+import { ChannelIcon } from "@/components/common/ChannelIcon"
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos os status' },
@@ -564,10 +565,7 @@ export default function LeadsPage() {
                                   color: '#4f46e5',
                                 }}
                               >
-                                <span
-                                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                                  style={{ backgroundColor: lead.canal_color || '#4f46e5' }}
-                                />
+                                <ChannelIcon canal={lead.canal_origem} label={lead.canal_label_name} className="w-3 h-3 shrink-0" />
                                 {lead.canal_label_name || lead.canal_origem}
                               </span>
                             </div>

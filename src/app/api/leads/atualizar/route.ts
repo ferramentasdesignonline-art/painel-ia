@@ -73,6 +73,9 @@ export async function POST(request: Request) {
       if ('veiculo_interessado' in novasInformacoes) payload.veiculo_interessado = novasInformacoes.veiculo_interessado;
       if ('veiculo_troca' in novasInformacoes) payload.veiculo_troca = novasInformacoes.veiculo_troca;
       if ('observacao_lead_qualificado' in novasInformacoes) payload.observacao_lead_qualificado = novasInformacoes.observacao_lead_qualificado;
+      if ('lead_simulacao_aprovada' in novasInformacoes) payload.lead_simulacao_aprovada = Boolean(novasInformacoes.lead_simulacao_aprovada);
+      if ('lead_simulacao_reprovada' in novasInformacoes) payload.lead_simulacao_reprovada = Boolean(novasInformacoes.lead_simulacao_reprovada);
+      if ('lead_visita_confirmada' in novasInformacoes) payload.lead_visita_confirmada = Boolean(novasInformacoes.lead_visita_confirmada);
 
       if ('data_agendamento' in novasInformacoes) {
         if (novasInformacoes.data_agendamento) {
