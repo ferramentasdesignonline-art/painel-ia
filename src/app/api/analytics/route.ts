@@ -299,11 +299,46 @@ export async function GET(request: Request) {
 
     const funnel = {
       stages: [
-        { id: 'novo_lead', nome: 'NOVO LEAD', count: stage1_novoLead, conversionRate: null, cor: '#3b82f6' },
-        { id: 'em_atendimento', nome: 'EM ATENDIMENTO', count: stage2_emAtendimento, conversionRate: Number(c1to2.toFixed(1)), cor: '#06b6d4' },
-        { id: 'oportunidade', nome: 'OPORTUNIDADE', count: stage3_oportunidade, conversionRate: Number(c2to3.toFixed(1)), cor: '#8b5cf6' },
-        { id: 'simulacao_aprovada', nome: 'SIMULAÇÃO APROVADA', count: stage4_simulacaoAprovada, conversionRate: Number(c3to4.toFixed(1)), cor: '#f59e0b' },
-        { id: 'cliente', nome: 'CLIENTES / VENDA', count: stage5_cliente, conversionRate: Number(c4to5.toFixed(1)), cor: '#22c55e' },
+        { 
+          id: 'novo_lead', 
+          nome: 'NOVO LEAD', 
+          count: stage1_novoLead, 
+          conversionRate: null, 
+          cor: '#3b82f6',
+          detalhe: 'Entrada total no período'
+        },
+        { 
+          id: 'em_atendimento', 
+          nome: 'EM ATENDIMENTO', 
+          count: stage2_emAtendimento, 
+          conversionRate: Number(c1to2.toFixed(1)), 
+          cor: '#06b6d4',
+          detalhe: 'Em atendimento ativo na esteira'
+        },
+        { 
+          id: 'oportunidade', 
+          nome: 'OPORTUNIDADE', 
+          count: stage3_oportunidade, 
+          conversionRate: Number(c2to3.toFixed(1)), 
+          cor: '#8b5cf6',
+          detalhe: `${oportunidades} Oportunidades + ${visitasAgendadas + visitasRealizadas} Visitas + ${simulacoesAprovadas} Simulações + ${clientes} Vendas`
+        },
+        { 
+          id: 'simulacao_aprovada', 
+          nome: 'SIMULAÇÃO APROVADA', 
+          count: stage4_simulacaoAprovada, 
+          conversionRate: Number(c3to4.toFixed(1)), 
+          cor: '#f59e0b',
+          detalhe: `${simulacoesAprovadas} Simulações Aprovadas + ${clientes} Vendas`
+        },
+        { 
+          id: 'cliente', 
+          nome: 'CLIENTES / VENDA', 
+          count: stage5_cliente, 
+          conversionRate: Number(c4to5.toFixed(1)), 
+          cor: '#22c55e',
+          detalhe: `${stage5_cliente} compras/vendas concluídas`
+        },
       ],
       total: stage1_novoLead,
       globalConversionRate: Number(taxaConversaoGeral.toFixed(1)),

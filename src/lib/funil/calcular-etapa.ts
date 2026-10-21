@@ -83,11 +83,15 @@ export function calcularEtapaPorLabels(
     // 3. Visita - Agendada
     if (nomesPresentes.some(n => n.includes('visita - agendada') || n.includes('visita agendada'))) return 'visita_agendada';
 
-    // 4. Simulação Aprovada
-    if (nomesPresentes.some(n => n.includes('simulação aprovada') || n.includes('simulacao aprovada') || n.includes('ficha aprovada'))) return 'simulacao_aprovada';
-
-    // 5. Oportunidade
+    // 4. Oportunidade (tem precedência se contiver a palavra "oportunidade", como "Oportunidade - Ficha Aprovada | Troca | Entrada")
     if (nomesPresentes.some(n => n.includes('oportunidade'))) return 'oportunidade';
+
+    // 5. Simulação Aprovada (específica de simulação aprovada sem ser etiqueta de oportunidade geral)
+    if (nomesPresentes.some(n => 
+      n.includes('simulação aprovada') || 
+      n.includes('simulacao aprovada') || 
+      (n.includes('ficha aprovada') && !n.includes('oportunidade'))
+    )) return 'simulacao_aprovada';
 
     // 6. Perdido Qualificado (Etiquetas: Perdido Qualificado, Ficha Reprovada, etc.)
     if (nomesPresentes.some(n => 

@@ -10,6 +10,7 @@ export type FunnelStage = {
   count: number;
   conversionRate: number | null;
   cor?: string;
+  detalhe?: string;
 };
 
 export type FunnelData = {
@@ -99,6 +100,11 @@ export function VisualFunnel({ funnel, loading }: VisualFunnelProps) {
                     <span className="text-2xl font-black tracking-tight text-white mt-0.5 drop-shadow-sm">
                       {stage.count.toLocaleString("pt-BR")}
                     </span>
+                    {stage.detalhe && (
+                      <span className="text-[10px] font-semibold text-white/80 mt-0.5 tracking-normal text-center px-2 line-clamp-1">
+                        {stage.detalhe}
+                      </span>
+                    )}
                   </div>
                 </div>
               </React.Fragment>
