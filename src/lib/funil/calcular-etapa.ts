@@ -89,16 +89,29 @@ export function calcularEtapaPorLabels(
     // 5. Oportunidade
     if (nomesPresentes.some(n => n.includes('oportunidade'))) return 'oportunidade';
 
-    // 6. Ficha Reprovada
-    if (nomesPresentes.some(n => n.includes('ficha reprovada') || n.includes('simulação reprovada') || n.includes('simulacao reprovada'))) return 'ficha_reprovada';
+    // 6. Perdido Qualificado (Etiquetas: Perdido Qualificado, Ficha Reprovada, etc.)
+    if (nomesPresentes.some(n => 
+      n.includes('perdido | qualificado') || 
+      n.includes('perdido qualificado') || 
+      n.includes('ficha reprovada') || 
+      n.includes('simulação reprovada') || 
+      n.includes('simulacao reprovada') ||
+      n.includes('achou caro') ||
+      n.includes('concorrente') ||
+      n.includes('desistiu')
+    )) return 'perdido_qualificado';
 
-    // 7. Perdido Qualificado
-    if (nomesPresentes.some(n => n.includes('perdido | qualificado') || n.includes('perdido qualificado'))) return 'perdido_qualificado';
+    // 7. Perdido Desqualificado (Etiquetas: Perdido Desqualificado, Sem resposta, Sem perfil, Número errado)
+    if (nomesPresentes.some(n => 
+      n.includes('desqualificado') || 
+      n.includes('sem resposta') || 
+      n.includes('sem perfil') || 
+      n.includes('número errado') || 
+      n.includes('numero errado') || 
+      (n.includes('perdido') && !n.includes('qualificado'))
+    )) return 'perdido_desqualificado';
 
-    // 8. Perdido Desqualificado
-    if (nomesPresentes.some(n => n.includes('perdido') || n.includes('desqualificado') || n.includes('sem resposta'))) return 'perdido_desqualificado';
-
-    // 9. Em atendimento
+    // 8. Em atendimento
     if (nomesPresentes.some(n => n.includes('em atendimento') || n.includes('recontratar') || n.includes('recontatar'))) return 'em_atendimento';
   }
 
@@ -108,8 +121,7 @@ export function calcularEtapaPorLabels(
   if (idsSet.has('54')) return 'visita_realizada';
   if (idsSet.has('53') || idsSet.has('6')) return 'visita_agendada';
   if (idsSet.has('55')) return 'oportunidade';
-  if (idsSet.has('57')) return 'ficha_reprovada';
-  if (idsSet.has('59')) return 'perdido_qualificado';
+  if (idsSet.has('59') || idsSet.has('57')) return 'perdido_qualificado';
   if (idsSet.has('58')) return 'perdido_desqualificado';
   if (idsSet.has('56')) return 'em_atendimento';
 
@@ -121,13 +133,13 @@ export function calcularEtapaIA(
   meta_followup = 5,
   mapaNomes?: Map<string, string>
 ): TipoEtapaIA {
-  // 1. Prioridade máxima: Etiquetas do WhatsApp do lead
+  // 1. Prioridade máxima: Etiquetas do WhatsApp do lead (perdidos SEMPRE por etiqueta)
   if (lead.whatsapp_labels && lead.whatsapp_labels.length > 0) {
     const etapaLabel = calcularEtapaPorLabels(lead.whatsapp_labels, mapaNomes);
     if (etapaLabel) return etapaLabel;
   }
 
-  // 2. Fallback pelas colunas da tabela do lead
+  // 2. Fallback pelas colunas da tabela do lead (apenas etapas ativas; perdidos apenas se houver etiqueta)
   if (lead.lead_visita_confirmada === true) {
     return 'visita_agendada';
   }
@@ -137,14 +149,8 @@ export function calcularEtapaIA(
   if (lead.lead_simulacao_pre_aprovada === true) {
     return 'oportunidade';
   }
-  if (lead.lead_simulacao_reprovada === true) {
-    return 'ficha_reprovada';
-  }
   if (lead.veiculo_troca && lead.veiculo_troca.trim().length > 0) {
     return 'oportunidade';
-  }
-  if ((lead.quantidade_followup || 0) >= meta_followup) {
-    return 'perdido_desqualificado';
   }
 
   return 'em_atendimento';

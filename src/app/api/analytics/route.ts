@@ -268,9 +268,7 @@ export async function GET(request: Request) {
         totalFollowups += parseInt(lead.quantidade_followup || '0');
       }
 
-      const etapa = lead.lead_perda === true
-        ? 'ia_perda'
-        : calcularEtapaIA(lead, 5, mapaNomes);
+      const etapa = calcularEtapaIA(lead, 5, mapaNomes);
 
       if (etapa === 'cliente') {
         clientes++;
@@ -287,16 +285,9 @@ export async function GET(request: Request) {
         (lead.veiculo_troca && String(lead.veiculo_troca).trim().length > 0)
       ) {
         oportunidades++;
-      } else if (
-        etapa === 'perdido_qualificado' ||
-        etapa === 'ficha_reprovada' ||
-        lead.lead_simulacao_reprovada === true
-      ) {
+      } else if (etapa === 'perdido_qualificado') {
         perdidosQualificados++;
-      } else if (
-        etapa === 'perdido_desqualificado' ||
-        etapa === 'ia_perda'
-      ) {
+      } else if (etapa === 'perdido_desqualificado') {
         perdidosDesqualificados++;
       } else {
         emAtendimento++;
