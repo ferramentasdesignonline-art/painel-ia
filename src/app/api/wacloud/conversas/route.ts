@@ -1,19 +1,69 @@
 import { NextResponse } from 'next/server';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
+import { fetchUazapiChats, fetchUazapiLabels } from '@/lib/wacloud/uazapi';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 export const revalidate = 0;
 
-// GET /api/wacloud/conversas - lista contatos (último registro por contato)
+// GET /api/wacloud/conversas - lista contatos sob demanda via UAZAPI (ou fallback no banco)
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const instancia = searchParams.get('instancia');
+  const offset = Number(searchParams.get('offset')) || 0;
+  const limit = Number(searchParams.get('limit')) || 60;
 
   try {
     const supabase = getWacloudSupabaseAdmin();
 
-    // Query direta sem reatribuição de variável (evita bug de chaining do Supabase client)
+    // 1. Se tem instância informada, busca direto na UAZAPI sob demanda
+    if (instancia) {
+      const { data: instData } = await supabase
+        .from('wacloud_instancias')
+        .select('id, token, nome_instancia, cliente_id')
+        .eq('nome_instancia', instancia)
+        .single();
+
+      if (instData?.token) {
+        try {
+          const [chatResult, labels] = await Promise.all([
+            fetchUazapiChats(instData.token, offset, limit),
+            fetchUazapiLabels(instData.token).catch(() => []),
+          ]);
+
+          const rawChats = chatResult.chats || [];
+          const contatos = rawChats
+            .filter((c: any) => c?.wa_chatid && !c?.wa_isGroup)
+            .map((c: any) => {
+              const cleanPhone = String(c.wa_chatid).split('@')[0].replace(/\D/g, '');
+              const ts = c.wa_lastMsgTimestamp ? new Date(Number(c.wa_lastMsgTimestamp)).toISOString() : new Date().toISOString();
+              return {
+                telefone_contato: cleanPhone,
+                nome_contato: c.wa_contactName || c.lead_fullName || c.lead_name || c.name || c.wa_name || cleanPhone,
+                nome_instancia: instancia,
+                ultima_mensagem: c.wa_lastMessageTextVote || null,
+                ultimo_tipo: c.wa_lastMessageType || 'text',
+                ultimo_timestamp: ts,
+                imagem_preview: c.imagePreview || null,
+                nao_lidas: c.wa_unreadCount || 0,
+                whatsapp_labels: Array.isArray(c.wa_label) ? c.wa_label : [],
+              };
+            });
+
+          return NextResponse.json({
+            contatos,
+            total_msgs: 0,
+            labels: labels || [],
+            source: 'uazapi',
+            total: chatResult.pagination?.totalRecords ?? contatos.length,
+          });
+        } catch (uazErr) {
+          console.warn('Erro ao buscar contatos direto da UAZAPI, usando fallback do banco:', uazErr);
+        }
+      }
+    }
+
+    // 2. Fallback caso a Uazapi falhe ou não tenha token
     const { data, error } = instancia
       ? await supabase
           .from('wacloud_mensagens')

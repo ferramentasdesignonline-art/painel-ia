@@ -180,6 +180,10 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMsgs, setLoadingMsgs] = useState(false)
+  const [hasMoreMsgs, setHasMoreMsgs] = useState(false)
+  const [msgOffset, setMsgOffset] = useState(0)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const isPrependingOlderRef = useRef(false)
   const [busca, setBusca] = useState("")
   const [uazapiLabels, setUazapiLabels] = useState<any[]>([])
   const [showLabelsModal, setShowLabelsModal] = useState(false)
@@ -230,50 +234,19 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
     }
   }
 
-  const syncContatos = async (isFull: boolean) => {
-    setSyncProgress({ imported: 0, total: 0, label: isFull ? 'Sincronizando todo o histórico...' : 'Atualizando conversas...' })
+  const syncContatos = async () => {
     try {
-      let offset: number | null = 0;
-      let imported = 0;
-      let total = 0;
-      
-      while (offset !== null) {
-        const res = await fetch(`/api/wacloud/instances/${instancia.id}/sync-chats`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ offset }),
-        })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || "Erro ao sincronizar")
-        
-        imported += data.processed || 0
-        total = data.total || total
-        setSyncProgress({ imported, total, label: `Sincronizando ${imported} de ${total}...` })
-        
-        if (!isFull) break; // Quick sync (apenas offset 0)
-        offset = data.next_offset
-      }
+      await fetchContatosDB()
     } catch (err) {
       console.error("Sync error:", err)
-    } finally {
-      setSyncProgress(null)
-      await fetchContatosDB()
     }
   }
 
   useEffect(() => {
     const loadInitial = async () => {
       setLoading(true)
-      const lista = await fetchContatosDB()
+      await fetchContatosDB()
       setLoading(false)
-      
-      // Auto-sync
-      if (lista.length === 0) {
-        await syncContatos(true)
-      } else {
-        // roda em background pra não travar a UI
-        syncContatos(false)
-      }
     }
     loadInitial()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -639,19 +612,22 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
     }
   };
 
-  const [syncingMsgs, setSyncingMsgs] = useState(false)
-
-  const fetchMensagens = async (contato: Contato) => {
-    setLoadingMsgs(true)
+  const fetchMensagens = async (contato: Contato, isInitial = true) => {
+    if (isInitial) {
+      setLoadingMsgs(true)
+      setMsgOffset(0)
+      setHasMoreMsgs(false)
+    }
     try {
-      // 1. Tenta buscar no banco primeiro
       const res = await fetch(
-        `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}&_t=${Date.now()}`,
+        `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}&offset=0&limit=30&_t=${Date.now()}`,
         { cache: 'no-store' }
       )
       const data = await res.json()
-      let msgs = data.mensagens || []
+      const msgs = data.mensagens || []
       setMensagens(msgs)
+      setHasMoreMsgs(Boolean(data.hasMore))
+      setMsgOffset(msgs.length)
 
       // 2. Sincroniza em tempo real as etiquetas e dados do contato diretamente da Uazapi
       fetch(`/api/wacloud/instances/${instancia.id}/chat-details`, {
@@ -673,58 +649,54 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
           }
         })
         .catch(err => console.warn('Erro ao atualizar chat-details:', err));
-
-      // 3. Se não tiver mensagens no banco, puxa automaticamente da Uazapi
-      if (msgs.length === 0) {
-        await syncMensagens(contato, false)
-      }
     } catch (err) {
       console.error('Erro ao buscar mensagens', err)
-      setSyncingMsgs(false)
     } finally {
-      setLoadingMsgs(false)
+      if (isInitial) setLoadingMsgs(false)
     }
   }
 
-  const syncMensagens = async (contato: Contato, isFull: boolean = false) => {
-    setSyncingMsgs(true);
+  const loadOlderMessages = async () => {
+    if (!selectedContato || loadingOlder || !hasMoreMsgs) return;
+    setLoadingOlder(true);
+    const container = chatRef.current;
+    const prevScrollHeight = container?.scrollHeight || 0;
+    const prevScrollTop = container?.scrollTop || 0;
+
     try {
-      let offset: number | null = 0;
-      let imported = 0;
-      const chatid = contato.telefone_contato.includes('@') ? contato.telefone_contato : `${contato.telefone_contato}@s.whatsapp.net`;
-      
-      while (offset !== null) {
-        const res = await fetch(`/api/wacloud/instances/${instancia.id}/sync-messages`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chatid, offset }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Erro ao sincronizar mensagens");
-        
-        imported += data.processed || 0;
-        
-        if (!isFull) break;
-        offset = data.next_offset;
-      }
-      if (isFull) alert(`Histórico sincronizado: ${imported} mensagens importadas.`);
-      
-      // Update view
-      const resNovo = await fetch(
-        `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}&_t=${Date.now()}`,
+      const res = await fetch(
+        `/api/wacloud/conversas/${encodeURIComponent(selectedContato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}&offset=${msgOffset}&limit=30&_t=${Date.now()}`,
         { cache: 'no-store' }
-      )
-      const dataNovo = await resNovo.json()
-      if (selectedContatoRef.current?.telefone_contato === contato.telefone_contato) {
-        setMensagens(dataNovo.mensagens || []);
+      );
+      const data = await res.json();
+      const olderMsgs: Mensagem[] = data.mensagens || [];
+      if (olderMsgs.length > 0) {
+        isPrependingOlderRef.current = true;
+        setMensagens(prev => [...olderMsgs, ...prev]);
+        setMsgOffset(prev => prev + olderMsgs.length);
+        setHasMoreMsgs(Boolean(data.hasMore));
+
+        // Preserva a posição de rolagem após carregar mensagens mais antigas no topo
+        setTimeout(() => {
+          if (container) {
+            const newScrollHeight = container.scrollHeight;
+            container.scrollTop = newScrollHeight - prevScrollHeight + prevScrollTop;
+          }
+          isPrependingOlderRef.current = false;
+        }, 50);
+      } else {
+        setHasMoreMsgs(false);
       }
-    } catch (err: any) {
-      if (isFull) alert("Erro ao sincronizar: " + err.message);
-      else console.error("Auto sync msgs error:", err.message);
+    } catch (err) {
+      console.error('Erro ao carregar mensagens anteriores:', err);
     } finally {
-      setSyncingMsgs(false);
+      setLoadingOlder(false);
     }
-  }
+  };
+
+  const syncMensagens = async (contato: Contato) => {
+    await fetchMensagens(contato, false);
+  };
 
 
   useEffect(() => {
@@ -742,7 +714,7 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
   }, [busca, contatos])
 
   useEffect(() => {
-    if (chatRef.current) {
+    if (chatRef.current && !isPrependingOlderRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight
     }
   }, [mensagens])
@@ -781,9 +753,9 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
       if (countdownRef.current <= 0) {
         countdownRef.current = 30
         setCountdown(30)
-        syncContatos(false)
+        syncContatos()
         if (selectedContatoRef.current) {
-          syncMensagens(selectedContatoRef.current, false)
+          syncMensagens(selectedContatoRef.current)
         }
       }
     }, 1000)
@@ -847,8 +819,8 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Contatos</span>
               <button
                 onClick={() => {
-                  syncContatos(false)
-                  if (selectedContatoRef.current) syncMensagens(selectedContatoRef.current, false)
+                  syncContatos()
+                  if (selectedContatoRef.current) syncMensagens(selectedContatoRef.current)
                   setCountdown(30)
                 }}
                 disabled={!!syncProgress}
@@ -1032,19 +1004,31 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
                   </button>
 
                   <button
-                    onClick={() => syncMensagens(selectedContato, true)}
-                    disabled={syncingMsgs}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:text-indigo-600 hover:border-indigo-200 transition-colors disabled:opacity-50"
-                    title="Sincronizar todo o histórico do WhatsApp para este contato"
+                    onClick={loadOlderMessages}
+                    disabled={loadingOlder || !hasMoreMsgs}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:text-indigo-600 hover:border-indigo-200 transition-colors disabled:opacity-40"
+                    title={hasMoreMsgs ? "Buscar mensagens anteriores desta conversa" : "Todas as mensagens já carregadas"}
                   >
-                    {syncingMsgs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
-                    {syncingMsgs ? "Baixando..." : "Sincronizar Histórico"}
+                    {loadingOlder ? <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" /> : <RefreshCcw className="w-3.5 h-3.5" />}
+                    {loadingOlder ? "Carregando..." : hasMoreMsgs ? "Mensagens Anteriores" : "Histórico Completo"}
                   </button>
                 </div>
               </div>
 
               {/* Mensagens */}
               <div ref={chatRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+                {hasMoreMsgs && (
+                  <div className="flex justify-center pb-2 pt-1">
+                    <button
+                      onClick={loadOlderMessages}
+                      disabled={loadingOlder}
+                      className="text-xs font-medium bg-white/95 hover:bg-white border border-gray-200/90 shadow-xs px-3.5 py-1.5 rounded-full text-indigo-600 hover:text-indigo-700 flex items-center gap-1.5 transition-all"
+                    >
+                      {loadingOlder ? <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" /> : <RefreshCcw className="w-3.5 h-3.5" />}
+                      {loadingOlder ? 'Carregando anteriores...' : 'Carregar mensagens anteriores'}
+                    </button>
+                  </div>
+                )}
                 {loadingMsgs ? (
                   <div className="flex justify-center items-center h-32"><Loader2 className="w-6 h-6 text-indigo-500 animate-spin" /></div>
                 ) : mensagens.length === 0 ? (

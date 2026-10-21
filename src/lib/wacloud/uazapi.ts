@@ -55,7 +55,7 @@ export async function createWacloudInstance(nomeInstancia: string, clienteId?: s
 }
 
 /** Busca uma página de chats na Uazapi (ordenados do mais recente para o mais antigo). */
-export async function fetchUazapiChats(token: string, offset: number, limit = 50) {
+export async function fetchUazapiChats(token: string, offset: number, limit = 50, extraParams: Record<string, any> = {}) {
   const res = await fetch(`${WACLOUD_CONFIG.uazapiBaseUrl}/chat/find`, {
     method: 'POST',
     headers: {
@@ -63,7 +63,7 @@ export async function fetchUazapiChats(token: string, offset: number, limit = 50
       'Content-Type': 'application/json',
       token,
     },
-    body: JSON.stringify({ sort: '-wa_lastMsgTimestamp', limit, offset }),
+    body: JSON.stringify({ sort: '-wa_lastMsgTimestamp', limit, offset, wa_isGroup: false, ...extraParams }),
     cache: 'no-store',
   });
   const data = await res.json().catch(() => null);

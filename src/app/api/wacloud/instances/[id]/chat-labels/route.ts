@@ -16,7 +16,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const supabase = getWacloudSupabaseAdmin();
     const { data: instance, error } = await supabase
       .from('wacloud_instancias')
-      .select('id, token')
+      .select('id, token, nome_instancia, cliente_id')
       .eq('id', params.id)
       .single();
 
@@ -41,15 +41,46 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Falha na Uazapi: ' + JSON.stringify(data) }, { status: res.status });
     }
 
-    // Opcional: a gente também deveria atualizar as etiquetas no nosso banco (wacloud_contatos) 
-    // mas a forma mais fácil é o frontend puxar novamente ou o sync-chats puxar.
-    // Como os labels do Uazapi vêm com o owner prefixado (ex: 55119999:3), 
-    // salvar apenas '3' no banco temporariamente funciona se o frontend lidar com os dois formatos.
-    await supabase
-      .from('wacloud_contatos')
-      .update({ whatsapp_labels: labelids, atualizado_em: new Date().toISOString() })
-      .eq('instancia_id', instance.id)
-      .eq('telefone_contato', number);
+    // 2. Atualizar no banco correto:
+    // Se for cliente com IA, salva diretamente na tabela de leads do cliente!
+    // Se for cliente sem IA (CRM), salva na tabela wacloud_contatos.
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const sbMain = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+      
+      const { data: clients } = await sbMain.from('sistema-dash-ia_clientes').select('*');
+      
+      const norm = (s: string) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const targetInst = norm(instance.nome_instancia);
+
+      const client = clients?.find((c: any) => {
+        if (instance.cliente_id && (c.id === instance.cliente_id || c.auth_user_id === instance.cliente_id)) return true;
+        const ni = norm(c.nome_instancia);
+        const n = norm(c.nome);
+        const sl = norm(c.slug);
+        return ni === targetInst || n === targetInst || sl === targetInst || targetInst.includes(n) || n.includes(targetInst);
+      });
+
+      if (client && client.tabela_leads) {
+        const clientDb = createClient(
+          client.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          client.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        const cleanNumber = String(number).replace(/\D/g, '');
+        await clientDb
+          .from(client.tabela_leads)
+          .update({ whatsapp_labels: labelids })
+          .ilike('telefone', `%${cleanNumber}%`);
+      } else {
+        await supabase
+          .from('wacloud_contatos')
+          .update({ whatsapp_labels: labelids, atualizado_em: new Date().toISOString() })
+          .eq('instancia_id', instance.id)
+          .eq('telefone_contato', number);
+      }
+    } catch (dbErr) {
+      console.warn('Erro ao atualizar etiqueta no banco local:', dbErr);
+    }
 
     return NextResponse.json({ success: true, data });
   } catch (err: any) {
