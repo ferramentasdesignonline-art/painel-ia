@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { RefreshCw, Pencil, Check, X, ShieldBan } from "lucide-react"
+import { RefreshCw, Pencil, Check, X, ShieldBan, Tag, Plus } from "lucide-react"
 import { LeadChat, ChatMessage } from "./LeadChat"
 import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
@@ -90,6 +90,79 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated, isSemIA: prop
   const [etapas, setEtapas] = useState<any[]>([])
   const [editEtapaId, setEditEtapaId] = useState("")
   const [salvandoEdicao, setSalvandoEdicao] = useState(false)
+
+  const [localTags, setLocalTags] = useState<{ id: string; nome: string; cor: string }[]>(lead?.tags || [])
+  const [etiquetasDisponiveis, setEtiquetasDisponiveis] = useState<any[]>([])
+  const [loadingEtiquetas, setLoadingEtiquetas] = useState(false)
+  const [popoverEtiquetasAberto, setPopoverEtiquetasAberto] = useState(false)
+  const [salvandoEtiquetaId, setSalvandoEtiquetaId] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLocalTags(lead?.tags || [])
+  }, [lead?.tags, lead?.id])
+
+  const fetchEtiquetas = async () => {
+    try {
+      setLoadingEtiquetas(true)
+      const res = await fetch('/api/leads/etiquetas')
+      if (res.ok) {
+        const data = await res.json()
+        setEtiquetasDisponiveis(data.etiquetas || [])
+      }
+    } catch (e) {
+      console.error('Erro ao buscar etiquetas disponíveis:', e)
+    } finally {
+      setLoadingEtiquetas(false)
+    }
+  }
+
+  const handleToggleEtiqueta = async (etiqueta: { id: string; labelid: string; nome: string; cor: string }) => {
+    if (!lead) return
+    const isAlreadyTagged = (localTags || []).some(t => {
+      const cleanT = String(t.id).replace(/^wa-/, '')
+      return cleanT === etiqueta.labelid || t.nome.toLowerCase() === etiqueta.nome.toLowerCase()
+    })
+    const action = isAlreadyTagged ? 'remove' : 'add'
+    setSalvandoEtiquetaId(etiqueta.labelid)
+
+    try {
+      const res = await fetch('/api/leads/etiquetas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId: lead.id,
+          telefone: lead.telefone,
+          labelId: etiqueta.labelid,
+          action
+        })
+      })
+
+      if (res.ok) {
+        let updatedTags = [...(localTags || [])]
+        if (action === 'add') {
+          updatedTags.push({
+            id: `wa-${etiqueta.labelid}`,
+            nome: etiqueta.nome,
+            cor: etiqueta.cor,
+          })
+        } else {
+          updatedTags = updatedTags.filter(t => {
+            const cleanT = String(t.id).replace(/^wa-/, '')
+            return cleanT !== etiqueta.labelid && t.nome.toLowerCase() !== etiqueta.nome.toLowerCase()
+          })
+        }
+        setLocalTags(updatedTags)
+        lead.tags = updatedTags
+        if (onLeadUpdated) {
+          onLeadUpdated(lead.id, { tags: updatedTags })
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao atualizar etiqueta do lead:', err)
+    } finally {
+      setSalvandoEtiquetaId(null)
+    }
+  }
 
   const formatarTelefone = (tel?: string | null) => {
     if (!tel) return '-';
@@ -413,36 +486,115 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated, isSemIA: prop
                </div>
              </div>
 
-             {/* Etiquetas (Tags) */}
-             <div className="space-y-2">
-               <div className="flex items-center justify-between border-b pb-2">
-                 <h3 className="font-semibold text-base text-gray-900">Etiquetas (Tags)</h3>
-                 {/* Por enquanto apenas um botão visual que podemos expandir depois com um Popover de seleção */}
-                 <Button variant="ghost" size="sm" className="h-6 text-[10px] uppercase font-bold text-indigo-600 hover:bg-indigo-50 px-2" onClick={() => alert('Em breve! O gestor precisa rodar o script SQL para ativarmos o painel de criação de Tags.')}>
-                   + Adicionar
-                 </Button>
-               </div>
-               <div className="flex flex-wrap gap-2 pt-1">
-                 {lead.tags && lead.tags.length > 0 ? (
-                   lead.tags.map(tag => {
-                     const isHex = tag.cor?.startsWith('#');
-                     return (
-                       <span
-                         key={tag.id}
-                         className={cn("px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border shadow-xs", !isHex && tag.cor)}
-                         style={isHex ? { backgroundColor: `${tag.cor}18`, borderColor: `${tag.cor}55`, color: tag.cor } : undefined}
-                       >
-                         {tag.nome}
-                       </span>
-                     );
-                   })
-                 ) : (
-                   <p className="text-xs text-gray-400 italic">Nenhuma etiqueta adicionada.</p>
-                 )}
-               </div>
-             </div>
+                           {/* Etiquetas (Tags) */}
+              <div className="space-y-2 relative">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h3 className="font-semibold text-base text-gray-900 flex items-center gap-1.5">
+                    <Tag className="w-4 h-4 text-indigo-600" />
+                    Etiquetas (WhatsApp)
+                  </h3>
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const novoEstado = !popoverEtiquetasAberto;
+                        setPopoverEtiquetasAberto(novoEstado);
+                        if (novoEstado && !etiquetasDisponiveis.length) {
+                          fetchEtiquetas();
+                        }
+                      }}
+                      className="h-6 text-[11px] uppercase font-bold text-indigo-600 hover:bg-indigo-50 px-2.5 rounded-lg border border-indigo-100 flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Adicionar
+                    </Button>
 
-             {/* Canal de Atendimento & Anúncio de Origem */}
+                    {/* Popover flutuante de seleção de etiquetas */}
+                    {popoverEtiquetasAberto && (
+                      <div className="absolute right-0 top-full mt-1.5 w-72 max-h-72 overflow-y-auto bg-white rounded-2xl shadow-xl border border-gray-100 p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                        <div className="px-2 py-1.5 border-b border-gray-100 flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Etiquetas da Loja</span>
+                          <button onClick={() => setPopoverEtiquetasAberto(false)} className="text-gray-400 hover:text-gray-600 p-0.5">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {loadingEtiquetas ? (
+                          <div className="py-6 text-center text-xs text-gray-400 flex items-center justify-center gap-2">
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
+                            <span>Carregando etiquetas...</span>
+                          </div>
+                        ) : etiquetasDisponiveis.length === 0 ? (
+                          <div className="py-6 text-center text-xs text-gray-400 italic">Nenhuma etiqueta encontrada.</div>
+                        ) : (
+                          <div className="space-y-1 py-1">
+                            {etiquetasDisponiveis.map(lbl => {
+                              const isSelected = (localTags || []).some(t => {
+                                const cleanT = String(t.id).replace(/^wa-/, '');
+                                return cleanT === lbl.labelid || t.nome.toLowerCase() === lbl.nome.toLowerCase();
+                              });
+                              const isSaving = salvandoEtiquetaId === lbl.labelid;
+                              return (
+                                <button
+                                  key={lbl.id}
+                                  type="button"
+                                  onClick={() => handleToggleEtiqueta(lbl)}
+                                  disabled={isSaving}
+                                  className={cn(
+                                    "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold text-left transition-all",
+                                    isSelected
+                                      ? "bg-indigo-50/70 text-indigo-900 border border-indigo-100"
+                                      : "hover:bg-gray-50 text-gray-700"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: lbl.cor || '#6366f1' }} />
+                                    <span className="truncate">{lbl.nome}</span>
+                                  </div>
+                                  {isSaving ? (
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-gray-400 shrink-0" />
+                                  ) : isSelected ? (
+                                    <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                  ) : null}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {localTags && localTags.length > 0 ? (
+                    localTags.map(tag => {
+                      const isHex = tag.cor?.startsWith('#');
+                      const cleanId = String(tag.id).replace(/^wa-/, '');
+                      return (
+                        <span
+                          key={tag.id}
+                          className={cn("group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border shadow-xs transition-all", !isHex && tag.cor)}
+                          style={isHex ? { backgroundColor: `${tag.cor}18`, borderColor: `${tag.cor}55`, color: tag.cor } : undefined}
+                        >
+                          <span>{tag.nome}</span>
+                          <button
+                            type="button"
+                            title="Remover etiqueta"
+                            onClick={() => handleToggleEtiqueta({ id: cleanId, labelid: cleanId, nome: tag.nome, cor: tag.cor })}
+                            className="opacity-40 group-hover:opacity-100 hover:text-red-600 transition-opacity ml-0.5 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">Nenhuma etiqueta adicionada.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Canal de Atendimento & Anúncio de Origem */}
              <div className="space-y-3">
                <h3 className="font-semibold text-base text-gray-900 border-b pb-2">Origem & Anúncio</h3>
                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
