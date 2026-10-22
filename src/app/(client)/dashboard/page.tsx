@@ -1188,8 +1188,17 @@ export default function ClientDashboardPage() {
       <LeadDrawer
         lead={selectedLead}
         isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
+        onClose={() => {
+          setIsDrawerOpen(false)
+          fetchData()
+        }}
         isSemIA={isSemIA}
+        onLeadUpdated={(leadId, updates) => {
+          setAllLeads(prev => prev.map(l => (l.id === leadId || String(l.original_id) === String(leadId)) ? { ...l, ...updates } : l))
+          if (selectedLead && (selectedLead.id === leadId || String(selectedLead.original_id) === String(leadId))) {
+            setSelectedLead(prev => prev ? { ...prev, ...updates } : null)
+          }
+        }}
       />
     </div>
   )

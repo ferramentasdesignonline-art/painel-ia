@@ -138,6 +138,19 @@ export async function getClientWhatsappLabelsData(clientConfig: any): Promise<{
                   .ilike('telefone', `%${tailPhone}%`);
               })
             ).catch(dbErr => console.warn('Aviso: sync whatsapp_labels na tabela de leads:', dbErr));
+          } else if (nomeInstancia && labeledChats.length > 0) {
+            // Cliente sem IA (leads ficam em wacloud_contatos)
+            Promise.allSettled(
+              labeledChats.map((c: any) => {
+                const cleanPhone = String(c.wa_chatid || '').split('@')[0].replace(/\D/g, '');
+                const tailPhone = cleanPhone.slice(-8);
+                return wacloudAdmin
+                  .from('wacloud_contatos')
+                  .update({ whatsapp_labels: c.wa_label, atualizado_em: new Date().toISOString() })
+                  .eq('nome_instancia', nomeInstancia)
+                  .ilike('telefone_contato', `%${tailPhone}%`);
+              })
+            ).catch(dbErr => console.warn('Aviso: sync whatsapp_labels em wacloud_contatos:', dbErr));
           }
         } catch (syncErr) {
           console.warn('Aviso no Lazy-Sync da Uazapi:', syncErr);
@@ -145,8 +158,8 @@ export async function getClientWhatsappLabelsData(clientConfig: any): Promise<{
       }
     }
 
-    // 3. Fallback: carregar contatos com etiquetas de wacloud_contatos (para clientes sem IA)
-    if (nomeInstancia && mapaWhatsappLabels.size === 0) {
+    // 3. Complementar com contatos do banco wacloud_contatos (para preencher qualquer contato que não estava no lote recente)
+    if (nomeInstancia) {
       const { data: chunk } = await wacloudAdmin
         .from('wacloud_contatos')
         .select('telefone_contato, whatsapp_labels')
@@ -157,11 +170,13 @@ export async function getClientWhatsappLabelsData(clientConfig: any): Promise<{
       for (const cc of chunk || []) {
         if (cc.telefone_contato && Array.isArray(cc.whatsapp_labels) && cc.whatsapp_labels.length > 0) {
           const rawTel = String(cc.telefone_contato).replace(/\D/g, '');
-          mapaWhatsappLabels.set(rawTel, cc.whatsapp_labels);
-          if (rawTel.startsWith('55')) {
-            mapaWhatsappLabels.set(rawTel.slice(2), cc.whatsapp_labels);
-          } else {
-            mapaWhatsappLabels.set(`55${rawTel}`, cc.whatsapp_labels);
+          if (!mapaWhatsappLabels.has(rawTel)) {
+            mapaWhatsappLabels.set(rawTel, cc.whatsapp_labels);
+            if (rawTel.startsWith('55')) {
+              mapaWhatsappLabels.set(rawTel.slice(2), cc.whatsapp_labels);
+            } else {
+              mapaWhatsappLabels.set(`55${rawTel}`, cc.whatsapp_labels);
+            }
           }
         }
       }

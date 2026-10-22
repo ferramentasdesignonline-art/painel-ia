@@ -167,55 +167,75 @@ export async function POST(request: Request) {
     const token = instanciaMatch?.token || clientConfig.whatsapp_token;
     const nomeInstancia = instanciaMatch?.nome_instancia || clientConfig.nome_instancia || clientConfig.whatsapp_instancia;
 
-    // 1. Atualizar em wacloud_contatos
-    let contatosQuery = wacloudAdmin
-      .from('wacloud_contatos')
-      .select('id, whatsapp_labels, telefone_contato')
-      .or(`telefone_contato.eq.${rawPhone},telefone_contato.eq.${rawPhone.replace(/^55/, '')}`);
-
-    if (nomeInstancia) {
-      contatosQuery = contatosQuery.eq('nome_instancia', nomeInstancia);
-    }
-
-    const { data: contatos } = await contatosQuery;
-    let newLabelsArray: string[] = [];
-
-    if (contatos && contatos.length > 0) {
-      for (const c of contatos) {
-        const curLabels: string[] = Array.isArray(c.whatsapp_labels) ? [...c.whatsapp_labels] : [];
-        if (action === 'add') {
-          const exists = curLabels.some(l => {
-            const lid = String(l).includes(':') ? String(l).split(':')[1] : String(l);
-            return lid === cleanLabelId;
-          });
-          if (!exists) {
-            curLabels.push(String(labelId));
-          }
-        } else {
-          // remove
-          const filtered = curLabels.filter(l => {
-            const lid = String(l).includes(':') ? String(l).split(':')[1] : String(l);
-            return lid !== cleanLabelId;
-          });
-          curLabels.length = 0;
-          curLabels.push(...filtered);
-        }
-
-        newLabelsArray = curLabels;
-        await wacloudAdmin
-          .from('wacloud_contatos')
-          .update({ whatsapp_labels: curLabels, atualizado_em: new Date().toISOString() })
-          .eq('id', c.id);
-      }
-    } else {
-      // Se não encontrou no wacloud_contatos, prepara lista simples
-      newLabelsArray = action === 'add' ? [cleanLabelId] : [];
-    }
-
-    // 2. Chamar Uazapi /chat/labels para sincronizar direto no WhatsApp
+    // 1. Obter etiquetas atuais (preferencialmente direto da UAZAPI para não sobrescrever nem perder etiquetas existentes)
+    let currentLabels: string[] = [];
     if (token) {
       try {
-        const payloadLabels = newLabelsArray.map(l => String(l).includes(':') ? String(l).split(':')[1] : String(l));
+        const uazRes = await fetch(`${WACLOUD_CONFIG.uazapiBaseUrl}/chat/find`, {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json', token },
+          body: JSON.stringify({ wa_chatid: `${rawPhone}@s.whatsapp.net` })
+        });
+        const uazData = await uazRes.json();
+        const chat = uazData.chats?.[0];
+        if (chat && Array.isArray(chat.wa_label)) {
+          currentLabels = chat.wa_label.map((l: any) => String(l).includes(':') ? String(l).split(':')[1] : String(l));
+        }
+      } catch (err) {
+        console.warn('Erro ao consultar chat na Uazapi:', err);
+      }
+    }
+
+    const tailPhone = rawPhone.slice(-8);
+
+    // Se a Uazapi não retornou labels, tenta pegar do banco
+    if (currentLabels.length === 0) {
+      if (clientConfig.tabela_leads) {
+        try {
+          const { createClient } = await import('@supabase/supabase-js');
+          const clientDb = createClient(
+            clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!
+          );
+          const { data: leadRow } = await clientDb
+            .from(clientConfig.tabela_leads)
+            .select('whatsapp_labels')
+            .ilike('telefone', `%${tailPhone}%`)
+            .limit(1)
+            .maybeSingle();
+
+          if (leadRow && Array.isArray(leadRow.whatsapp_labels)) {
+            currentLabels = leadRow.whatsapp_labels.map((l: any) => String(l).includes(':') ? String(l).split(':')[1] : String(l));
+          }
+        } catch (dbErr) {
+          console.warn('Erro ao buscar lead no banco do cliente:', dbErr);
+        }
+      } else {
+        const { data: contatoRow } = await wacloudAdmin
+          .from('wacloud_contatos')
+          .select('whatsapp_labels')
+          .ilike('telefone_contato', `%${tailPhone}%`)
+          .limit(1)
+          .maybeSingle();
+
+        if (contatoRow && Array.isArray(contatoRow.whatsapp_labels)) {
+          currentLabels = contatoRow.whatsapp_labels.map((l: any) => String(l).includes(':') ? String(l).split(':')[1] : String(l));
+        }
+      }
+    }
+
+    // 2. Adicionar ou remover a etiqueta desejada
+    const setLabels = new Set(currentLabels);
+    if (action === 'add') {
+      setLabels.add(cleanLabelId);
+    } else {
+      setLabels.delete(cleanLabelId);
+    }
+    const finalLabels = Array.from(setLabels);
+
+    // 3. Chamar Uazapi /chat/labels para sincronizar direto no WhatsApp
+    if (token) {
+      try {
         await fetch(`${WACLOUD_CONFIG.uazapiBaseUrl}/chat/labels`, {
           method: 'POST',
           headers: {
@@ -225,7 +245,7 @@ export async function POST(request: Request) {
           },
           body: JSON.stringify({
             number: rawPhone,
-            labelids: payloadLabels,
+            labelids: finalLabels,
           }),
         });
       } catch (uazapiErr) {
@@ -233,7 +253,34 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, whatsapp_labels: newLabelsArray });
+    // 4. Atualizar no banco correto
+    if (clientConfig.tabela_leads) {
+      try {
+        const { createClient } = await import('@supabase/supabase-js');
+        const clientDb = createClient(
+          clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        await clientDb
+          .from(clientConfig.tabela_leads)
+          .update({ whatsapp_labels: finalLabels })
+          .ilike('telefone', `%${tailPhone}%`);
+      } catch (err) {
+        console.warn('Erro ao atualizar whatsapp_labels no banco do cliente:', err);
+      }
+    } else {
+      let updateQuery = wacloudAdmin
+        .from('wacloud_contatos')
+        .update({ whatsapp_labels: finalLabels, atualizado_em: new Date().toISOString() })
+        .ilike('telefone_contato', `%${tailPhone}%`);
+
+      if (nomeInstancia) {
+        updateQuery = updateQuery.eq('nome_instancia', nomeInstancia);
+      }
+      await updateQuery;
+    }
+
+    return NextResponse.json({ success: true, whatsapp_labels: finalLabels });
   } catch (err: any) {
     console.error('Erro em POST /api/leads/etiquetas:', err);
     return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 });
