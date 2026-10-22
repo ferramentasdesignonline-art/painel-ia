@@ -179,9 +179,10 @@ export async function GET(request: Request) {
       .select('id, nome_instancia, token')
       .limit(50);
 
-    // Prioriza correspondência exata por cliente.nome_instancia
-    let instanciaMatch = cliente.nome_instancia
-      ? instancias?.find(i => normalizeStr(i.nome_instancia) === normalizeStr(cliente.nome_instancia))
+    // Prioriza correspondência exata por cliente.nome_instancia ou cliente.whatsapp_instancia
+    const instConfigNorm = normalizeStr(cliente.nome_instancia || cliente.whatsapp_instancia || '');
+    let instanciaMatch = instConfigNorm
+      ? instancias?.find(i => normalizeStr(i.nome_instancia) === instConfigNorm)
       : null;
 
     if (!instanciaMatch) {

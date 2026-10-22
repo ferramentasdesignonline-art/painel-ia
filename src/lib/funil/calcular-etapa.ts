@@ -94,7 +94,18 @@ export function calcularEtapaPorLabels(
       return 'oportunidade';
     }
 
-    // 5. Perdido | Qualificado (estritamente apenas etiqueta "Perdido | Qualificado")
+    // 5. Ficha Reprovada
+    if (nomesPresentes.some(n => 
+      n.includes('ficha reprovada') || 
+      n.includes('fichas reprovadas') || 
+      n.includes('finan. reprov') || 
+      n.includes('simulacao reprovada') || 
+      n.includes('simulação reprovada')
+    )) {
+      return 'ficha_reprovada';
+    }
+
+    // 6. Perdido | Qualificado (estritamente apenas etiqueta "Perdido | Qualificado")
     if (nomesPresentes.some(n => 
       n.includes('perdido | qualificado') || 
       n.includes('perdido qualificado')
@@ -102,28 +113,30 @@ export function calcularEtapaPorLabels(
       return 'perdido_qualificado';
     }
 
-    // 6. Perdido | Desqualificado | Sem resposta
+    // 7. Perdido | Desqualificado | Sem resposta
     if (nomesPresentes.some(n => 
-      n.includes('desqualificado')
+      n.includes('desqualificado') ||
+      n.includes('desistiu')
     )) {
       return 'perdido_desqualificado';
     }
 
-    // 7. Em atendimento | Recontatar
-    if (nomesPresentes.some(n => n.includes('em atendimento') || n.includes('recontatar') || n.includes('recontratar') || n.includes('ficha reprovada') || n.includes('interessado'))) {
+    // 8. Em atendimento | Recontatar
+    if (nomesPresentes.some(n => n.includes('em atendimento') || n.includes('recontatar') || n.includes('recontratar') || n.includes('interessado'))) {
       return 'em_atendimento';
     }
   }
 
-  // Fallback por IDs padrão das instâncias
+  // Fallback por IDs padrão das instâncias (Auto Prosperitá, Finez, etc.)
   const idsSet = new Set(ids);
-  if (idsSet.has('52')) return 'cliente';
-  if (idsSet.has('54')) return 'visita_realizada';
-  if (idsSet.has('53') || idsSet.has('6')) return 'visita_agendada';
-  if (idsSet.has('55')) return 'oportunidade';
-  if (idsSet.has('59')) return 'perdido_qualificado';
-  if (idsSet.has('58')) return 'perdido_desqualificado';
-  if (idsSet.has('56') || idsSet.has('57') || idsSet.has('50')) return 'em_atendimento';
+  if (idsSet.has('52') || idsSet.has('27')) return 'cliente';
+  if (idsSet.has('54') || idsSet.has('29')) return 'visita_realizada';
+  if (idsSet.has('53') || idsSet.has('28') || idsSet.has('6')) return 'visita_agendada';
+  if (idsSet.has('55') || idsSet.has('30')) return 'oportunidade';
+  if (idsSet.has('57') || idsSet.has('32') || idsSet.has('47') || idsSet.has('26')) return 'ficha_reprovada';
+  if (idsSet.has('59') || idsSet.has('34')) return 'perdido_qualificado';
+  if (idsSet.has('58') || idsSet.has('33') || idsSet.has('48')) return 'perdido_desqualificado';
+  if (idsSet.has('56') || idsSet.has('31') || idsSet.has('50') || idsSet.has('4')) return 'em_atendimento';
 
   return null;
 }
