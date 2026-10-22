@@ -83,6 +83,8 @@ export async function GET(request: Request) {
       query = query.gte('created_at', dataLimite.toISOString());
     }
 
+    const { data: contatos } = await query.order('created_at', { ascending: false }).limit(10000);
+
     const contatosFiltrados = (contatos || []).filter(c =>
       c.is_group !== true &&
       !c.wa_chatid?.includes('@g.us') &&
@@ -272,6 +274,35 @@ export async function GET(request: Request) {
 
   const colunasPorId = new Map(colunas.map(c => [c.id, c]));
 
+  // Mapa de equivalências entre etapas lógicas da IA/etiquetas e as colunas físicas do funil
+  const getEtapaIdParaTipo = (tipo: string): string | undefined => {
+    if (etapaPorTipo.has(tipo)) return etapaPorTipo.get(tipo);
+
+    if (tipo === 'em_atendimento') {
+      return etapaPorTipo.get('ia_em_andamento') || etapaPorTipo.get('ia_sem_contato');
+    }
+    if (tipo === 'oportunidade') {
+      return etapaPorTipo.get('ia_qualificado') || etapaPorTipo.get('simulacao_pre_aprovada') || etapaPorTipo.get('simulacao_aprovada');
+    }
+    if (tipo === 'visita_agendada' || tipo === 'visita_realizada') {
+      return etapaPorTipo.get('visita_confirmada');
+    }
+    if (tipo === 'simulacao_aprovada') {
+      return etapaPorTipo.get('simulacao_aprovada') || etapaPorTipo.get('ia_qualificado');
+    }
+    if (tipo === 'simulacao_reprovada' || tipo === 'ficha_reprovada') {
+      return etapaPorTipo.get('simulacao_reprovada') || etapaPorTipo.get('ia_perda');
+    }
+    if (tipo === 'perdido_qualificado' || tipo === 'perdido_desqualificado') {
+      return etapaPorTipo.get('ia_perda');
+    }
+    if (tipo === 'cliente') {
+      return etapaPorTipo.get('simulacao_aprovada') || etapaPorTipo.get('ia_qualificado');
+    }
+
+    return undefined;
+  };
+
   // Mapa de IDs numéricos -> Nomes de etiquetas para inferência dinâmica de etapas
   const mapaNomes = new Map<string, string>();
   mapaUazapiLabels.forEach((val, key) => mapaNomes.set(key, val.name));
@@ -320,10 +351,10 @@ export async function GET(request: Request) {
     // Verificar se tem posição manual recente (30 dias)
     const etapaManualId = mapaPosicoesManuais.get(String(lead.id));
     const tipoCalculado = calcularEtapaIA(leadComLabels, funil.meta_followup || 5, mapaNomes);
-    const etapaIdCalculada = etapaPorTipo.get(tipoCalculado);
+    const etapaIdCalculada = etapaPorTipo.get(tipoCalculado) || getEtapaIdParaTipo(tipoCalculado);
     
     // Se foi movido manualmente, respeita. Caso contrário, lógica das etiquetas / IA.
-    const etapaIdFinal = etapaManualId || etapaIdCalculada;
+    const etapaIdFinal = etapaManualId || etapaIdCalculada || etapaPorTipo.get('ia_em_andamento') || colunas[0]?.id;
 
     if (etapaIdFinal && colunasPorId.has(etapaIdFinal)) {
       colunasPorId.get(etapaIdFinal)!.leads.push({

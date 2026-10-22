@@ -200,15 +200,6 @@ export function KanbanBoard() {
 
     if (!leadOriginal) return;
 
-    // BLOQUEIO: Leads com visita ou simulação não podem ir para perda ou followup
-    const colDestino = colunas.find(c => c.id === paraEtapaId);
-    if (colDestino && (colDestino.tipo === 'ia_perda' || colDestino.tipo === 'ia_followup')) {
-      if (leadOriginal.lead_visita_confirmada || leadOriginal.lead_simulacao_aprovada || leadOriginal.lead_simulacao_pre_aprovada || leadOriginal.lead_simulacao_reprovada) {
-        alert("Leads com visita agendada ou simulação não podem ser movidos para Follow-up ou Perda.");
-        return;
-      }
-    }
-
     const previousState = [...colunas];
 
     setColunas(prev => {
@@ -245,6 +236,13 @@ export function KanbanBoard() {
         }),
       });
       if (!res.ok) throw new Error('Falha ao mover');
+      const json = await res.json();
+      if (json.whatsapp_labels) {
+        setColunas(prev => prev.map(col => ({
+          ...col,
+          leads: col.leads.map(l => l.id.toString() === leadId ? { ...l, whatsapp_labels: json.whatsapp_labels } : l)
+        })));
+      }
     } catch (err) {
       console.error(err);
       setColunas(previousState);
@@ -284,15 +282,7 @@ export function KanbanBoard() {
       }
     }
 
-    if (leadOriginal) {
-      const colDestino = colunas.find(c => c.id === overContainer);
-      if (colDestino && (colDestino.tipo === 'ia_perda' || colDestino.tipo === 'ia_followup')) {
-        if (leadOriginal.lead_visita_confirmada || leadOriginal.lead_simulacao_aprovada || leadOriginal.lead_simulacao_pre_aprovada || leadOriginal.lead_simulacao_reprovada) {
-          // Não permite drag over visualmente
-          return;
-        }
-      }
-    }
+
 
     // Mover lead entre colunas no estado local (sem chamar API ainda)
     setColunas(prev => {
