@@ -138,8 +138,13 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated, isSemIA: prop
       })
 
       if (res.ok) {
+        const json = await res.json()
         let updatedTags = [...(localTags || [])]
         if (action === 'add') {
+          updatedTags = updatedTags.filter(t => {
+            const cleanT = String(t.id).replace(/^wa-/, '')
+            return cleanT !== etiqueta.labelid && t.nome.toLowerCase() !== etiqueta.nome.toLowerCase()
+          })
           updatedTags.push({
             id: `wa-${etiqueta.labelid}`,
             nome: etiqueta.nome,
@@ -153,8 +158,18 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated, isSemIA: prop
         }
         setLocalTags(updatedTags)
         lead.tags = updatedTags
+
+        const leadUpdates: any = { tags: updatedTags }
+        if (json.canal_origem !== undefined) {
+          leadUpdates.canal_origem = json.canal_origem
+          leadUpdates.canal_label_name = json.canal_label_name
+          leadUpdates.canal_color = json.canal_color
+          lead.canal_origem = json.canal_origem
+          lead.canal_label_name = json.canal_label_name
+          lead.canal_color = json.canal_color
+        }
         if (onLeadUpdated) {
-          onLeadUpdated(lead.id, { tags: updatedTags })
+          onLeadUpdated(lead.id, leadUpdates)
         }
       }
     } catch (err) {

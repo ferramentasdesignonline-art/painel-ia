@@ -253,7 +253,31 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. Atualizar no banco correto
+    // 4. Descobrir se há etiqueta de canal ativa no finalLabels
+    let novoCanalOrigem: string | null = null;
+    let novoCanalNome: string | null = null;
+    let novoCanalCor: string | null = null;
+
+    if (token) {
+      try {
+        const uazapiLabels = await fetchUazapiLabels(token);
+        for (const lbl of uazapiLabels || []) {
+          const cid = String(lbl.labelid || lbl.id).includes(':') 
+            ? String(lbl.labelid || lbl.id).split(':')[1] 
+            : String(lbl.labelid || lbl.id);
+          if (finalLabels.includes(cid) && lbl.name.toLowerCase().startsWith('canal')) {
+            novoCanalNome = lbl.name.replace(/^canal\s*\|\s*/i, '').trim();
+            novoCanalCor = lbl.colorHex || '#6366f1';
+            novoCanalOrigem = novoCanalNome.toLowerCase().replace(/\s+/g, '_');
+            break;
+          }
+        }
+      } catch (e) {
+        // ignora
+      }
+    }
+
+    // 5. Atualizar no banco correto
     if (clientConfig.tabela_leads) {
       try {
         const { createClient } = await import('@supabase/supabase-js');
@@ -261,17 +285,25 @@ export async function POST(request: Request) {
           clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
           clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!
         );
+        const updateData: any = { whatsapp_labels: finalLabels };
+        if (novoCanalOrigem) updateData.origem_lead = novoCanalOrigem;
         await clientDb
           .from(clientConfig.tabela_leads)
-          .update({ whatsapp_labels: finalLabels })
+          .update(updateData)
           .ilike('telefone', `%${tailPhone}%`);
       } catch (err) {
         console.warn('Erro ao atualizar whatsapp_labels no banco do cliente:', err);
       }
     } else {
+      const updateData: any = { 
+        whatsapp_labels: finalLabels, 
+        atualizado_em: new Date().toISOString() 
+      };
+      if (novoCanalOrigem) updateData.origem_lead = novoCanalOrigem;
+      
       let updateQuery = wacloudAdmin
         .from('wacloud_contatos')
-        .update({ whatsapp_labels: finalLabels, atualizado_em: new Date().toISOString() })
+        .update(updateData)
         .ilike('telefone_contato', `%${tailPhone}%`);
 
       if (nomeInstancia) {
@@ -280,7 +312,13 @@ export async function POST(request: Request) {
       await updateQuery;
     }
 
-    return NextResponse.json({ success: true, whatsapp_labels: finalLabels });
+    return NextResponse.json({ 
+      success: true, 
+      whatsapp_labels: finalLabels,
+      canal_origem: novoCanalOrigem,
+      canal_label_name: novoCanalNome,
+      canal_color: novoCanalCor
+    });
   } catch (err: any) {
     console.error('Erro em POST /api/leads/etiquetas:', err);
     return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 });

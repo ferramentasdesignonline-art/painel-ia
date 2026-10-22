@@ -845,8 +845,20 @@ export function KanbanBoard() {
       <LeadDrawer 
         lead={leadSelecionado}
         isOpen={!!leadSelecionado}
-        onClose={() => setLeadSelecionado(null)}
+        onClose={() => {
+          setLeadSelecionado(null)
+          carregarDados()
+        }}
         isSemIA={config.tipo_atendimento === 'sem_ia'}
+        onLeadUpdated={(leadId, updates) => {
+          setColunas(prev => prev.map(col => ({
+            ...col,
+            leads: col.leads.map(l => (l.id === leadId || String(l.original_id) === String(leadId)) ? { ...l, ...updates } : l)
+          })))
+          if (leadSelecionado && (leadSelecionado.id === leadId || String(leadSelecionado.original_id) === String(leadId))) {
+            setLeadSelecionado((prev: any) => prev ? { ...prev, ...updates } : null)
+          }
+        }}
       />
     </div>
   );

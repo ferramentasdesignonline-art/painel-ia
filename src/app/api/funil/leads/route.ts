@@ -375,12 +375,12 @@ export async function GET(request: Request) {
       for (const lead of col.leads) {
         const crmTags = tagsByLeadId.get(lead.id) || [];
         
-        // Converte as etiquetas de WhatsApp reais (que não sejam canal) em tags resumidas
+        // Converte as etiquetas de WhatsApp reais em tags do lead
         const waTags: any[] = [];
         for (const lId of (lead.whatsapp_labels || [])) {
           const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
           const def = mapaUazapiLabels.get(cleanId);
-          if (def && !def.name.toLowerCase().startsWith('canal')) {
+          if (def) {
             waTags.push({
               id: `wa-${cleanId}`,
               nome: def.name,
@@ -400,7 +400,7 @@ export async function GET(request: Request) {
         for (const lId of (lead.whatsapp_labels || [])) {
           const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
           const def = mapaUazapiLabels.get(cleanId);
-          if (def && !def.name.toLowerCase().startsWith('canal')) {
+          if (def) {
             waTags.push({
               id: `wa-${cleanId}`,
               nome: def.name,

@@ -160,22 +160,35 @@ export async function GET(request: Request) {
         ? lead.whatsapp_labels
         : (mapaWhatsappLabels.get(phoneClean) || []);
 
-      // Descobrir Canal de Atendimento (via campo origem_lead ou etiqueta WhatsApp 'Canal | ...')
-      let canal_origem: string = lead.origem_lead || '';
+      // Descobrir Canal de Atendimento (prioridade para etiqueta WhatsApp 'Canal | ...')
+      let canal_origem: string = '';
       let canal_label_name: string | null = null;
       let canal_color: string | null = null;
 
-      if (!canal_origem) {
-        for (const lId of leadWaLabels) {
-          const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
-          const def = mapaUazapiLabels.get(cleanId);
-          if (def && def.name.toLowerCase().startsWith('canal')) {
-            canal_label_name = def.name.replace(/^canal\s*\|\s*/i, '').trim();
-            canal_color = def.colorHex;
-            canal_origem = canal_label_name.toLowerCase().replace(/\s+/g, '_');
-            break;
-          }
+      for (const lId of leadWaLabels) {
+        const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
+        const def = mapaUazapiLabels.get(cleanId);
+        if (def && def.name.toLowerCase().startsWith('canal')) {
+          canal_label_name = def.name.replace(/^canal\s*\|\s*/i, '').trim();
+          canal_color = def.colorHex;
+          canal_origem = canal_label_name.toLowerCase().replace(/\s+/g, '_');
+          break;
         }
+      }
+
+      if (!canal_origem && lead.origem_lead) {
+        canal_origem = lead.origem_lead;
+        canal_label_name = (
+          canal_origem === 'facebook_ads' ? 'Facebook Ads' :
+          canal_origem === 'instagram_ads' ? 'Instagram Ads' :
+          canal_origem === 'meta_ads' ? 'Meta Ads' :
+          canal_origem === 'facebook_marketplace' ? 'Marketplace' :
+          canal_origem === 'mercado_livre' || canal_origem === 'mercadolivre' ? 'Mercado Livre' :
+          canal_origem === 'webmotors' ? 'WebMotors' :
+          canal_origem === 'olx' ? 'OLX' :
+          canal_origem === 'icarros' ? 'iCarros' :
+          canal_origem
+        );
       }
 
       if (!canal_origem) {
@@ -225,7 +238,7 @@ export async function GET(request: Request) {
       for (const lId of (lead.whatsapp_labels || [])) {
         const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
         const def = mapaUazapiLabels.get(cleanId);
-        if (def && !def.name.toLowerCase().startsWith('canal')) {
+        if (def) {
           waTags.push({
             id: `wa-${cleanId}`,
             nome: def.name,

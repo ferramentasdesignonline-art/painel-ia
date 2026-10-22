@@ -210,19 +210,32 @@ export async function GET(request: Request) {
 
       lead.whatsapp_labels = leadWaLabels;
 
-      let canal_origem: string = lead.origem_lead || '';
+      let canal_origem: string = '';
       let canal_label_name: string | null = null;
 
-      if (!canal_origem) {
-        for (const lId of leadWaLabels) {
-          const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
-          const nomeLbl = mapaNomes.get(cleanId);
-          if (nomeLbl && nomeLbl.toLowerCase().startsWith('canal')) {
-            canal_label_name = nomeLbl.replace(/^canal\s*\|\s*/i, '').trim();
-            canal_origem = canal_label_name.toLowerCase().replace(/\s+/g, '_');
-            break;
-          }
+      for (const lId of leadWaLabels) {
+        const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
+        const nomeLbl = mapaNomes.get(cleanId);
+        if (nomeLbl && nomeLbl.toLowerCase().startsWith('canal')) {
+          canal_label_name = nomeLbl.replace(/^canal\s*\|\s*/i, '').trim();
+          canal_origem = canal_label_name.toLowerCase().replace(/\s+/g, '_');
+          break;
         }
+      }
+
+      if (!canal_origem && lead.origem_lead) {
+        canal_origem = lead.origem_lead;
+        canal_label_name = (
+          canal_origem === 'facebook_ads' ? 'Facebook Ads' :
+          canal_origem === 'instagram_ads' ? 'Instagram Ads' :
+          canal_origem === 'meta_ads' ? 'Meta Ads' :
+          canal_origem === 'facebook_marketplace' ? 'Marketplace' :
+          canal_origem === 'mercado_livre' || canal_origem === 'mercadolivre' ? 'Mercado Livre' :
+          canal_origem === 'webmotors' ? 'WebMotors' :
+          canal_origem === 'olx' ? 'OLX' :
+          canal_origem === 'icarros' ? 'iCarros' :
+          canal_origem
+        );
       }
 
       if (!canal_origem) {

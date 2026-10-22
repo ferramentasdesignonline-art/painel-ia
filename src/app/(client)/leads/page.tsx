@@ -700,7 +700,10 @@ export default function LeadsPage() {
       <LeadDrawer
         lead={selectedLead}
         isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
+        onClose={() => {
+          setIsDrawerOpen(false)
+          fetchLeads()
+        }}
         isSemIA={tipoAtendimento === 'sem_ia'}
         onLeadUpdated={(leadId, updates) => {
           setLeads(prev => prev.map(l => (l.id === leadId || String(l.original_id) === String(leadId)) ? { ...l, ...updates } : l))
