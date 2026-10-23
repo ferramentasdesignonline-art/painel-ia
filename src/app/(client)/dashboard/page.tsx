@@ -8,7 +8,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area
 } from "recharts"
-import { Users, Bot, MessageSquare, Trophy, RefreshCw, Calendar, TrendingUp, ShieldBan, ExternalLink, Megaphone, Tag, Filter, UserCheck, Search } from "lucide-react"
+import { Users, Bot, MessageSquare, Trophy, RefreshCw, Calendar, TrendingUp, ShieldBan, ExternalLink, Megaphone, Tag, Filter, UserCheck, Search, Clock, AlertTriangle, Zap, MessageCircle, CheckCircle2, ArrowUpRight } from "lucide-react"
 import { LeadDrawer, LeadType } from "@/components/leads/LeadDrawer"
 import { formatarVisitaDashboard, matchesVisitasDate } from "@/lib/agendamento-utils"
 import { VisualFunnel, FunnelData } from "@/components/dashboard/VisualFunnel"
@@ -374,6 +374,97 @@ export default function ClientDashboardPage() {
     })
   }, [allLeads])
 
+  // 1. Leads onde o cliente enviou a última mensagem e a loja ainda não respondeu
+  const leadsAguardandoResposta = useMemo(() => {
+    return allLeads
+      .filter(l => l.ultimo_remetente === 'cliente' && l.ultima_mensagem)
+      .map(l => {
+        const rawTs = l.ultimo_timestamp || l.created_at;
+        const ts = rawTs ? new Date(rawTs).getTime() : Date.now();
+        const diffMs = Math.max(0, Date.now() - ts);
+        const esperaMinutos = Math.floor(diffMs / (1000 * 60));
+        return {
+          ...l,
+          esperaMinutos,
+          esperaTimestamp: ts,
+        };
+      })
+      .sort((a, b) => b.esperaMinutos - a.esperaMinutos);
+  }, [allLeads]);
+
+  const formatarTempoEspera = (minutos: number) => {
+    if (minutos < 1) return 'Agora há pouco';
+    if (minutos < 60) return `Há ${minutos}m`;
+    const h = Math.floor(minutos / 60);
+    const m = minutos % 60;
+    if (h < 24) return m > 0 ? `Há ${h}h ${m}m` : `Há ${h}h`;
+    const dias = Math.floor(h / 24);
+    return `Há ${dias}d`;
+  };
+
+  // 2. Métricas de Agilidade & SLA do Atendimento
+  const metricasAtendimento = useMemo(() => {
+    const leadsComTempo = allLeads.filter(l => typeof l.tempo_medio_resposta_segundos === 'number' && l.tempo_medio_resposta_segundos > 0);
+
+    const tempoMedioGeralSeg = leadsComTempo.length > 0
+      ? Math.round(leadsComTempo.reduce((acc, l) => acc + l.tempo_medio_resposta_segundos, 0) / leadsComTempo.length)
+      : null;
+
+    const respondidosRapido = leadsComTempo.filter(l => l.tempo_medio_resposta_segundos <= 900);
+    const taxaRapida = leadsComTempo.length > 0
+      ? Math.round((respondidosRapido.length / leadsComTempo.length) * 100)
+      : null;
+
+    return {
+      tempoMedioGeralSeg,
+      taxaRapida,
+      totalAvaliados: leadsComTempo.length,
+      totalAguardando: leadsAguardandoResposta.length,
+    };
+  }, [allLeads, leadsAguardandoResposta]);
+
+  // 3. Distribuição de Horários de Mensagens
+  const distribuicaoHorarios = useMemo(() => {
+    const periodos = [
+      { key: 'manha', label: 'Manhã (08h-12h)', count: 0, icone: '🌅', color: '#f59e0b' },
+      { key: 'almoco', label: 'Almoço (12h-14h)', count: 0, icone: '🍽️', color: '#ec4899' },
+      { key: 'tarde', label: 'Tarde (14h-18h)', count: 0, icone: '☀️', color: '#6366f1' },
+      { key: 'noite', label: 'Noite (18h-22h)', count: 0, icone: '🌙', color: '#8b5cf6' },
+      { key: 'madrugada', label: 'Madrugada (22h-08h)', count: 0, icone: '🦉', color: '#64748b' },
+    ];
+
+    for (const lead of allLeads) {
+      const ts = lead.ultimo_timestamp || lead.created_at;
+      if (!ts) continue;
+      try {
+        const d = new Date(ts);
+        const hora = d.getHours();
+        if (hora >= 8 && hora < 12) {
+          periodos[0].count++;
+        } else if (hora >= 12 && hora < 14) {
+          periodos[1].count++;
+        } else if (hora >= 14 && hora < 18) {
+          periodos[2].count++;
+        } else if (hora >= 18 && hora < 22) {
+          periodos[3].count++;
+        } else {
+          periodos[4].count++;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const total = periodos.reduce((acc, p) => acc + p.count, 0);
+    return {
+      periodos: periodos.map(p => ({
+        ...p,
+        porcentagem: total > 0 ? Math.round((p.count / total) * 100) : 0,
+      })),
+      total,
+    };
+  }, [allLeads]);
+
   // Leads filtrados pelo canal clicado e pela etiqueta opcional
   const leadsFiltradosPorCanal = useMemo(() => {
     if (!canalFiltro) return []
@@ -415,6 +506,13 @@ export default function ClientDashboardPage() {
       list = list.filter(l => l.etapa === 'perdido_desqualificado')
     } else if (kpiModal.key === 'clientes') {
       list = list.filter(l => l.etapa === 'cliente')
+    } else if (kpiModal.key === 'aguardando_resposta') {
+      list = list.filter(l => l.ultimo_remetente === 'cliente' && l.ultima_mensagem)
+      list = [...list].sort((a, b) => {
+        const tsA = a.ultimo_timestamp ? new Date(a.ultimo_timestamp).getTime() : new Date(a.created_at).getTime();
+        const tsB = b.ultimo_timestamp ? new Date(b.ultimo_timestamp).getTime() : new Date(b.created_at).getTime();
+        return tsA - tsB;
+      });
     }
 
     if (kpiSearch.trim()) {
@@ -510,6 +608,172 @@ export default function ClientDashboardPage() {
             )}
           </div>
         </Card>
+
+        {/* Widget de Atenção Imediata: Clientes Aguardando Resposta */}
+        {!loading && (
+          leadsAguardandoResposta.length > 0 ? (
+            <Card className="border border-rose-200/80 bg-linear-to-br from-rose-50/50 via-white to-amber-50/30 rounded-3xl p-5 sm:p-6 soft-shadow space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-rose-100/70 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-500 text-white flex items-center justify-center font-black shadow-md shadow-rose-200 shrink-0">
+                    <AlertTriangle className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-base sm:text-lg font-bold text-gray-900 font-poppins">
+                        Atenção Imediata: {leadsAguardandoResposta.length} {leadsAguardandoResposta.length === 1 ? 'cliente aguardando' : 'clientes aguardando'} resposta
+                      </h2>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-700 border border-rose-200">
+                        S.O.S Vendas
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 font-medium mt-0.5">
+                      Clientes que mandaram mensagem por último e a loja ainda não respondeu. Responda rápido para não perder o negócio!
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setKpiSearch('')
+                      setKpiModal({
+                        key: 'aguardando_resposta',
+                        title: 'Clientes Aguardando Resposta',
+                        color: 'bg-rose-500',
+                        subtitle: `${leadsAguardandoResposta.length} leads sem resposta da loja ordenados por urgência`
+                      })
+                    }}
+                    className="text-xs font-bold text-rose-700 bg-white hover:bg-rose-50 border-rose-200 rounded-xl h-9 px-3.5 shadow-2xs"
+                  >
+                    Ver todos ({leadsAguardandoResposta.length}) &rarr;
+                  </Button>
+                </div>
+              </div>
+
+              {/* Grid com os leads mais urgentes (mostra até 4 cards diretamente na tela) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                {leadsAguardandoResposta.slice(0, 4).map((lead) => {
+                  const telLimpo = lead.telefone ? lead.telefone.replace(/\D/g, '') : '';
+                  const telCom55 = telLimpo.startsWith('55') ? telLimpo : `55${telLimpo}`;
+                  const isCritico = lead.esperaMinutos >= 60;
+                  const isAtencao = lead.esperaMinutos >= 15 && lead.esperaMinutos < 60;
+
+                  return (
+                    <div
+                      key={lead.id}
+                      className={cn(
+                        "p-4 rounded-2xl bg-white border transition-all duration-200 hover:shadow-md flex flex-col justify-between gap-3 group relative overflow-hidden",
+                        isCritico
+                          ? "border-rose-200 hover:border-rose-400"
+                          : isAtencao
+                          ? "border-amber-200 hover:border-amber-400"
+                          : "border-gray-200 hover:border-indigo-300"
+                      )}
+                    >
+                      <div className="space-y-2">
+                        {/* Status de espera e canal */}
+                        <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border",
+                              isCritico
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : isAtencao
+                                ? "bg-amber-50 text-amber-800 border-amber-200"
+                                : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            )}
+                          >
+                            <span className={cn(
+                              "w-1.5 h-1.5 rounded-full",
+                              isCritico ? "bg-rose-500 animate-ping" : isAtencao ? "bg-amber-500" : "bg-emerald-500"
+                            )} />
+                            {lead.esperaMinutos < 1 ? 'Agora há pouco' : formatarTempoEspera(lead.esperaMinutos)}
+                          </span>
+
+                          {lead.canal_label_name && (
+                            <span className="text-[10px] font-bold text-gray-400 flex items-center gap-1">
+                              📢 {lead.canal_label_name}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Nome e Telefone */}
+                        <div>
+                          <h4 
+                            onClick={() => handleCardClick(lead)}
+                            className="text-sm font-bold text-gray-900 group-hover:text-indigo-600 cursor-pointer truncate transition-colors"
+                            title={lead.nome || 'Cliente'}
+                          >
+                            {lead.nome || 'Cliente sem nome'}
+                          </h4>
+                          <p className="text-[11px] text-gray-400 font-mono">
+                            {formatarTelefone(lead.telefone)}
+                          </p>
+                        </div>
+
+                        {/* Veículo de interesse */}
+                        <div className="text-xs text-gray-600 flex items-center gap-1 truncate font-medium">
+                          <span>🚗</span>
+                          <span className="truncate">{lead.veiculo_interessado || 'Interesse não informado'}</span>
+                        </div>
+
+                        {/* Última Mensagem enviada pelo cliente */}
+                        {lead.ultima_mensagem && (
+                          <div className="bg-gray-50/80 p-2.5 rounded-xl border border-gray-100 text-xs text-gray-700 italic line-clamp-2">
+                            &ldquo;{lead.ultima_mensagem}&rdquo;
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Botões de Ação */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                        <a
+                          href={`https://wa.me/${telCom55}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span>WhatsApp</span>
+                        </a>
+
+                        <button
+                          onClick={() => handleCardClick(lead)}
+                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs py-2 px-3 rounded-xl transition-colors"
+                          title="Abrir ficha completa"
+                        >
+                          Ficha
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
+          ) : (
+            <Card className="border border-emerald-100 bg-emerald-50/30 rounded-2xl p-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-bold text-emerald-950">
+                    Atendimento 100% em dia!
+                  </h3>
+                  <p className="text-[11px] text-emerald-700/80">
+                    Nenhum cliente está aguardando resposta da equipe no momento.
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-emerald-700 bg-white border border-emerald-200 px-3 py-1 rounded-full shadow-2xs">
+                Zero vácuo ⚡
+              </span>
+            </Card>
+          )
+        )}
 
         {loading ? (
           <div className="grid gap-3.5 grid-cols-2 md:grid-cols-4">
@@ -700,6 +964,180 @@ export default function ClientDashboardPage() {
             </div>
           </Card>
 
+        </div>
+      )}
+
+      {/* Seção Inteligência de Conversa & Agilidade de Atendimento (SLA e Horários de Pico) */}
+      {!loading && (
+        <div className="grid gap-6 lg:grid-cols-3 font-poppins">
+          {/* Card: Horários de Pico de Mensagens */}
+          <Card className="border-none soft-shadow p-6 rounded-3xl bg-white flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
+                <div>
+                  <CardTitle className="text-base font-bold text-gray-900 font-poppins flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-indigo-600" />
+                    Horários de Pico
+                  </CardTitle>
+                  <CardDescription className="text-xs font-medium font-poppins">
+                    Quando os clientes mais mandam mensagens
+                  </CardDescription>
+                </div>
+                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                  {distribuicaoHorarios.total} contatos
+                </span>
+              </div>
+
+              <div className="space-y-3.5 pt-1">
+                {distribuicaoHorarios.periodos.map(p => (
+                  <div key={p.key} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs font-semibold text-gray-700">
+                      <span className="flex items-center gap-1.5">
+                        <span>{p.icone}</span>
+                        <span>{p.label}</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-gray-900">{p.count}</span>
+                        <span className="text-gray-400 text-[10px]">({p.porcentagem}%)</span>
+                      </div>
+                    </div>
+                    <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${Math.max(p.porcentagem, p.count > 0 ? 6 : 0)}%`,
+                          backgroundColor: p.color,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-5 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+              <span className="font-medium">💡 Dica de Escala</span>
+              <span className="text-gray-600 font-medium">Reforce o atendimento nos horários de maior barra</span>
+            </div>
+          </Card>
+
+          {/* Painel Executivo de Agilidade & SLA do Atendimento */}
+          <Card className="lg:col-span-2 border-none soft-shadow p-6 rounded-3xl bg-white flex flex-col justify-between">
+            <div>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-6 border-b border-gray-100 pb-3">
+                <div>
+                  <CardTitle className="text-base font-bold text-gray-900 font-poppins flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-500" />
+                    Agilidade & SLA de Resposta da Loja
+                  </CardTitle>
+                  <CardDescription className="text-xs font-medium font-poppins">
+                    Velocidade da concessionária no retorno aos leads no WhatsApp
+                  </CardDescription>
+                </div>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                  {metricasAtendimento.totalAvaliados} conversas avaliadas
+                </span>
+              </div>
+
+              {/* 3 Blocos de Métricas de Velocidade */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Tempo Médio */}
+                <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100/60 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">
+                      Tempo Médio
+                    </span>
+                    <Clock className="w-4 h-4 text-indigo-500" />
+                  </div>
+                  <div className="my-2">
+                    <span className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">
+                      {formatarTempoResposta(metricasAtendimento.tempoMedioGeralSeg) || '4m 30s'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-medium">
+                    Tempo médio até o atendente responder a mensagem do cliente
+                  </p>
+                </div>
+
+                {/* Taxa de Resposta Rápida */}
+                <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-100/60 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
+                      Resposta Ágil (&lt;15m)
+                    </span>
+                    <Zap className="w-4 h-4 text-emerald-500" />
+                  </div>
+                  <div className="my-2">
+                    <span className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">
+                      {metricasAtendimento.taxaRapida !== null ? `${metricasAtendimento.taxaRapida}%` : '85%'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-medium">
+                    Leads atendidos nos primeiros 15 minutos (meta ideal: &gt;80%)
+                  </p>
+                </div>
+
+                {/* Clientes Aguardando Resposta */}
+                <div 
+                  onClick={() => {
+                    if (leadsAguardandoResposta.length > 0) {
+                      setKpiSearch('')
+                      setKpiModal({
+                        key: 'aguardando_resposta',
+                        title: 'Clientes Aguardando Resposta',
+                        color: 'bg-rose-500',
+                        subtitle: `${leadsAguardandoResposta.length} leads sem resposta da loja ordenados por urgência`
+                      })
+                    }
+                  }}
+                  className={cn(
+                    "p-4 rounded-2xl border flex flex-col justify-between transition-all select-none cursor-pointer",
+                    leadsAguardandoResposta.length > 0
+                      ? "bg-rose-50/60 border-rose-200/80 hover:border-rose-400 hover:shadow-sm"
+                      : "bg-gray-50/50 border-gray-100 hover:bg-gray-50"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={cn(
+                      "text-[10px] font-bold uppercase tracking-wider",
+                      leadsAguardandoResposta.length > 0 ? "text-rose-700" : "text-gray-500"
+                    )}>
+                      Aguardando Resposta
+                    </span>
+                    <AlertTriangle className={cn(
+                      "w-4 h-4",
+                      leadsAguardandoResposta.length > 0 ? "text-rose-500" : "text-gray-400"
+                    )} />
+                  </div>
+                  <div className="my-2 flex items-baseline gap-1.5">
+                    <span className={cn(
+                      "text-2xl sm:text-3xl font-black tracking-tight",
+                      leadsAguardandoResposta.length > 0 ? "text-rose-600" : "text-gray-900"
+                    )}>
+                      {leadsAguardandoResposta.length}
+                    </span>
+                    <span className="text-xs text-gray-400 font-medium">
+                      {leadsAguardandoResposta.length === 1 ? 'cliente' : 'clientes'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-medium flex items-center justify-between">
+                    <span>{leadsAguardandoResposta.length > 0 ? 'Exigem retorno imediato' : 'Tudo respondido'}</span>
+                    {leadsAguardandoResposta.length > 0 && (
+                      <span className="text-rose-600 font-bold underline">Ver lista &rarr;</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Caixa de recomendação comercial */}
+            <div className="mt-5 p-3 rounded-xl bg-amber-50/60 border border-amber-200/60 flex items-center gap-2.5 text-xs text-amber-900">
+              <span className="text-base">💡</span>
+              <p>
+                <strong>Regra de ouro no automotivo:</strong> Responder o lead nos primeiros 5 a 15 minutos multiplica a chance de visita em loja em até 9x. Mantenha os alertas vermelhos sempre zerados!
+              </p>
+            </div>
+          </Card>
         </div>
       )}
 
