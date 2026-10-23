@@ -382,7 +382,8 @@ export function KanbanBoard() {
 
   const formatarTelefone = (tel?: string | null) => {
     if (!tel) return '-';
-    let limpo = tel.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+    const str = String(tel || '');
+    let limpo = str.replace('@s.whatsapp.net', '').replace(/\D/g, '');
     if (!limpo) return tel.split('@')[0];
     if (limpo.startsWith('55')) limpo = limpo.slice(2);
     if (limpo.length === 11) return `(${limpo.slice(0, 2)}) ${limpo.slice(2, 7)}-${limpo.slice(7)}`;

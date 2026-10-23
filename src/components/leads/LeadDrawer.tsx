@@ -179,10 +179,11 @@ export function LeadDrawer({ lead, isOpen, onClose, onLeadUpdated, isSemIA: prop
     }
   }
 
-  const formatarTelefone = (tel?: string | null) => {
+  const formatarTelefone = (tel?: any) => {
     if (!tel) return '-';
-    let limpo = tel.replace('@s.whatsapp.net', '').replace(/\D/g, '');
-    if (!limpo) return tel.split('@')[0];
+    const str = String(tel);
+    let limpo = str.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+    if (!limpo) return str.split('@')[0];
     if (limpo.startsWith('55')) limpo = limpo.slice(2);
     if (limpo.length === 11) return `(${limpo.slice(0, 2)}) ${limpo.slice(2, 7)}-${limpo.slice(7)}`;
     if (limpo.length === 10) return `(${limpo.slice(0, 2)}) ${limpo.slice(2, 6)}-${limpo.slice(6)}`;

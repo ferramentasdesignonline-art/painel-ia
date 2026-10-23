@@ -14,6 +14,14 @@ import { ChannelIcon } from "@/components/common/ChannelIcon"
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos os status' },
+  { value: 'cliente', label: 'Cliente' },
+  { value: 'visita_realizada', label: 'Visita Realizada' },
+  { value: 'visita_agendada', label: 'Visita Agendada' },
+  { value: 'oportunidade', label: 'Oportunidade' },
+  { value: 'ficha_reprovada', label: 'Ficha Reprovada' },
+  { value: 'perdido_qualificado', label: 'Perdido Qualificado' },
+  { value: 'perdido_desqualificado', label: 'Perdido Desqualificado' },
+  { value: 'em_atendimento', label: 'Em Atendimento' },
   { value: 'ia_sem_contato', label: 'Sem contato' },
   { value: 'ia_em_andamento', label: 'Em andamento' },
   { value: 'ia_followup', label: 'Follow-up' },
@@ -22,19 +30,53 @@ const STATUS_OPTIONS = [
 ]
 
 const STATUS_STYLE: Record<string, string> = {
-  ia_sem_contato:  'bg-gray-50 text-gray-500 border-gray-200',
-  ia_em_andamento: 'bg-indigo-50 text-indigo-600 border-indigo-100',
-  ia_followup:     'bg-orange-50 text-orange-600 border-orange-100',
-  ia_qualificado:  'bg-emerald-50 text-emerald-600 border-emerald-100',
-  ia_perda:        'bg-red-50 text-red-500 border-red-100',
+  // Funil Principal
+  cliente:                 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  visita_realizada:        'bg-teal-50 text-teal-700 border-teal-200',
+  visita_agendada:         'bg-purple-50 text-purple-700 border-purple-200',
+  oportunidade:            'bg-blue-50 text-blue-700 border-blue-200',
+  ficha_reprovada:         'bg-rose-50 text-rose-700 border-rose-200',
+  perdido_qualificado:     'bg-amber-50 text-amber-700 border-amber-200',
+  perdido_desqualificado:  'bg-gray-100 text-gray-600 border-gray-200',
+  em_atendimento:          'bg-indigo-50 text-indigo-700 border-indigo-200',
+
+  // Legados e Específicos
+  ia_sem_contato:          'bg-gray-50 text-gray-500 border-gray-200',
+  ia_em_andamento:         'bg-indigo-50 text-indigo-600 border-indigo-100',
+  ia_followup:             'bg-orange-50 text-orange-600 border-orange-100',
+  ia_qualificado:          'bg-emerald-50 text-emerald-600 border-emerald-100',
+  ia_perda:                'bg-red-50 text-red-500 border-red-100',
+  visita_confirmada:       'bg-purple-50 text-purple-700 border-purple-200',
+  simulacao_pre_aprovada:  'bg-blue-50 text-blue-700 border-blue-200',
+  simulacao_aprovada:      'bg-emerald-50 text-emerald-700 border-emerald-200',
+  simulacao_reprovada:     'bg-rose-50 text-rose-700 border-rose-200',
+  manual:                  'bg-gray-50 text-gray-700 border-gray-200',
+  qualificado:             'bg-emerald-50 text-emerald-700 border-emerald-200',
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  ia_sem_contato:  'Sem contato',
-  ia_em_andamento: 'Em andamento',
-  ia_followup:     'Follow-up',
-  ia_qualificado:  'Qualificado',
-  ia_perda:        'Perda',
+  // Funil Principal
+  cliente:                 'Cliente',
+  visita_realizada:        'Visita Realizada',
+  visita_agendada:         'Visita Agendada',
+  oportunidade:            'Oportunidade',
+  ficha_reprovada:         'Ficha Reprovada',
+  perdido_qualificado:     'Perdido Qualificado',
+  perdido_desqualificado:  'Perdido Desqualificado',
+  em_atendimento:          'Em Atendimento',
+
+  // Legados e Específicos
+  ia_sem_contato:          'Sem contato',
+  ia_em_andamento:         'Em andamento',
+  ia_followup:             'Follow-up',
+  ia_qualificado:          'Qualificado',
+  ia_perda:                'Perda',
+  visita_confirmada:       'Visita Confirmada',
+  simulacao_pre_aprovada:  'Simulação Pré-Aprovada',
+  simulacao_aprovada:      'Simulação Aprovada',
+  simulacao_reprovada:     'Simulação Reprovada',
+  manual:                  'Lead Manual',
+  qualificado:             'Qualificado',
 }
 
 export default function LeadsPage() {
@@ -72,10 +114,11 @@ export default function LeadsPage() {
     );
   };
 
-  const formatarTelefone = (tel?: string | null) => {
+  const formatarTelefone = (tel?: any) => {
     if (!tel) return '-';
-    let limpo = tel.replace('@s.whatsapp.net', '').replace(/\D/g, '');
-    if (!limpo) return tel.split('@')[0];
+    const str = String(tel);
+    let limpo = str.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+    if (!limpo) return str.split('@')[0];
     if (limpo.startsWith('55')) limpo = limpo.slice(2);
     if (limpo.length === 11) return `(${limpo.slice(0, 2)}) ${limpo.slice(2, 7)}-${limpo.slice(7)}`;
     if (limpo.length === 10) return `(${limpo.slice(0, 2)}) ${limpo.slice(2, 6)}-${limpo.slice(6)}`;
@@ -84,22 +127,32 @@ export default function LeadsPage() {
 
   const formatTs = (ts?: string | null, opts?: Intl.DateTimeFormatOptions) => {
     if (!ts) return '-';
-    const d = new Date(ts);
-    if (isNaN(d.getTime())) return '-';
-    return d.toLocaleString('pt-BR', opts || { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+    try {
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return '-';
+      return d.toLocaleString('pt-BR', opts || { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '-';
+    }
   };
 
   const getStageKey = (lead: any): string => {
-    if (lead.origem === 'manual') {
+    if (lead?.etapa) return String(lead.etapa);
+    if (lead?.origem === 'manual') {
       if (lead.etapa_manual_nome?.toLowerCase() === 'qualificado') return 'qualificado';
       return 'manual';
     }
-    return calcularEtapaIA(lead);
+    try {
+      return calcularEtapaIA(lead);
+    } catch {
+      return 'em_atendimento';
+    }
   };
 
   const getStageName = (lead: any) => {
-    if (lead.origem === 'manual') return lead.etapa_manual_nome || 'Lead Manual';
-    return STATUS_LABEL[getStageKey(lead)] || 'Em andamento';
+    if (lead?.origem === 'manual') return lead.etapa_manual_nome || 'Lead Manual';
+    const key = getStageKey(lead);
+    return STATUS_LABEL[key] || 'Em Atendimento';
   };
 
   const fetchLeads = async () => {
@@ -107,7 +160,7 @@ export default function LeadsPage() {
     try {
       const res = await fetch('/api/leads')
       const json = await res.json()
-      if (json.data) setLeads(json.data)
+      if (json.data && Array.isArray(json.data)) setLeads(json.data)
       if (json.tipo_atendimento) setTipoAtendimento(json.tipo_atendimento)
     } catch (err) {
       console.error("Failed to fetch leads", err)
@@ -120,14 +173,14 @@ export default function LeadsPage() {
     const formattedLead: LeadType = {
       id: lead.id?.toString() || "",
       nome: lead.nome || "Cliente",
-      telefone: lead.telefone || lead.phone || "",
+      telefone: String(lead.telefone || lead.phone || ""),
       veiculo: lead.veiculo_interessado || lead.veiculo || lead.carro || "",
       vendedor: lead.vendedor_lead || "IA",
       status: getStageName(lead),
       origem: lead.origem || "ia",
-      ultimaMensagem: lead.ultima_mensagem || lead.updated_at || "-",
+      ultimaMensagem: typeof lead.ultima_mensagem === 'string' ? lead.ultima_mensagem : (lead.updated_at || "-"),
       createdAt: lead.created_at,
-      ultimaMensagemTs: lead.ultima_mensagem,
+      ultimaMensagemTs: typeof lead.ultima_mensagem === 'string' ? lead.ultima_mensagem : undefined,
       quantidadeFollowup: lead.quantidade_followup,
       leadFinalizado: lead.lead_finalizado === true,
       vendedorLead: lead.vendedor_lead || null,
@@ -143,10 +196,10 @@ export default function LeadsPage() {
       cpfCnpj: lead.cpf_cnpj || null,
       dataNascimento: lead.data_nascimento || null,
       veiculoTroca: lead.veiculo_troca || null,
-      endereco: lead.endereço || null,
+      endereco: lead.endereço || lead.endereco || null,
       possuiCnh: lead.possui_cnh,
       genero: lead.genero || null,
-      tags: lead.tags || [],
+      tags: Array.isArray(lead.tags) ? lead.tags : [],
       canal_origem: lead.canal_origem,
       canal_label_name: lead.canal_label_name,
       canal_color: lead.canal_color,
@@ -168,8 +221,8 @@ export default function LeadsPage() {
   const canaisDisponiveis = useMemo(() => {
     const map = new Map<string, { key: string; label: string; count: number }>();
     for (const l of leads) {
-      const key = l.canal_origem || 'desconhecido';
-      const label = l.canal_label_name || (
+      const key = String(l.canal_origem || 'desconhecido');
+      const label = String(l.canal_label_name || (
         key === 'facebook_ads' ? 'Facebook Ads' :
         key === 'instagram_ads' ? 'Instagram Ads' :
         key === 'meta_ads' ? 'Meta Ads' :
@@ -179,7 +232,7 @@ export default function LeadsPage() {
         key === 'olx' ? 'OLX' :
         key === 'icarros' ? 'iCarros' :
         'Direto / Desconhecido'
-      );
+      ));
       if (!map.has(key)) {
         map.set(key, { key, label, count: 0 });
       }
@@ -192,11 +245,15 @@ export default function LeadsPage() {
   const tagsDisponiveis = useMemo(() => {
     const map = new Map<string, { nome: string; count: number }>();
     for (const l of leads) {
-      for (const t of (l.tags || [])) {
-        if (!map.has(t.nome)) {
-          map.set(t.nome, { nome: t.nome, count: 0 });
+      if (!Array.isArray(l.tags)) continue;
+      for (const t of l.tags) {
+        if (!t) continue;
+        const nome = typeof t === 'string' ? t : (t.nome ? String(t.nome) : '');
+        if (!nome.trim()) continue;
+        if (!map.has(nome)) {
+          map.set(nome, { nome, count: 0 });
         }
-        map.get(t.nome)!.count += 1;
+        map.get(nome)!.count += 1;
       }
     }
     return Array.from(map.values()).sort((a, b) => b.count - a.count);
@@ -204,19 +261,25 @@ export default function LeadsPage() {
 
   const filtered = useMemo(() => {
     let result = leads.filter(l => {
+      const nomeStr = String(l.nome || '');
+      const telStr = String(l.telefone || l.phone || '');
+      const searchLower = search.toLowerCase();
       const matchSearch =
-        (l.nome || '').toLowerCase().includes(search.toLowerCase()) ||
-        (l.telefone || '').includes(search);
+        nomeStr.toLowerCase().includes(searchLower) ||
+        telStr.includes(search);
 
       const matchStatus = !filterStatus || getStageKey(l) === filterStatus;
 
       // Multi-seleção de canais
-      const matchCanal = filterCanais.length === 0 || filterCanais.includes(l.canal_origem || 'desconhecido');
+      const lCanal = String(l.canal_origem || 'desconhecido');
+      const matchCanal = filterCanais.length === 0 || filterCanais.includes(lCanal);
 
       // Multi-seleção de tags
-      const matchTag = filterTags.length === 0 || (l.tags || []).some((t: any) =>
-        filterTags.some(ft => ft.toLowerCase() === t.nome.toLowerCase())
-      );
+      const matchTag = filterTags.length === 0 || (Array.isArray(l.tags) && l.tags.some((t: any) => {
+        if (!t) return false;
+        const tNome = typeof t === 'string' ? t : (t.nome ? String(t.nome) : '');
+        return filterTags.some(ft => ft.toLowerCase() === tNome.toLowerCase());
+      }));
 
       const matchData = (() => {
         const rawDate = sortBy === 'ultima_mensagem' ? (l.updated_at || l.created_at) : l.created_at;
@@ -575,17 +638,21 @@ export default function LeadsPage() {
 
                       {/* Etiquetas (WhatsApp & CRM) */}
                       <td className="px-5 py-3.5">
-                        {lead.tags && lead.tags.length > 0 ? (
+                        {Array.isArray(lead.tags) && lead.tags.length > 0 ? (
                           <div className="flex flex-wrap gap-1 max-w-[220px]">
-                            {lead.tags.map((tag: any) => {
-                              const isHex = tag.cor?.startsWith('#');
+                            {lead.tags.map((tag: any, idx: number) => {
+                              if (!tag) return null;
+                              const tagNome = typeof tag === 'string' ? tag : (tag.nome ? String(tag.nome) : '');
+                              if (!tagNome) return null;
+                              const tagCor = (typeof tag === 'object' && tag.cor) ? String(tag.cor) : '#6366f1';
+                              const isHex = tagCor.startsWith('#');
                               return (
                                 <span
-                                  key={tag.id}
-                                  className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", !isHex && tag.cor)}
-                                  style={isHex ? { backgroundColor: `${tag.cor}18`, borderColor: `${tag.cor}55`, color: tag.cor } : undefined}
+                                  key={tag.id || `tag-${idx}`}
+                                  className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border", !isHex && tagCor)}
+                                  style={isHex ? { backgroundColor: `${tagCor}18`, borderColor: `${tagCor}55`, color: tagCor } : undefined}
                                 >
-                                  {tag.nome}
+                                  {tagNome}
                                 </span>
                               );
                             })}
@@ -599,11 +666,11 @@ export default function LeadsPage() {
                       <td className="px-5 py-3.5">
                         {lead.anuncio_titulo || lead.anuncio_id ? (
                           <div className="flex flex-col gap-0.5 text-xs max-w-[200px]">
-                            <span className="font-bold text-gray-800 line-clamp-1">{lead.anuncio_titulo || 'Anúncio Meta'}</span>
+                            <span className="font-bold text-gray-800 line-clamp-1">{lead.anuncio_titulo ? String(lead.anuncio_titulo) : 'Anúncio Meta'}</span>
                             {lead.anuncio_id && (
-                              <span className="text-[10px] text-gray-400 font-mono">ID: {lead.anuncio_id}</span>
+                              <span className="text-[10px] text-gray-400 font-mono">ID: {String(lead.anuncio_id)}</span>
                             )}
-                            {lead.anuncio_url && (
+                            {lead.anuncio_url && typeof lead.anuncio_url === 'string' && (
                               <a
                                 href={lead.anuncio_url}
                                 target="_blank"
@@ -622,19 +689,28 @@ export default function LeadsPage() {
 
                       {/* Veículo de Interesse */}
                       <td className="px-5 py-3.5">
-                        <span className="text-sm font-semibold text-gray-700 line-clamp-2 max-w-[180px]">{lead.veiculo_interessado || '-'}</span>
+                        <span className="text-sm font-semibold text-gray-700 line-clamp-2 max-w-[180px]">{lead.veiculo_interessado ? String(lead.veiculo_interessado) : '-'}</span>
                       </td>
 
                       {/* Última Atividade */}
                       <td className="px-5 py-3.5">
                         <div className="flex flex-col">
-                          {(lead.ultima_mensagem && !lead.ultima_mensagem.startsWith('202')) || lead.notas ? (
-                            <span className="text-xs text-gray-600 line-clamp-1 max-w-[240px]">
-                              {lead.ultima_mensagem && !lead.ultima_mensagem.startsWith('202') 
-                                ? `"${lead.ultima_mensagem.substring(0, 40)}..."` 
-                                : lead.notas}
-                            </span>
-                          ) : null}
+                          {(() => {
+                            const msg = typeof lead.ultima_mensagem === 'string'
+                              ? lead.ultima_mensagem
+                              : (lead.ultima_mensagem && typeof lead.ultima_mensagem === 'object' ? JSON.stringify(lead.ultima_mensagem) : null);
+                            const notas = typeof lead.notas === 'string' ? lead.notas : null;
+                            const hasMsg = msg && !msg.startsWith('202');
+
+                            if (hasMsg || notas) {
+                              return (
+                                <span className="text-xs text-gray-600 line-clamp-1 max-w-[240px]">
+                                  {hasMsg ? `"${msg.substring(0, 40)}..."` : notas}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
                           <span className="text-[10px] font-bold text-gray-400 mt-1 uppercase">
                             Criado: {formatTs(lead.created_at, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} • 
                             Últ: {formatTs(lead.updated_at || lead.created_at, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
@@ -664,15 +740,19 @@ export default function LeadsPage() {
                             )}
                           </div>
                           {(() => {
-                            const vi = formatarVisitaDashboard(lead);
-                            if (!vi.hasAgendamento) return null;
-                            const badge = vi.badgeText ? `${vi.dataFormatada ? vi.dataFormatada.slice(0, 5) + ' • ' : ''}${vi.badgeText}` : vi.dataFormatada;
-                            return (
-                              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100 flex items-center gap-1 mt-0.5">
-                                <Calendar className="w-3 h-3 text-amber-600" />
-                                {badge}
-                              </span>
-                            );
+                            try {
+                              const vi = formatarVisitaDashboard(lead);
+                              if (!vi?.hasAgendamento) return null;
+                              const badge = vi.badgeText ? `${vi.dataFormatada ? vi.dataFormatada.slice(0, 5) + ' • ' : ''}${vi.badgeText}` : vi.dataFormatada;
+                              return (
+                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100 flex items-center gap-1 mt-0.5">
+                                  <Calendar className="w-3 h-3 text-amber-600" />
+                                  {badge}
+                                </span>
+                              );
+                            } catch {
+                              return null;
+                            }
                           })()}
                         </div>
                       </td>
