@@ -365,7 +365,7 @@ export function KanbanBoard() {
       cpfCnpj: (l as any).cpf_cnpj || null,
       dataNascimento: (l as any).data_nascimento || null,
       veiculoTroca: (l as any).veiculo_troca || null,
-      endereco: (l as any).endereço || null,
+      endereco: (l as any).endereco || (l as any).endereço || null,
       possuiCnh: (l as any).possui_cnh,
       genero: (l as any).genero || null,
       tags: l.tags || [],

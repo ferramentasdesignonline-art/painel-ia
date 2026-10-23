@@ -102,6 +102,14 @@ export async function GET(request: Request) {
           anuncio_url: c.anuncio_url || null,
           anuncio_descricao: c.anuncio_descricao || null,
           whatsapp_labels: Array.isArray(c.whatsapp_labels) ? c.whatsapp_labels : [],
+          email: c.email || null,
+          cpf_cnpj: c.cpf_cnpj || null,
+          data_nascimento: c.data_nascimento || null,
+          possui_cnh: c.possui_cnh !== undefined ? c.possui_cnh : null,
+          endereco: c.endereco || c.endereço || null,
+          endereço: c.endereco || c.endereço || null,
+          genero: c.genero || null,
+          valor_entrada: c.valor_entrada || null,
         };
       });
     } else {

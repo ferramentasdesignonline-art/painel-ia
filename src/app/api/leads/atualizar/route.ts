@@ -76,6 +76,14 @@ export async function POST(request: Request) {
       if ('lead_simulacao_aprovada' in novasInformacoes) payload.lead_simulacao_aprovada = Boolean(novasInformacoes.lead_simulacao_aprovada);
       if ('lead_simulacao_reprovada' in novasInformacoes) payload.lead_simulacao_reprovada = Boolean(novasInformacoes.lead_simulacao_reprovada);
       if ('lead_visita_confirmada' in novasInformacoes) payload.lead_visita_confirmada = Boolean(novasInformacoes.lead_visita_confirmada);
+      if ('email' in novasInformacoes) payload.email = novasInformacoes.email;
+      if ('cpf_cnpj' in novasInformacoes) payload.cpf_cnpj = novasInformacoes.cpf_cnpj;
+      if ('data_nascimento' in novasInformacoes) payload.data_nascimento = novasInformacoes.data_nascimento;
+      if ('possui_cnh' in novasInformacoes) payload.possui_cnh = novasInformacoes.possui_cnh !== null && novasInformacoes.possui_cnh !== undefined ? Boolean(novasInformacoes.possui_cnh) : null;
+      if ('endereco' in novasInformacoes) payload.endereco = novasInformacoes.endereco;
+      if ('endereço' in novasInformacoes) payload.endereco = novasInformacoes['endereço'];
+      if ('genero' in novasInformacoes) payload.genero = novasInformacoes.genero;
+      if ('valor_entrada' in novasInformacoes) payload.valor_entrada = novasInformacoes.valor_entrada;
 
       if ('data_agendamento' in novasInformacoes) {
         if (novasInformacoes.data_agendamento) {
