@@ -92,6 +92,35 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null
 }
 
+function formatarTempoResposta(segundos?: number | null): string | null {
+  if (segundos === null || segundos === undefined || isNaN(segundos)) return null;
+  if (segundos < 60) return `${segundos}s`;
+  const minutos = Math.floor(segundos / 60);
+  const segRestantes = segundos % 60;
+  if (minutos < 60) {
+    return segRestantes > 0 ? `${minutos}m ${segRestantes}s` : `${minutos}m`;
+  }
+  const horas = Math.floor(minutos / 60);
+  const minRestantes = minutos % 60;
+  return minRestantes > 0 ? `${horas}h ${minRestantes}m` : `${horas}h`;
+}
+
+function formatarHorarioMsg(timestamp?: string | null): string | null {
+  if (!timestamp) return null;
+  try {
+    const d = new Date(timestamp);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return null;
+  }
+}
+
 const KpiCard = ({ title, value, subtitle, icon: Icon, color, trend, onClick }: any) => (
   <Card 
     onClick={onClick}
@@ -175,7 +204,7 @@ export default function ClientDashboardPage() {
       cpfCnpj: lead.cpf_cnpj || null,
       dataNascimento: lead.data_nascimento || null,
       veiculoTroca: lead.veiculo_troca || null,
-      endereco: lead.endereço || null,
+      endereco: lead.endereco || lead.endereço || null,
       possuiCnh: lead.possui_cnh,
       genero: lead.genero || null,
       tags: lead.tags || [],
@@ -1089,7 +1118,7 @@ export default function ClientDashboardPage() {
 
       {/* Modal Interativo ao Clicar em Qualquer Card de KPI */}
       <Dialog open={!!kpiModal} onOpenChange={(open) => { if (!open) setKpiModal(null) }}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden font-poppins rounded-2xl">
+        <DialogContent className="max-w-4xl lg:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden font-poppins rounded-2xl">
           <DialogHeader className="p-6 pb-4 border-b border-gray-100 bg-gray-50/50">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1120,7 +1149,7 @@ export default function ClientDashboardPage() {
             </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-3">
+          <div className="flex-1 overflow-y-auto p-6 space-y-3.5">
             {leadsFiltradosPorKpi.length === 0 ? (
               <div className="text-center py-12 text-gray-400 text-sm">
                 Nenhum lead encontrado nesta categoria no período selecionado.
@@ -1130,54 +1159,158 @@ export default function ClientDashboardPage() {
                 <div
                   key={lead.id}
                   onClick={() => handleCardClick(lead)}
-                  className="p-4 rounded-xl border border-gray-100 bg-white hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-4 group"
+                  className="p-4 sm:p-5 rounded-2xl border border-gray-100 bg-white hover:border-indigo-300 hover:shadow-lg transition-all duration-200 cursor-pointer flex flex-col gap-3 group"
                 >
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors">
-                        {lead.nome || 'Cliente sem nome'}
-                      </span>
-                      <span className="text-xs text-gray-400 font-mono">
-                        {formatarTelefone(lead.telefone)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
-                      {lead.veiculo_interessado && (
-                        <span className="bg-gray-100 px-2 py-0.5 rounded text-gray-700 font-medium">
-                          🚗 {lead.veiculo_interessado}
-                        </span>
-                      )}
-                      {lead.canal_label_name && (
-                        <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium text-[11px]">
-                          📢 {lead.canal_label_name}
-                        </span>
-                      )}
-                      {lead.created_at && (
-                        <span className="text-gray-400 text-[11px]">
-                          {new Date(lead.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      )}
-                    </div>
-
-                    {lead.tags && lead.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {lead.tags.map((t: any, i: number) => (
-                          <span
-                            key={i}
-                            style={{ backgroundColor: `${t.cor}15`, color: t.cor || '#4f46e5' }}
-                            className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                          >
-                            {t.nome}
-                          </span>
-                        ))}
+                  {/* Linha Superior: Avatar, Nome, Telefone, Canal, Data e Ação */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-sm">
+                        {(lead.nome || 'C').slice(0, 2).toUpperCase()}
                       </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-base text-gray-900 group-hover:text-indigo-600 transition-colors truncate">
+                            {lead.nome || 'Cliente sem nome'}
+                          </span>
+                          <span className="text-xs text-gray-500 font-mono bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">
+                            {formatarTelefone(lead.telefone)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5 flex-wrap">
+                          {lead.canal_label_name && (
+                            <span 
+                              className="px-2 py-0.5 rounded-md font-bold text-[11px] uppercase tracking-wider border shrink-0"
+                              style={{
+                                backgroundColor: lead.canal_color ? `${lead.canal_color}15` : '#eef2ff',
+                                color: lead.canal_color || '#4f46e5',
+                                borderColor: lead.canal_color ? `${lead.canal_color}30` : '#e0e7ff',
+                              }}
+                            >
+                              📢 {lead.canal_label_name}
+                            </span>
+                          )}
+                          {lead.created_at && (
+                            <span className="text-[11px] text-gray-400">
+                              Criado em {formatarHorarioMsg(lead.created_at)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 group-hover:bg-indigo-600 group-hover:text-white transition-all px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-2xs">
+                        <span>Abrir ficha</span>
+                        <span className="group-hover:translate-x-0.5 transition-transform">&rarr;</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Badges de Informações do Lead (Veículo de Interesse, CPF, Nascimento, Entrada, Troca, CNH) */}
+                  <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                    {/* Veículo de interesse: sempre exibido conforme solicitado (se não tiver, 'null') */}
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80 text-xs text-slate-700 font-medium">
+                      <span>🚗 Veículo de interesse:</span>
+                      <strong className={lead.veiculo_interessado ? "text-slate-900 font-bold" : "text-gray-400 font-mono font-normal"}>
+                        {lead.veiculo_interessado || 'null'}
+                      </strong>
+                    </div>
+
+                    {lead.cpf_cnpj && (
+                      <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-100 text-xs text-emerald-800 font-medium">
+                        🪪 CPF: <strong className="font-mono">{lead.cpf_cnpj}</strong>
+                      </span>
+                    )}
+
+                    {lead.data_nascimento && (
+                      <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-100 text-xs text-blue-800 font-medium">
+                        🎂 Nasc: <strong>{lead.data_nascimento}</strong>
+                      </span>
+                    )}
+
+                    {lead.possui_cnh !== null && lead.possui_cnh !== undefined && (
+                      <span className={cn(
+                        "flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border",
+                        lead.possui_cnh ? "bg-amber-50 border-amber-200/70 text-amber-800" : "bg-gray-50 border-gray-200 text-gray-500"
+                      )}>
+                        💳 {lead.possui_cnh ? 'Possui CNH' : 'Sem CNH'}
+                      </span>
+                    )}
+
+                    {lead.valor_entrada && (
+                      <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 border border-green-100 text-xs text-green-800 font-medium">
+                        💰 Entrada: <strong>{lead.valor_entrada.startsWith('R$') ? lead.valor_entrada : `R$ ${lead.valor_entrada}`}</strong>
+                      </span>
+                    )}
+
+                    {lead.veiculo_troca && (
+                      <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-100 text-xs text-purple-800 font-medium" title={lead.veiculo_troca}>
+                        🔄 Troca: <strong className="truncate max-w-[200px]">{lead.veiculo_troca}</strong>
+                      </span>
                     )}
                   </div>
 
-                  <span className="text-xs font-bold text-indigo-600 group-hover:translate-x-1 transition-transform shrink-0">
-                    Abrir &rarr;
-                  </span>
+                  {/* Bloco de Atendimento: Última Mensagem, Horário, Remetente e Média de Tempo de Resposta */}
+                  <div className="bg-gray-50/70 hover:bg-gray-50 transition-colors rounded-xl p-3 border border-gray-100 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        {lead.ultimo_remetente === 'vendedor' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Vendedor (Loja)
+                          </span>
+                        ) : lead.ultimo_remetente === 'cliente' ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                            Cliente (Eles)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-gray-100 text-gray-600">
+                            Última Mensagem
+                          </span>
+                        )}
+
+                        {lead.ultimo_timestamp && (
+                          <span className="text-[11px] text-gray-400 font-medium">
+                            {formatarHorarioMsg(lead.ultimo_timestamp)}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Média de tempo de resposta */}
+                      <div className="flex items-center gap-1 text-[11px] font-medium text-gray-600 bg-white px-2 py-0.5 rounded-md border border-gray-200 shadow-2xs">
+                        <span>⏱️ Média de resposta:</span>
+                        <strong className="text-gray-900 font-bold">
+                          {formatarTempoResposta(lead.tempo_medio_resposta_segundos) || 'Sem cálculo'}
+                        </strong>
+                      </div>
+                    </div>
+
+                    {lead.ultima_mensagem ? (
+                      <p className="text-xs text-gray-600 italic line-clamp-2 bg-white/60 p-2 rounded-lg border border-gray-100/80">
+                        &ldquo;{lead.ultima_mensagem}&rdquo;
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-400 italic">
+                        Nenhuma mensagem recente registrada.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Tags do WhatsApp e CRM */}
+                  {lead.tags && lead.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {lead.tags.map((t: any, i: number) => (
+                        <span
+                          key={i}
+                          style={{ backgroundColor: `${t.cor}15`, color: t.cor || '#4f46e5' }}
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-md border border-black/5"
+                        >
+                          {t.nome}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))
             )}

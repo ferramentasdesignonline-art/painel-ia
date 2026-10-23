@@ -64,9 +64,79 @@ export async function GET(request: Request) {
       if (from) contatosQuery = contatosQuery.gte('created_at', from);
       if (to) contatosQuery = contatosQuery.lte('created_at', to);
 
-      const { data: contatos } = await contatosQuery.limit(50000);
+      const [resContatos, resMsgs] = await Promise.all([
+        contatosQuery.limit(50000),
+        wacloudAdmin
+          .from('wacloud_mensagens')
+          .select('telefone_contato, mensagem, enviado_por_mim, created_at')
+          .eq('nome_instancia', nomeInstancia)
+          .order('created_at', { ascending: true })
+          .limit(10000)
+      ]);
 
-      const contatosFiltrados = (contatos || []).filter(c =>
+      const contatos = resContatos.data || [];
+      const mensagensRecentes = resMsgs.data || [];
+
+      // Agrupa mensagens por telefone limpo
+      const msgsPorTelefone = new Map<string, any[]>();
+      for (const m of mensagensRecentes) {
+        const raw = String(m.telefone_contato || '');
+        const clean = raw.replace(/@.*$/, '').replace(/\D/g, '');
+        if (!clean) continue;
+        if (!msgsPorTelefone.has(clean)) msgsPorTelefone.set(clean, []);
+        msgsPorTelefone.get(clean)!.push(m);
+      }
+
+      // Estatísticas de mensagem e tempo de resposta por telefone
+      const statsMap = new Map<string, {
+        ultima_mensagem: string | null;
+        ultimo_remetente: 'vendedor' | 'cliente' | null;
+        ultimo_timestamp: string | null;
+        tempo_medio_resposta_segundos: number | null;
+      }>();
+
+      for (const [tel, msgs] of msgsPorTelefone.entries()) {
+        if (!msgs || msgs.length === 0) continue;
+        const lastMsg = msgs[msgs.length - 1];
+
+        let lastClientTime: number | null = null;
+        const responseTimes: number[] = [];
+
+        for (const m of msgs) {
+          const time = new Date(m.created_at).getTime();
+          if (!m.enviado_por_mim) {
+            lastClientTime = time;
+          } else if (lastClientTime) {
+            const diffSec = Math.round((time - lastClientTime) / 1000);
+            if (diffSec >= 0 && diffSec < 86400) {
+              responseTimes.push(diffSec);
+            }
+            lastClientTime = null;
+          }
+        }
+
+        const avgSec = responseTimes.length > 0
+          ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
+          : null;
+
+        statsMap.set(tel, {
+          ultima_mensagem: lastMsg.mensagem || null,
+          ultimo_remetente: lastMsg.enviado_por_mim ? 'vendedor' : 'cliente',
+          ultimo_timestamp: lastMsg.created_at || null,
+          tempo_medio_resposta_segundos: avgSec,
+        });
+      }
+
+      const getMsgStats = (cleanPhone: string) => {
+        if (statsMap.has(cleanPhone)) return statsMap.get(cleanPhone);
+        const without55 = cleanPhone.startsWith('55') ? cleanPhone.slice(2) : cleanPhone;
+        if (statsMap.has(without55)) return statsMap.get(without55);
+        const with55 = '55' + cleanPhone;
+        if (statsMap.has(with55)) return statsMap.get(with55);
+        return null;
+      };
+
+      const contatosFiltrados = contatos.filter(c =>
         c.is_group !== true &&
         !c.wa_chatid?.includes('@g.us') &&
         !c.telefone_contato?.includes('@g.us') &&
@@ -76,6 +146,8 @@ export async function GET(request: Request) {
       leadsIA = contatosFiltrados.map(c => {
         const rawTel = String(c.telefone_contato || c.wa_chatid || '');
         const phoneClean = rawTel.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
+        const stats = getMsgStats(phoneClean);
+
         return {
           id: c.id,
           nome: c.nome_contato || 'Cliente',
@@ -83,7 +155,11 @@ export async function GET(request: Request) {
           phone: phoneClean,
           created_at: c.created_at,
           updated_at: c.atualizado_em,
-          ultima_mensagem: c.ultima_mensagem || null,
+          ultima_mensagem: stats?.ultima_mensagem || c.ultima_mensagem || null,
+          ultimo_remetente: stats?.ultimo_remetente || (c.ultimo_remetente ? (c.ultimo_remetente === 'bot' || c.ultimo_remetente === 'vendedor' ? 'vendedor' : 'cliente') : null),
+          ultimo_timestamp: stats?.ultimo_timestamp || c.ultimo_timestamp || c.atualizado_em || c.created_at || null,
+          tempo_medio_resposta_segundos: stats?.tempo_medio_resposta_segundos || c.tempo_primeira_resposta_segundos || null,
+          tempo_primeira_resposta_segundos: c.tempo_primeira_resposta_segundos || null,
           data_agendamento_visita: c.data_agendamento_visita || null,
           horario_agendamento_visita: c.horario_agendamento_visita || null,
           lead_visita_confirmada: Boolean(c.lead_visita_confirmada),
@@ -213,7 +289,7 @@ export async function GET(request: Request) {
         data_agendamento,
         original_id: lead.id,
         id: `ia-${lead.id}`,
-        origem: 'ia',
+        origem: isSemIA ? 'sem_ia' : 'ia',
         is_blocked: isBlocked,
         whatsapp_labels: leadWaLabels,
         canal_origem,

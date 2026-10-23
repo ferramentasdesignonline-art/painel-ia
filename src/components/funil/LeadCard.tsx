@@ -47,6 +47,14 @@ export type Lead = {
   anuncio_id?: string | null;
   anuncio_url?: string | null;
   origem_detalhe?: string | null;
+  cpf_cnpj?: string | null;
+  data_nascimento?: string | null;
+  possui_cnh?: boolean | null;
+  valor_entrada?: string | null;
+  veiculo_troca?: string | null;
+  ultimo_remetente?: 'vendedor' | 'cliente' | string | null;
+  ultimo_timestamp?: string | null;
+  tempo_medio_resposta_segundos?: number | null;
 };
 
 type Props = {
@@ -153,6 +161,22 @@ export function LeadCard({ lead, onClick, formatarTelefone, metaFollowup, nomeEt
               {lead.veiculo_interessado || 'Nenhum interessado'}
             </span>
           </div>
+
+          {/* Dados do Cliente (CPF e Data de Nascimento se preenchidos) */}
+          {(lead.cpf_cnpj || lead.data_nascimento) && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {lead.cpf_cnpj && (
+                <span className="px-1.5 py-0.5 rounded bg-emerald-50/80 border border-emerald-100 text-[10px] font-mono text-emerald-800 font-medium" title={`CPF/CNPJ: ${lead.cpf_cnpj}`}>
+                  🪪 {lead.cpf_cnpj}
+                </span>
+              )}
+              {lead.data_nascimento && (
+                <span className="px-1.5 py-0.5 rounded bg-blue-50/80 border border-blue-100 text-[10px] text-blue-800 font-medium" title={`Data de Nascimento: ${lead.data_nascimento}`}>
+                  🎂 {lead.data_nascimento}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Pills Labels & Todas as Etiquetas */}
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
