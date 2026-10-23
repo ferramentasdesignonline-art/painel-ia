@@ -700,7 +700,8 @@ export default function LeadsPage() {
                               ? lead.ultima_mensagem
                               : (lead.ultima_mensagem && typeof lead.ultima_mensagem === 'object' ? JSON.stringify(lead.ultima_mensagem) : null);
                             const notas = typeof lead.notas === 'string' ? lead.notas : null;
-                            const hasMsg = msg && !msg.startsWith('202');
+                            const isIso = msg && (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:/i.test(msg.trim()) || msg.startsWith('202'));
+                            const hasMsg = msg && !isIso;
 
                             if (hasMsg || notas) {
                               return (

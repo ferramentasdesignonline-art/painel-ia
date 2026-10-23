@@ -50,6 +50,13 @@ export async function GET(request: Request) {
     let leadsIA: any[] = [];
     let blockedNumbers = new Set<string>();
 
+    let statsMapIA = new Map<string, {
+      ultima_mensagem: string | null;
+      ultimo_remetente: 'vendedor' | 'cliente' | null;
+      ultimo_timestamp: string | null;
+      tempo_medio_resposta_segundos: number | null;
+    }>();
+
     if (isSemIA) {
       const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
       const wacloudAdmin = getWacloudSupabaseAdmin();
@@ -189,8 +196,104 @@ export async function GET(request: Request) {
         };
       });
     } else {
-      leadsIA = await getClientLeads(supabaseAdmin, clientConfig.tabela_leads, { from, to });
-      blockedNumbers = await getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios);
+      const [leadsRes, blockedRes] = await Promise.all([
+        getClientLeads(supabaseAdmin, clientConfig.tabela_leads, { from, to }),
+        getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios)
+      ]);
+      leadsIA = leadsRes;
+      blockedNumbers = blockedRes;
+
+      // Se cliente tem tabela_memoria, enriquece com as mensagens reais e estatísticas de resposta da IA
+      if (clientConfig.tabela_memoria) {
+        try {
+          const { data: rawMsgs } = await supabaseAdmin
+            .from(clientConfig.tabela_memoria)
+            .select('session_id, message, created_at')
+            .order('created_at', { ascending: false })
+            .limit(10000);
+
+          if (rawMsgs && rawMsgs.length > 0) {
+            const cronoMsgs = [...rawMsgs].reverse();
+            const msgsPorTelefone = new Map<string, any[]>();
+
+            for (const m of cronoMsgs) {
+              const rawSession = String(m.session_id || '');
+              if (rawSession.includes('_oportunidade') || rawSession.includes('_dados')) continue;
+              const clean = rawSession.replace(/@.*$/, '').replace(/\D/g, '');
+              if (!clean) continue;
+              if (!msgsPorTelefone.has(clean)) msgsPorTelefone.set(clean, []);
+              msgsPorTelefone.get(clean)!.push(m);
+            }
+
+            for (const [tel, msgs] of msgsPorTelefone.entries()) {
+              let lastValidMsg: any = null;
+              let lastClientTime: number | null = null;
+              const responseTimes: number[] = [];
+
+              for (const m of msgs) {
+                const msgData = typeof m.message === 'string' ? (() => {
+                  try { return JSON.parse(m.message); } catch { return { content: m.message }; }
+                })() : (m.message || {});
+
+                let content = typeof msgData.content === 'string' ? msgData.content : '';
+                if (!content) continue;
+
+                // Ignora triggers automáticos de follow-up do sistema
+                if (
+                  content.includes("Execute agora o follow-up") ||
+                  content.includes("Execute o follow-up") ||
+                  content.includes("Analise primeiro todo o histórico")
+                ) {
+                  continue;
+                }
+
+                // Limpa estado interno da IA e prefixos de webhook
+                content = content
+                  .replace(/<estado>[\s\S]*?<\/estado>/gi, '')
+                  .replace(/Mensagem do cliente:\s*/gi, '')
+                  .replace(/Se caso tiver, o cliente pode ter respondido uma mensagem e a mensagem era essa:\s*/gi, '')
+                  .trim();
+
+                if (!content) continue;
+
+                const isHuman = msgData.type === 'human';
+                const time = new Date(m.created_at).getTime();
+
+                lastValidMsg = {
+                  content,
+                  isHuman,
+                  created_at: m.created_at,
+                };
+
+                if (isHuman) {
+                  lastClientTime = time;
+                } else if (lastClientTime) {
+                  const diffSec = Math.round((time - lastClientTime) / 1000);
+                  if (diffSec >= 0 && diffSec < 86400) {
+                    responseTimes.push(diffSec);
+                  }
+                  lastClientTime = null;
+                }
+              }
+
+              if (lastValidMsg) {
+                const avgSec = responseTimes.length > 0
+                  ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
+                  : null;
+
+                statsMapIA.set(tel, {
+                  ultima_mensagem: lastValidMsg.content,
+                  ultimo_remetente: lastValidMsg.isHuman ? 'cliente' : 'vendedor',
+                  ultimo_timestamp: lastValidMsg.created_at,
+                  tempo_medio_resposta_segundos: avgSec,
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Erro ao buscar mensagens da tabela_memoria da IA:", err);
+        }
+      }
     }
 
     // 5. Busca leads manuais
@@ -284,6 +387,24 @@ export async function GET(request: Request) {
         canal_color = '#64748b';
       }
 
+      const getMsgStatsIA = (cleanPhone: string) => {
+        if (statsMapIA.has(cleanPhone)) return statsMapIA.get(cleanPhone);
+        const without55 = cleanPhone.startsWith('55') ? cleanPhone.slice(2) : cleanPhone;
+        if (statsMapIA.has(without55)) return statsMapIA.get(without55);
+        const with55 = '55' + cleanPhone;
+        if (statsMapIA.has(with55)) return statsMapIA.get(with55);
+        return null;
+      };
+
+      const statsIA = getMsgStatsIA(phoneClean);
+
+      // Tratamento da última mensagem
+      let ultimaMensagemTexto = statsIA?.ultima_mensagem || lead.ultima_mensagem || null;
+      // Se a coluna da tabela_leads continha apenas um timestamp ISO (ex: "2026-10-23T..."), nunca exibe o timestamp como texto
+      if (ultimaMensagemTexto && typeof ultimaMensagemTexto === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:/i.test(ultimaMensagemTexto.trim())) {
+        ultimaMensagemTexto = statsIA?.ultima_mensagem || null;
+      }
+
       return {
         ...lead,
         data_agendamento,
@@ -299,6 +420,10 @@ export async function GET(request: Request) {
         anuncio_id: lead.anuncio_id || null,
         anuncio_url: lead.anuncio_url || null,
         origem_detalhe: lead.origem_detalhe || null,
+        ultima_mensagem: ultimaMensagemTexto,
+        ultimo_remetente: statsIA?.ultimo_remetente || (lead.ultimo_remetente ? (lead.ultimo_remetente === 'bot' || lead.ultimo_remetente === 'vendedor' ? 'vendedor' : 'cliente') : null),
+        ultimo_timestamp: statsIA?.ultimo_timestamp || lead.ultimo_timestamp || lead.created_at || null,
+        tempo_medio_resposta_segundos: statsIA?.tempo_medio_resposta_segundos || lead.tempo_medio_resposta_segundos || null,
       };
     });
 

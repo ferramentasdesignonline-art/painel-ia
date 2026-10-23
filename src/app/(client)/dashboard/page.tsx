@@ -472,7 +472,10 @@ export default function ClientDashboardPage() {
     return allLeads.filter(l => {
       const matchCanal = (l.canal_origem || 'desconhecido') === canalFiltro
       if (!matchCanal) return false
-      if (tagFiltro && !(l.tags || []).some((t: any) => t.nome.toLowerCase() === tagFiltro.toLowerCase())) {
+      if (tagFiltro && !(l.tags || []).some((t: any) => {
+        const nome = typeof t === 'string' ? t : (t?.nome || '');
+        return nome.toLowerCase() === tagFiltro.toLowerCase();
+      })) {
         return false
       }
       return true
@@ -520,9 +523,12 @@ export default function ClientDashboardPage() {
       const q = kpiSearch.toLowerCase()
       list = list.filter(l =>
         (l.nome && l.nome.toLowerCase().includes(q)) ||
-        (l.telefone && l.telefone.includes(q)) ||
+        (l.telefone && String(l.telefone).includes(q)) ||
         (l.veiculo_interessado && l.veiculo_interessado.toLowerCase().includes(q)) ||
-        (l.tags && l.tags.some((t: any) => t.nome && t.nome.toLowerCase().includes(q)))
+        (l.tags && l.tags.some((t: any) => {
+          const nome = typeof t === 'string' ? t : (t?.nome || '');
+          return nome.toLowerCase().includes(q);
+        }))
       )
     }
 
@@ -1234,7 +1240,8 @@ export default function ClientDashboardPage() {
                   Todas ({tagsDisponiveis.reduce((acc, t) => acc + t.count, 0)})
                 </button>
                 {tagsDisponiveis.map(t => {
-                  const active = tagFiltro?.toLowerCase() === t.nome.toLowerCase()
+                  const tNome = typeof t === 'string' ? t : (t?.nome || '');
+                  const active = tagFiltro?.toLowerCase() === tNome.toLowerCase()
                   return (
                     <button
                       key={t.nome}
@@ -1678,7 +1685,7 @@ export default function ClientDashboardPage() {
 
                     {lead.valor_entrada && (
                       <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 border border-green-100 text-xs text-green-800 font-medium">
-                        💰 Entrada: <strong>{lead.valor_entrada.startsWith('R$') ? lead.valor_entrada : `R$ ${lead.valor_entrada}`}</strong>
+                        💰 Entrada: <strong>{String(lead.valor_entrada).startsWith('R$') ? String(lead.valor_entrada) : `R$ ${String(lead.valor_entrada)}`}</strong>
                       </span>
                     )}
 
@@ -1725,9 +1732,9 @@ export default function ClientDashboardPage() {
                       </div>
                     </div>
 
-                    {lead.ultima_mensagem ? (
+                    {lead.ultima_mensagem && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:/i.test(String(lead.ultima_mensagem).trim()) ? (
                       <p className="text-xs text-gray-600 italic line-clamp-2 bg-white/60 p-2 rounded-lg border border-gray-100/80">
-                        &ldquo;{lead.ultima_mensagem}&rdquo;
+                        &ldquo;{String(lead.ultima_mensagem)}&rdquo;
                       </p>
                     ) : (
                       <p className="text-xs text-gray-400 italic">
@@ -1737,17 +1744,23 @@ export default function ClientDashboardPage() {
                   </div>
 
                   {/* Tags do WhatsApp e CRM */}
-                  {lead.tags && lead.tags.length > 0 && (
+                  {lead.tags && Array.isArray(lead.tags) && lead.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 pt-0.5">
-                      {lead.tags.map((t: any, i: number) => (
-                        <span
-                          key={i}
-                          style={{ backgroundColor: `${t.cor}15`, color: t.cor || '#4f46e5' }}
-                          className="text-[10px] font-bold px-2 py-0.5 rounded-md border border-black/5"
-                        >
-                          {t.nome}
-                        </span>
-                      ))}
+                      {lead.tags.map((t: any, i: number) => {
+                        if (!t) return null;
+                        const tNome = typeof t === 'string' ? t : (t?.nome || '');
+                        if (!tNome) return null;
+                        const tCor = (typeof t === 'object' && t?.cor) ? String(t.cor) : '#4f46e5';
+                        return (
+                          <span
+                            key={i}
+                            style={{ backgroundColor: `${tCor}15`, color: tCor }}
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-md border border-black/5"
+                          >
+                            {tNome}
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
