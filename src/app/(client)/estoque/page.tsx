@@ -50,6 +50,7 @@ export default function EstoquePage() {
   const [editingVehicle, setEditingVehicle] = useState<VeiculoEstoque | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
+  const [opcionalInput, setOpcionalInput] = useState("")
   const [formData, setFormData] = useState<Partial<VeiculoEstoque>>({
     marca: "",
     modelo: "",
@@ -61,7 +62,7 @@ export default function EstoquePage() {
     cambio: "",
     valor_venda: "",
     fotos: [],
-    opcionais: "",
+    opcionais: [],
     tipo: "",
   })
 
@@ -164,6 +165,24 @@ export default function EstoquePage() {
     }
   }
 
+  function parseOpcionaisArray(raw: any): string[] {
+    if (!raw) return []
+    if (Array.isArray(raw)) return raw.map(String).map((s) => s.trim()).filter(Boolean)
+    if (typeof raw === "object") {
+      const list = raw.fotos || raw.opcionais || Object.values(raw)
+      if (Array.isArray(list)) return list.map(String).map((s) => s.trim()).filter(Boolean)
+    }
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw)
+        return parseOpcionaisArray(parsed)
+      } catch {
+        return raw.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean)
+      }
+    }
+    return [String(raw)]
+  }
+
   // Abrir Modal de Edição
   function handleOpenEdit(vehicle: VeiculoEstoque) {
     setEditingVehicle(vehicle)
@@ -178,9 +197,10 @@ export default function EstoquePage() {
       cambio: vehicle.cambio || "",
       valor_venda: vehicle.valor_venda ? formatCurrency(String(vehicle.valor_venda)) : "",
       fotos: vehicle.fotos || [],
-      opcionais: Array.isArray(vehicle.opcionais) ? vehicle.opcionais.join("\n") : String(vehicle.opcionais || ""),
+      opcionais: parseOpcionaisArray(vehicle.opcionais),
       tipo: vehicle.tipo || "",
     })
+    setOpcionalInput("")
     setModalOpen(true)
   }
 
@@ -198,10 +218,31 @@ export default function EstoquePage() {
       cambio: "",
       valor_venda: "",
       fotos: [],
-      opcionais: "",
+      opcionais: [],
       tipo: "Carro",
     })
+    setOpcionalInput("")
     setModalOpen(true)
+  }
+
+  function handleAddOpcional() {
+    const clean = opcionalInput.trim().replace(/^,|,$/g, "")
+    if (!clean) return
+    const current = Array.isArray(formData.opcionais) ? formData.opcionais : []
+    if (!current.includes(clean)) {
+      setFormData((prev) => ({
+        ...prev,
+        opcionais: [...(Array.isArray(prev.opcionais) ? prev.opcionais : []), clean],
+      }))
+    }
+    setOpcionalInput("")
+  }
+
+  function handleRemoveOpcional(index: number) {
+    setFormData((prev) => ({
+      ...prev,
+      opcionais: (Array.isArray(prev.opcionais) ? prev.opcionais : []).filter((_, i) => i !== index),
+    }))
   }
 
   // Máscaras de entrada em tempo real
@@ -280,9 +321,15 @@ export default function EstoquePage() {
 
     setSaving(true)
     try {
+      const currentOpcionais = Array.isArray(formData.opcionais) ? [...formData.opcionais] : []
+      const pending = opcionalInput.trim().replace(/^,|,$/g, "")
+      if (pending && !currentOpcionais.includes(pending)) {
+        currentOpcionais.push(pending)
+      }
+
       const payload = {
         ...formData,
-        opcionais: typeof formData.opcionais === "string" ? formData.opcionais.split("\n").filter(Boolean) : formData.opcionais,
+        opcionais: currentOpcionais,
       }
 
       if (editingVehicle) {
@@ -1019,18 +1066,70 @@ export default function EstoquePage() {
                 </div>
               </div>
 
-              {/* Opcionais / Observações */}
+              {/* Opcionais / Observações com Chips / Tags */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Opcionais e Observações (Uma por linha ou texto descritivo)
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Ar-condicionado, Direção elétrica, Vidros elétricos, Sensor de estacionamento..."
-                  value={formData.opcionais || ""}
-                  onChange={(e) => setFormData({ ...formData, opcionais: e.target.value })}
-                  className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Opcionais do Veículo
+                  </label>
+                  <span className="text-[11px] text-gray-400">
+                    Digite e dê <kbd className="px-1.5 py-0.5 rounded bg-gray-100 border text-gray-600 font-mono text-[10px]">Enter</kbd> para criar o campo
+                  </span>
+                </div>
+
+                <div className="min-h-[50px] p-2 rounded-xl border border-gray-300 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100 bg-white transition-all flex flex-wrap items-center gap-1.5">
+                  {(Array.isArray(formData.opcionais) ? formData.opcionais : []).map((item, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80 animate-in fade-in zoom-in-95 duration-150"
+                    >
+                      <span>{item}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveOpcional(idx)}
+                        className="text-indigo-400 hover:text-red-600 hover:bg-red-50 rounded-full p-0.5 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  ))}
+
+                  <div className="flex-1 flex items-center min-w-[200px]">
+                    <input
+                      type="text"
+                      placeholder={
+                        Array.isArray(formData.opcionais) && formData.opcionais.length > 0
+                          ? "Adicionar outro opcional..."
+                          : "Ex: Ar-condicionado (dê Enter para criar)"
+                      }
+                      value={opcionalInput}
+                      onChange={(e) => setOpcionalInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === ",") {
+                          e.preventDefault()
+                          handleAddOpcional()
+                        } else if (
+                          e.key === "Backspace" &&
+                          !opcionalInput &&
+                          Array.isArray(formData.opcionais) &&
+                          formData.opcionais.length > 0
+                        ) {
+                          handleRemoveOpcional(formData.opcionais.length - 1)
+                        }
+                      }}
+                      className="w-full text-sm outline-none border-none p-1 bg-transparent placeholder:text-gray-400"
+                    />
+                    {opcionalInput.trim() && (
+                      <button
+                        type="button"
+                        onClick={handleAddOpcional}
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 transition-colors shrink-0"
+                      >
+                        Adicionar
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Botões do Rodapé */}
