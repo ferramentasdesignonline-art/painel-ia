@@ -23,6 +23,7 @@ import {
   Calendar,
   Layers,
   Sparkles,
+  Star,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -172,10 +173,10 @@ export default function EstoquePage() {
       versao: vehicle.versao || "",
       ano: vehicle.ano || "",
       cor: vehicle.cor || "",
-      quilometragem: vehicle.quilometragem || "",
+      quilometragem: vehicle.quilometragem ? formatKm(String(vehicle.quilometragem)) : "",
       combustivel: vehicle.combustivel || "",
       cambio: vehicle.cambio || "",
-      valor_venda: vehicle.valor_venda || "",
+      valor_venda: vehicle.valor_venda ? formatCurrency(String(vehicle.valor_venda)) : "",
       fotos: vehicle.fotos || [],
       opcionais: Array.isArray(vehicle.opcionais) ? vehicle.opcionais.join("\n") : String(vehicle.opcionais || ""),
       tipo: vehicle.tipo || "",
@@ -193,8 +194,8 @@ export default function EstoquePage() {
       ano: "",
       cor: "",
       quilometragem: "",
-      combustivel: "Flex",
-      cambio: "Automático",
+      combustivel: "",
+      cambio: "",
       valor_venda: "",
       fotos: [],
       opcionais: "",
@@ -203,7 +204,22 @@ export default function EstoquePage() {
     setModalOpen(true)
   }
 
-  // Upload de Fotos para Cloudflare R2
+  // Máscaras de entrada em tempo real
+  function formatCurrency(val: string) {
+    const digits = val.replace(/\D/g, "")
+    if (!digits) return ""
+    const num = parseInt(digits, 10)
+    return `R$ ${num.toLocaleString("pt-BR")}`
+  }
+
+  function formatKm(val: string) {
+    const digits = val.replace(/\D/g, "")
+    if (!digits) return ""
+    const num = parseInt(digits, 10)
+    return `${num.toLocaleString("pt-BR")} km`
+  }
+
+  // Upload de Fotos
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files || files.length === 0) return
@@ -230,7 +246,7 @@ export default function EstoquePage() {
         alert(json.error || "Erro no upload das imagens")
       }
     } catch {
-      alert("Erro ao enviar imagens para o Cloudflare R2.")
+      alert("Erro ao enviar imagens.")
     } finally {
       setUploadingPhotos(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
@@ -242,6 +258,16 @@ export default function EstoquePage() {
       ...prev,
       fotos: (prev.fotos || []).filter((_, i) => i !== index),
     }))
+  }
+
+  function handleSetPrincipalPhoto(index: number) {
+    setFormData((prev) => {
+      const fotos = [...(prev.fotos || [])]
+      if (index <= 0 || index >= fotos.length) return prev
+      const [selected] = fotos.splice(index, 1)
+      fotos.unshift(selected)
+      return { ...prev, fotos }
+    })
   }
 
   // Salvar Veículo (Criar ou Editar)
@@ -345,7 +371,7 @@ export default function EstoquePage() {
               Estoque de Veículos
             </h1>
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-              Cloudflare R2 & IA
+              Catálogo de Veículos
             </span>
           </div>
           <p className="text-sm text-gray-500 mt-1">
@@ -793,11 +819,11 @@ export default function EstoquePage() {
 
             {/* Formulário */}
             <form onSubmit={handleSaveVehicle} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
-              {/* Seção de Fotos com Upload Cloudflare R2 */}
+              {/* Seção de Fotos */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-semibold text-gray-800">
-                    Galeria de Fotos (Cloudflare R2)
+                    Galeria de Fotos
                   </label>
                   <span className="text-xs text-gray-400">
                     {formData.fotos?.length || 0} fotos adicionadas
@@ -820,7 +846,7 @@ export default function EstoquePage() {
                   {uploadingPhotos ? (
                     <div className="flex flex-col items-center justify-center py-2">
                       <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mb-2" />
-                      <p className="text-sm font-semibold text-gray-700">Enviando para o Cloudflare R2...</p>
+                      <p className="text-sm font-semibold text-gray-700">Enviando fotos...</p>
                       <p className="text-xs text-gray-400">Aguarde o processamento das imagens</p>
                     </div>
                   ) : (
@@ -834,29 +860,57 @@ export default function EstoquePage() {
                   )}
                 </div>
 
-                {/* Preview das Fotos Carregadas */}
+                {/* Preview das Fotos Carregadas com Opção de Imagem Principal */}
                 {formData.fotos && formData.fotos.length > 0 && (
-                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 mt-4">
-                    {formData.fotos.map((url, idx) => (
-                      <div
-                        key={idx}
-                        className="relative group aspect-square rounded-xl overflow-hidden border border-gray-200 bg-gray-100"
-                      >
-                        <img src={url} alt="" className="w-full h-full object-cover" />
-                        {idx === 0 && (
-                          <span className="absolute top-1 left-1 bg-indigo-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs">
-                            Capa
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleRemovePhoto(idx)}
-                          className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
+                  <div className="mt-4 space-y-2">
+                    <p className="text-[11px] text-gray-500">
+                      💡 A foto com badge dourado é a <strong>Foto Principal (Capa)</strong>. Clique em <strong>"Tornar Principal"</strong> para mudar.
+                    </p>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                      {formData.fotos.map((url, idx) => {
+                        const isPrincipal = idx === 0
+                        return (
+                          <div
+                            key={idx}
+                            className={`relative group aspect-square rounded-xl overflow-hidden border transition-all ${
+                              isPrincipal
+                                ? "ring-2 ring-amber-500 border-amber-500 shadow-md"
+                                : "border-gray-200 bg-gray-100 hover:border-gray-400"
+                            }`}
+                          >
+                            <img src={url} alt="" className="w-full h-full object-cover" />
+
+                            {/* Badge Principal ou Botão para Tornar Principal */}
+                            {isPrincipal ? (
+                              <span className="absolute top-1.5 left-1.5 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-1">
+                                <Star className="w-3 h-3 fill-current" />
+                                Principal
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleSetPrincipalPhoto(idx)}
+                                className="absolute bottom-1.5 left-1.5 right-1.5 bg-black/75 hover:bg-amber-600 text-white text-[10px] font-semibold py-1 px-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-center flex items-center justify-center gap-1 shadow-sm"
+                                title="Definir esta imagem como capa principal"
+                              >
+                                <Star className="w-3 h-3 text-amber-300 fill-current" />
+                                Tornar Principal
+                              </button>
+                            )}
+
+                            {/* Botão Remover */}
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePhoto(idx)}
+                              className="absolute top-1.5 right-1.5 p-1 bg-red-600 hover:bg-red-700 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                              title="Remover foto"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
@@ -921,46 +975,36 @@ export default function EstoquePage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">Quilometragem (KM)</label>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Quilometragem</label>
                   <input
                     type="text"
-                    placeholder="Ex: 45000"
+                    placeholder="Ex: 45.000 km"
                     value={formData.quilometragem || ""}
-                    onChange={(e) => setFormData({ ...formData, quilometragem: e.target.value })}
-                    className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                    onChange={(e) => setFormData({ ...formData, quilometragem: formatKm(e.target.value) })}
+                    className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none font-mono"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Câmbio</label>
-                  <select
+                  <input
+                    type="text"
+                    placeholder="Ex: Automático, Manual"
                     value={formData.cambio || ""}
                     onChange={(e) => setFormData({ ...formData, cambio: e.target.value })}
-                    className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none bg-white"
-                  >
-                    <option value="">Selecione</option>
-                    <option value="Automático">Automático</option>
-                    <option value="Manual">Manual</option>
-                    <option value="CVT">CVT</option>
-                    <option value="Automatizado">Automatizado</option>
-                  </select>
+                    className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">Combustível</label>
-                  <select
+                  <input
+                    type="text"
+                    placeholder="Ex: Flex, Gasolina, Diesel"
                     value={formData.combustivel || ""}
                     onChange={(e) => setFormData({ ...formData, combustivel: e.target.value })}
-                    className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none bg-white"
-                  >
-                    <option value="">Selecione</option>
-                    <option value="Flex">Flex</option>
-                    <option value="Gasolina">Gasolina</option>
-                    <option value="Diesel">Diesel</option>
-                    <option value="Híbrido">Híbrido</option>
-                    <option value="Elétrico">Elétrico</option>
-                    <option value="Etanol">Etanol</option>
-                  </select>
+                    className="w-full rounded-xl border border-gray-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  />
                 </div>
 
                 <div>
@@ -969,8 +1013,8 @@ export default function EstoquePage() {
                     type="text"
                     placeholder="Ex: R$ 89.900"
                     value={formData.valor_venda || ""}
-                    onChange={(e) => setFormData({ ...formData, valor_venda: e.target.value })}
-                    className="w-full rounded-xl border border-gray-300 p-2.5 text-sm font-semibold text-emerald-700 focus:border-indigo-500 focus:outline-none"
+                    onChange={(e) => setFormData({ ...formData, valor_venda: formatCurrency(e.target.value) })}
+                    className="w-full rounded-xl border border-gray-300 p-2.5 text-sm font-semibold text-emerald-700 focus:border-indigo-500 focus:outline-none font-mono"
                   />
                 </div>
               </div>
