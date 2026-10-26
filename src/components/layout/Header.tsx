@@ -13,10 +13,8 @@ export function Header({ clientName, clientEmail, tipoAtendimento, hasEstoque }:
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
         <div className="flex flex-1 items-center gap-4">
           <Sheet>
-            <SheetTrigger asChild>
-              <button className="md:hidden p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-md">
-                <Menu className="h-6 w-6" />
-              </button>
+            <SheetTrigger className="md:hidden p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-md">
+              <Menu className="h-6 w-6" />
             </SheetTrigger>
             <SheetContent side="left" className="p-0 w-72 border-none">
               <Sidebar className="flex w-full" tipoAtendimento={tipoAtendimento} hasEstoque={hasEstoque} />
@@ -39,13 +37,12 @@ export function Header({ clientName, clientEmail, tipoAtendimento, hasEstoque }:
 
           {/* Profile dropdown */}
           <DropdownMenu>
-            <DropdownMenuTrigger>
-              <div className="flex items-center p-1 rounded-full hover:bg-gray-50 transition-colors cursor-pointer ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
-                <Avatar className="h-9 w-9 border-2 border-white shadow-sm font-poppins">
-                  <AvatarImage src="" />
-                  <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-bold text-xs">{clientName ? clientName.substring(0, 2).toUpperCase() : 'CC'}</AvatarFallback>
-                </Avatar>
-              </div>
+            <DropdownMenuTrigger className="flex items-center p-1 rounded-full hover:bg-gray-50 transition-colors cursor-pointer ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
+              <Avatar className="h-9 w-9 border-2 border-white shadow-sm font-poppins">
+                <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-bold text-xs">
+                  {clientName ? clientName.substring(0, 2).toUpperCase() : 'CC'}
+                </AvatarFallback>
+              </Avatar>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-64 font-poppins" align="end">
               <DropdownMenuGroup>

@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input"
 import { VeiculoEstoque } from "@/lib/estoque/service"
 
 export default function EstoquePage() {
+  const [mounted, setMounted] = useState(false)
   const [ativos, setAtivos] = useState<VeiculoEstoque[]>([])
   const [inativos, setInativos] = useState<VeiculoEstoque[]>([])
   const [loading, setLoading] = useState(true)
@@ -99,6 +100,7 @@ export default function EstoquePage() {
   }
 
   useEffect(() => {
+    setMounted(true)
     fetchEstoque()
   }, [])
 
@@ -395,6 +397,33 @@ export default function EstoquePage() {
       return matchSearch && matchCombustivel && matchCambio
     })
   }, [activeTab, ativos, inativos, searchTerm, filterCombustivel, filterCambio])
+
+  if (!mounted || loading) {
+    return (
+      <div className="space-y-6 pb-12">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold tracking-tight text-gray-900 font-poppins">
+                Estoque de Veículos
+              </h1>
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                Catálogo de Veículos
+              </span>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">
+              Gerencie os carros disponíveis no estoque. Ative ou desative veículos com sincronização instantânea com a IA.
+            </p>
+          </div>
+        </div>
+
+        <div className="py-20 text-center bg-white rounded-2xl border border-gray-100 shadow-xs">
+          <RefreshCw className="h-8 w-8 text-indigo-500 animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-500">Carregando catálogo de veículos...</p>
+        </div>
+      </div>
+    )
+  }
 
   if (!enabled) {
     return (
