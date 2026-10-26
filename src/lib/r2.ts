@@ -1,11 +1,23 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3"
 
+const R2_ENDPOINT =
+  process.env.R2_ENDPOINT ||
+  "https://504606956cf9454e5c1a0ee6a159a338.r2.cloudflarestorage.com"
+const R2_ACCESS_KEY_ID =
+  process.env.R2_ACCESS_KEY_ID || "6403d276742ca081b4908554c548089b"
+const R2_SECRET_ACCESS_KEY =
+  process.env.R2_SECRET_ACCESS_KEY ||
+  "e4c20157a3943c037aca4df3b10c63aa5198af0ca1aca4ac9ede5368db847dba"
+const R2_BUCKET = process.env.R2_BUCKET || "autodesign-bucket"
+const R2_PUBLIC_URL =
+  process.env.R2_PUBLIC_URL || "https://cdn.artesdesignonline.com.br"
+
 const r2Client = new S3Client({
   region: "auto",
-  endpoint: process.env.R2_ENDPOINT,
+  endpoint: R2_ENDPOINT,
   credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
+    accessKeyId: R2_ACCESS_KEY_ID,
+    secretAccessKey: R2_SECRET_ACCESS_KEY,
   },
 })
 
@@ -20,27 +32,27 @@ export async function uploadToR2(
 
   await r2Client.send(
     new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET,
+      Bucket: R2_BUCKET,
       Key: key,
       Body: fileBuffer,
       ContentType: contentType,
     })
   )
 
-  const publicUrl = process.env.R2_PUBLIC_URL?.replace(/\/$/, "")
+  const publicUrl = R2_PUBLIC_URL.replace(/\/$/, "")
   return `${publicUrl}/${key}`
 }
 
 export async function deleteFromR2(fileUrl: string): Promise<boolean> {
   try {
-    const publicUrl = process.env.R2_PUBLIC_URL?.replace(/\/$/, "")
+    const publicUrl = R2_PUBLIC_URL.replace(/\/$/, "")
     if (!publicUrl || !fileUrl.startsWith(publicUrl)) {
       return false
     }
     const key = fileUrl.replace(`${publicUrl}/`, "")
     await r2Client.send(
       new DeleteObjectCommand({
-        Bucket: process.env.R2_BUCKET,
+        Bucket: R2_BUCKET,
         Key: key,
       })
     )
