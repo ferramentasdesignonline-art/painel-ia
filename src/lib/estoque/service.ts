@@ -85,6 +85,7 @@ async function ensureInativoTable(baseId: string, cleanName: string): Promise<st
       table_name: inativoName,
       title: inativoName,
       columns: [
+        { column_name: "id", title: "Id", uidt: "ID", pk: true, ai: true },
         { column_name: "chave_externa", title: "chave_externa", uidt: "SingleLineText" },
         { column_name: "marca", title: "marca", uidt: "SingleLineText" },
         { column_name: "modelo", title: "modelo", uidt: "SingleLineText" },
@@ -137,9 +138,11 @@ function normalizeVehicle(raw: any, ativo: boolean): VeiculoEstoque {
     opcionais = opcionais.opcionais || opcionais.fotos || Object.values(opcionais)
   }
 
+  const recordId = raw.Id || raw.id || raw.chave_externa
+
   return {
-    id: raw.Id || raw.id,
-    Id: raw.Id || raw.id,
+    id: recordId,
+    Id: recordId,
     chave_externa: raw.chave_externa || "",
     marca: raw.marca || "",
     modelo: raw.modelo || "",
@@ -235,15 +238,27 @@ export async function alternarStatusVeiculo(tabelaEstoque: string, id: number | 
     const targetTableId = tornarAtivo ? activeMeta.id : inativoMeta.id
 
     // 1. Buscar dados do registro na tabela de origem
+    let item: any = null
     const resGet = await fetch(`${NOCODB_URL}/api/v2/tables/${originTableId}/records/${id}`, {
       headers: { "xc-token": NOCODB_TOKEN },
     })
 
-    if (!resGet.ok) {
-      throw new Error(`Veículo não encontrado na tabela de origem (${resGet.status})`)
+    if (resGet.ok) {
+      item = await resGet.json()
+    } else {
+      // Tenta buscar por chave_externa
+      const resWhere = await fetch(`${NOCODB_URL}/api/v2/tables/${originTableId}/records?where=(chave_externa,eq,${id})`, {
+        headers: { "xc-token": NOCODB_TOKEN },
+      })
+      if (resWhere.ok) {
+        const jsonWhere = await resWhere.json()
+        item = jsonWhere.list?.[0]
+      }
     }
 
-    const item = await resGet.json()
+    if (!item) {
+      throw new Error("Veículo não encontrado na tabela de origem.")
+    }
 
     // 2. Montar payload para a tabela de destino
     const payload = {
@@ -280,13 +295,14 @@ export async function alternarStatusVeiculo(tabelaEstoque: string, id: number | 
     }
 
     // 4. Remover da tabela de origem
+    const originRecordId = item.Id || item.id || id
     await fetch(`${NOCODB_URL}/api/v2/tables/${originTableId}/records`, {
       method: "DELETE",
       headers: {
         "xc-token": NOCODB_TOKEN,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify([{ Id: Number(id) }]),
+      body: JSON.stringify([{ Id: Number(originRecordId) }]),
     })
 
     return { success: true, novoStatus: tornarAtivo }
@@ -396,7 +412,7 @@ export async function excluirVeiculo(tabelaEstoque: string, id: number | string,
   const tableId = ativo ? activeMeta?.id : inativoMeta?.id
 
   if (tableId) {
-    const res = await fetch(`${NOCODB_URL}/api/v2/tables/${tableId}/records`, {
+    let res = await fetch(`${NOCODB_URL}/api/v2/tables/${tableId}/records`, {
       method: "DELETE",
       headers: {
         "xc-token": NOCODB_TOKEN,
@@ -404,6 +420,27 @@ export async function excluirVeiculo(tabelaEstoque: string, id: number | string,
       },
       body: JSON.stringify([{ Id: Number(id) }]),
     })
+
+    if (!res.ok) {
+      // Se falhar, busca por chave_externa
+      const resWhere = await fetch(`${NOCODB_URL}/api/v2/tables/${tableId}/records?where=(chave_externa,eq,${id})`, {
+        headers: { "xc-token": NOCODB_TOKEN },
+      })
+      if (resWhere.ok) {
+        const jsonWhere = await resWhere.json()
+        const found = jsonWhere.list?.[0]
+        if (found && (found.Id || found.id)) {
+          res = await fetch(`${NOCODB_URL}/api/v2/tables/${tableId}/records`, {
+            method: "DELETE",
+            headers: {
+              "xc-token": NOCODB_TOKEN,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify([{ Id: Number(found.Id || found.id) }]),
+          })
+        }
+      }
+    }
 
     if (!res.ok) {
       const err = await res.text()

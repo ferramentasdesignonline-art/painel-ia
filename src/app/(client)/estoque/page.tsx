@@ -106,8 +106,11 @@ export default function EstoquePage() {
 
   // Alternar Ativar / Desativar
   async function handleToggle(vehicle: VeiculoEstoque) {
-    const id = vehicle.Id || vehicle.id
-    if (!id) return
+    const id = vehicle.Id || vehicle.id || vehicle.chave_externa
+    if (!id) {
+      alert("Identificador do veículo não encontrado.")
+      return
+    }
 
     setTogglingId(id)
     const tornarAtivo = !vehicle.ativo
@@ -142,8 +145,11 @@ export default function EstoquePage() {
 
   // Excluir Veículo
   async function handleDelete(vehicle: VeiculoEstoque) {
-    const id = vehicle.Id || vehicle.id
-    if (!id) return
+    const id = vehicle.Id || vehicle.id || vehicle.chave_externa
+    if (!id) {
+      alert("Identificador do veículo não encontrado.")
+      return
+    }
 
     if (!confirm(`Deseja realmente excluir permanentemente o veículo ${vehicle.marca} ${vehicle.modelo}?`)) {
       return
@@ -338,7 +344,7 @@ export default function EstoquePage() {
       }
 
       if (editingVehicle) {
-        const id = editingVehicle.Id || editingVehicle.id
+        const id = editingVehicle.Id || editingVehicle.id || editingVehicle.chave_externa
         const res = await fetch(`/api/estoque/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
