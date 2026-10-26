@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronDown, RefreshCw, AlertCircle, Bot, UserCheck, Sparkles, MessageCircle, Info } from "lucide-react"
+import { ChevronDown, RefreshCw, AlertCircle, Bot, UserCheck, Sparkles, MessageCircle, Info, Car } from "lucide-react"
 
 function TableSelect({
   label,
@@ -89,6 +89,7 @@ export default function NovoClientePage() {
   const [loadingInstancias, setLoadingInstancias] = useState(true)
 
   const [tipoAtendimento, setTipoAtendimento] = useState<'com_ia' | 'sem_ia'>('sem_ia')
+  const [moduloEstoqueAtivo, setModuloEstoqueAtivo] = useState(false)
 
   const [formData, setFormData] = useState({
     nome: "",
@@ -353,14 +354,59 @@ export default function NovoClientePage() {
                   tables={tables}
                   loadingTables={loadingTables}
                 />
-                <TableSelect
-                  label="Tabela de Estoque"
-                  value={formData.tabela_estoque}
-                  onChange={(v) => setFormData({ ...formData, tabela_estoque: v })}
-                  tables={tables}
-                  loadingTables={loadingTables}
-                />
               </div>
+            </div>
+
+            {/* Módulo de Estoque (Opcional) */}
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+                    <Car className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-semibold text-gray-900">Módulo de Estoque</h3>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
+                        Opcional
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Habilita o gerenciamento de estoque, upload de fotos no Cloudflare R2 e botões de ativar/desativar veículos.
+                    </p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={moduloEstoqueAtivo}
+                    onChange={(e) => {
+                      const ativo = e.target.checked
+                      setModuloEstoqueAtivo(ativo)
+                      if (!ativo) {
+                        setFormData((prev) => ({ ...prev, tabela_estoque: "" }))
+                      }
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+              </div>
+
+              {moduloEstoqueAtivo && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <TableSelect
+                    label="Tabela de Estoque (NocoDB ou Supabase)"
+                    value={formData.tabela_estoque}
+                    onChange={(v) => setFormData({ ...formData, tabela_estoque: v })}
+                    tables={tables}
+                    loadingTables={loadingTables}
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1.5">
+                    Ex: <code className="text-indigo-600 font-mono font-semibold">cr_motors_estoque</code> ou o ID da tabela no NocoDB.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div>

@@ -11,16 +11,20 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Leads", href: "/leads", icon: Users },
   { name: "Funil de Leads", href: "/funil", icon: Trophy },
+  { name: "Estoque", href: "/estoque", icon: Car },
   { name: "WhatsApp Web", href: "/whatsapp-web", icon: MessageSquare },
   { name: "Bloqueios", href: "/bloqueios", icon: ShieldBan },
   { name: "Conexão WhatsApp", href: "/whatsapp", icon: MessageCircle },
 ]
 
-export function Sidebar({ className, tipoAtendimento }: { className?: string; tipoAtendimento?: string }) {
+export function Sidebar({ className, tipoAtendimento, hasEstoque }: { className?: string; tipoAtendimento?: string; hasEstoque?: boolean }) {
   const pathname = usePathname()
 
   const navItems = navigation.filter(item => {
     if (tipoAtendimento === 'sem_ia' && item.href === '/bloqueios') {
+      return false
+    }
+    if (item.href === '/estoque' && !hasEstoque) {
       return false
     }
     return true

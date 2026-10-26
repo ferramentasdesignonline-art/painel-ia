@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { logout } from "@/app/(auth)/logout/actions"
 
-export function Header({ clientName, clientEmail, tipoAtendimento }: { clientName?: string, clientEmail?: string, tipoAtendimento?: string }) {
+export function Header({ clientName, clientEmail, tipoAtendimento, hasEstoque }: { clientName?: string, clientEmail?: string, tipoAtendimento?: string, hasEstoque?: boolean }) {
   return (
     <header className="sticky top-0 z-40 flex h-20 shrink-0 items-center gap-x-4 border-b border-gray-100 bg-white/80 backdrop-blur-md px-4 sm:gap-x-6 sm:px-6 lg:px-8">
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
@@ -19,7 +19,7 @@ export function Header({ clientName, clientEmail, tipoAtendimento }: { clientNam
               </button>
             </SheetTrigger>
             <SheetContent side="left" className="p-0 w-72 border-none">
-              <Sidebar className="flex w-full" tipoAtendimento={tipoAtendimento} />
+              <Sidebar className="flex w-full" tipoAtendimento={tipoAtendimento} hasEstoque={hasEstoque} />
             </SheetContent>
           </Sheet>
           
