@@ -23,39 +23,96 @@ export interface VeiculoEstoque {
 
 const NOCODB_URL = process.env.NOCODB_URL || "https://evolution-nocodb.4lap5g.easypanel.host"
 const NOCODB_TOKEN = process.env.NOCODB_API_TOKEN || "9Qz7ETxba8JnXq3B0e9ybHaSiDar6hLqYBIIkg7u"
-const BASE_ID = "p8xylnrppf72yx9"
 
-// Cache de mapeamento de nome de tabela para tableId no NocoDB
-let tableMapCache: Record<string, string> | null = null
+interface TableMeta {
+  id: string
+  base_id: string
+}
 
-async function getNocoDBTableMap(): Promise<Record<string, string>> {
+// Cache de mapeamento de nome de tabela para meta do NocoDB
+let tableMapCache: Record<string, TableMeta> | null = null
+
+async function getNocoDBTableMap(): Promise<Record<string, TableMeta>> {
   if (tableMapCache) return tableMapCache
 
-  const map: Record<string, string> = {
-    cr_motors_estoque: "m086uokz593yt9z",
-    cr_motors_estoque_inativo: "mj7zycrk1wiehet",
-  }
+  const map: Record<string, TableMeta> = {}
 
   try {
-    const res = await fetch(`${NOCODB_URL}/api/v2/meta/bases/${BASE_ID}/tables`, {
+    // 1. Buscar todas as bases do NocoDB
+    const basesRes = await fetch(`${NOCODB_URL}/api/v2/meta/bases`, {
       headers: { "xc-token": NOCODB_TOKEN },
       cache: "no-store",
     })
-    if (res.ok) {
-      const data = await res.json()
-      if (Array.isArray(data.list)) {
-        for (const t of data.list) {
-          if (t.table_name && t.id) map[t.table_name.toLowerCase()] = t.id
-          if (t.title && t.id) map[t.title.toLowerCase()] = t.id
+    const basesData = basesRes.ok ? await basesRes.json() : { list: [] }
+    const bases = basesData.list || []
+
+    // 2. Para cada base, buscar suas tabelas
+    for (const b of bases) {
+      const res = await fetch(`${NOCODB_URL}/api/v2/meta/bases/${b.id}/tables`, {
+        headers: { "xc-token": NOCODB_TOKEN },
+        cache: "no-store",
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data.list)) {
+          for (const t of data.list) {
+            const meta: TableMeta = { id: t.id, base_id: b.id }
+            if (t.table_name) map[t.table_name.toLowerCase()] = meta
+            if (t.title) map[t.title.toLowerCase()] = meta
+            if (t.id) map[t.id.toLowerCase()] = meta
+          }
         }
       }
     }
   } catch (err) {
-    console.error("Erro ao listar tabelas NocoDB:", err)
+    console.error("Erro ao mapear tabelas NocoDB:", err)
   }
 
   tableMapCache = map
   return map
+}
+
+async function ensureInativoTable(baseId: string, cleanName: string): Promise<string> {
+  const inativoName = `${cleanName}_inativo`
+
+  const res = await fetch(`${NOCODB_URL}/api/v2/meta/bases/${baseId}/tables`, {
+    method: "POST",
+    headers: {
+      "xc-token": NOCODB_TOKEN,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      table_name: inativoName,
+      title: inativoName,
+      columns: [
+        { column_name: "chave_externa", title: "chave_externa", uidt: "SingleLineText" },
+        { column_name: "marca", title: "marca", uidt: "SingleLineText" },
+        { column_name: "modelo", title: "modelo", uidt: "SingleLineText" },
+        { column_name: "versao", title: "versao", uidt: "SingleLineText" },
+        { column_name: "ano", title: "ano", uidt: "Number" },
+        { column_name: "cor", title: "cor", uidt: "SingleLineText" },
+        { column_name: "quilometragem", title: "quilometragem", uidt: "SingleLineText" },
+        { column_name: "combustivel", title: "combustivel", uidt: "SingleLineText" },
+        { column_name: "cambio", title: "cambio", uidt: "SingleLineText" },
+        { column_name: "valor_venda", title: "valor_venda", uidt: "SingleLineText" },
+        { column_name: "fotos", title: "fotos", uidt: "JSON" },
+        { column_name: "opcionais", title: "opcionais", uidt: "JSON" },
+        { column_name: "subcategoria", title: "subcategoria", uidt: "SingleLineText" },
+        { column_name: "tipo", title: "tipo", uidt: "SingleLineText" },
+        { column_name: "atualizado_em", title: "atualizado_em", uidt: "SingleLineText" },
+      ],
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`Falha ao criar tabela de inativos: ${errText}`)
+  }
+
+  const created = await res.json()
+  // Limpar cache para atualizar mapeamento
+  tableMapCache = null
+  return created.id
 }
 
 function normalizeVehicle(raw: any, ativo: boolean): VeiculoEstoque {
@@ -105,11 +162,11 @@ function normalizeVehicle(raw: any, ativo: boolean): VeiculoEstoque {
 export async function listarEstoqueCliente(tabelaEstoque: string) {
   const tableMap = await getNocoDBTableMap()
   const cleanName = (tabelaEstoque || "").toLowerCase().trim()
-  const activeTableId = tableMap[cleanName] || (cleanName.startsWith("m0") ? cleanName : null)
+  const activeMeta = tableMap[cleanName]
 
-  if (activeTableId) {
+  if (activeMeta) {
     // 1. Tabela ativa no NocoDB
-    const resAtivos = await fetch(`${NOCODB_URL}/api/v2/tables/${activeTableId}/records?limit=250`, {
+    const resAtivos = await fetch(`${NOCODB_URL}/api/v2/tables/${activeMeta.id}/records?limit=250`, {
       headers: { "xc-token": NOCODB_TOKEN },
       cache: "no-store",
     })
@@ -118,11 +175,11 @@ export async function listarEstoqueCliente(tabelaEstoque: string) {
 
     // 2. Tabela de inativos no NocoDB (${cleanName}_inativo)
     const inativoName = `${cleanName}_inativo`
-    const inativoTableId = tableMap[inativoName]
+    const inativoMeta = tableMap[inativoName]
 
     let veiculosInativos: VeiculoEstoque[] = []
-    if (inativoTableId) {
-      const resInativos = await fetch(`${NOCODB_URL}/api/v2/tables/${inativoTableId}/records?limit=250`, {
+    if (inativoMeta) {
+      const resInativos = await fetch(`${NOCODB_URL}/api/v2/tables/${inativoMeta.id}/records?limit=250`, {
         headers: { "xc-token": NOCODB_TOKEN },
         cache: "no-store",
       })
@@ -144,7 +201,7 @@ export async function listarEstoqueCliente(tabelaEstoque: string) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const { data: ativos, error: errAtivos } = await supabase.from(cleanName).select("*")
+  const { data: ativos } = await supabase.from(cleanName).select("*")
   const { data: inativos } = await supabase.from(`${cleanName}_inativo`).select("*")
 
   return {
@@ -158,13 +215,24 @@ export async function listarEstoqueCliente(tabelaEstoque: string) {
 export async function alternarStatusVeiculo(tabelaEstoque: string, id: number | string, tornarAtivo: boolean) {
   const tableMap = await getNocoDBTableMap()
   const cleanName = (tabelaEstoque || "").toLowerCase().trim()
-  const activeTableId = tableMap[cleanName] || (cleanName.startsWith("m0") ? cleanName : null)
-  const inativoName = `${cleanName}_inativo`
-  const inativoTableId = tableMap[inativoName]
+  const activeMeta = tableMap[cleanName]
 
-  if (activeTableId && inativoTableId) {
-    const originTableId = tornarAtivo ? inativoTableId : activeTableId
-    const targetTableId = tornarAtivo ? activeTableId : inativoTableId
+  if (activeMeta) {
+    const inativoName = `${cleanName}_inativo`
+    let inativoMeta = tableMap[inativoName]
+
+    // Se a tabela inativa ainda não existir no NocoDB, cria dinamicamente na mesma base
+    if (!inativoMeta && activeMeta.base_id) {
+      const inativoId = await ensureInativoTable(activeMeta.base_id, cleanName)
+      inativoMeta = { id: inativoId, base_id: activeMeta.base_id }
+    }
+
+    if (!inativoMeta) {
+      throw new Error("Não foi possível localizar ou criar a tabela de inativos no NocoDB.")
+    }
+
+    const originTableId = tornarAtivo ? inativoMeta.id : activeMeta.id
+    const targetTableId = tornarAtivo ? activeMeta.id : inativoMeta.id
 
     // 1. Buscar dados do registro na tabela de origem
     const resGet = await fetch(`${NOCODB_URL}/api/v2/tables/${originTableId}/records/${id}`, {
@@ -177,7 +245,7 @@ export async function alternarStatusVeiculo(tabelaEstoque: string, id: number | 
 
     const item = await resGet.json()
 
-    // 2. Montar payload limpo para a tabela de destino
+    // 2. Montar payload para a tabela de destino
     const payload = {
       chave_externa: item.chave_externa || String(Date.now()),
       marca: item.marca || "",
@@ -211,7 +279,7 @@ export async function alternarStatusVeiculo(tabelaEstoque: string, id: number | 
       throw new Error(`Falha ao inserir na tabela de destino: ${err}`)
     }
 
-    // 4. Remover da tabela de origem (cumprindo a regra do usuário)
+    // 4. Remover da tabela de origem
     await fetch(`${NOCODB_URL}/api/v2/tables/${originTableId}/records`, {
       method: "DELETE",
       headers: {
@@ -224,15 +292,15 @@ export async function alternarStatusVeiculo(tabelaEstoque: string, id: number | 
     return { success: true, novoStatus: tornarAtivo }
   }
 
-  throw new Error("Tabelas de estoque ativa/inativa não configuradas no provedor.")
+  throw new Error("Tabela de estoque não encontrada no NocoDB ou Supabase.")
 }
 
 export async function criarVeiculo(tabelaEstoque: string, dados: Partial<VeiculoEstoque>) {
   const tableMap = await getNocoDBTableMap()
   const cleanName = (tabelaEstoque || "").toLowerCase().trim()
-  const activeTableId = tableMap[cleanName] || (cleanName.startsWith("m0") ? cleanName : null)
+  const activeMeta = tableMap[cleanName]
 
-  if (activeTableId) {
+  if (activeMeta) {
     const payload = {
       chave_externa: dados.chave_externa || String(Date.now()),
       marca: dados.marca || "",
@@ -251,7 +319,7 @@ export async function criarVeiculo(tabelaEstoque: string, dados: Partial<Veiculo
       atualizado_em: new Date().toISOString().split("T")[0],
     }
 
-    const res = await fetch(`${NOCODB_URL}/api/v2/tables/${activeTableId}/records`, {
+    const res = await fetch(`${NOCODB_URL}/api/v2/tables/${activeMeta.id}/records`, {
       method: "POST",
       headers: {
         "xc-token": NOCODB_TOKEN,
@@ -274,9 +342,9 @@ export async function criarVeiculo(tabelaEstoque: string, dados: Partial<Veiculo
 export async function editarVeiculo(tabelaEstoque: string, id: number | string, ativo: boolean, dados: Partial<VeiculoEstoque>) {
   const tableMap = await getNocoDBTableMap()
   const cleanName = (tabelaEstoque || "").toLowerCase().trim()
-  const activeTableId = tableMap[cleanName]
-  const inativoTableId = tableMap[`${cleanName}_inativo`]
-  const tableId = ativo ? activeTableId : inativoTableId
+  const activeMeta = tableMap[cleanName]
+  const inativoMeta = tableMap[`${cleanName}_inativo`]
+  const tableId = ativo ? activeMeta?.id : inativoMeta?.id
 
   if (tableId) {
     const payload: any = {
@@ -323,9 +391,9 @@ export async function editarVeiculo(tabelaEstoque: string, id: number | string, 
 export async function excluirVeiculo(tabelaEstoque: string, id: number | string, ativo: boolean) {
   const tableMap = await getNocoDBTableMap()
   const cleanName = (tabelaEstoque || "").toLowerCase().trim()
-  const activeTableId = tableMap[cleanName]
-  const inativoTableId = tableMap[`${cleanName}_inativo`]
-  const tableId = ativo ? activeTableId : inativoTableId
+  const activeMeta = tableMap[cleanName]
+  const inativoMeta = tableMap[`${cleanName}_inativo`]
+  const tableId = ativo ? activeMeta?.id : inativoMeta?.id
 
   if (tableId) {
     const res = await fetch(`${NOCODB_URL}/api/v2/tables/${tableId}/records`, {

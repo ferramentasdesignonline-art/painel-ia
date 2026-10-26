@@ -59,7 +59,7 @@ export async function POST(request: Request) {
           tabela_leads: isSemIA ? null : tabela_leads,
           tabela_bloqueios: isSemIA ? null : tabela_bloqueios,
           tabela_memoria: isSemIA ? null : tabela_memoria,
-          tabela_estoque: isSemIA ? null : tabela_estoque,
+          tabela_estoque: tabela_estoque || null,
           supabase_url: isSemIA ? null : supabase_url,
           supabase_anon_key: isSemIA ? null : supabase_anon_key,
           supabase_service_role_key: isSemIA ? null : supabase_service_role_key,

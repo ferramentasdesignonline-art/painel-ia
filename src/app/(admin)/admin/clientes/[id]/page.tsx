@@ -89,6 +89,7 @@ export default function EditarClientePage() {
   const [loadingTables, setLoadingTables] = useState(true)
   const [apiError, setApiError] = useState<string | null>(null)
   const [moduloEstoqueAtivo, setModuloEstoqueAtivo] = useState(false)
+  const [bancoProvider, setBancoProvider] = useState<'nocodb' | 'supabase'>('nocodb')
 
   const [formData, setFormData] = useState({
     nome: "",
@@ -99,6 +100,27 @@ export default function EditarClientePage() {
     tabela_memoria: "",
     tabela_estoque: "",
   })
+
+  const fetchTables = async (provider: 'nocodb' | 'supabase' = bancoProvider) => {
+    setLoadingTables(true)
+    setApiError(null)
+    try {
+      const res = await fetch(`/api/admin/tables?provider=${provider}`)
+      const json = await res.json()
+      if (json.error) {
+        setApiError(json.error)
+      } else if (json.tables) {
+        setTables(json.tables)
+        if (json.tables.length === 0) {
+          setApiError(`Nenhuma tabela encontrada no ${provider === 'nocodb' ? 'NocoDB' : 'Supabase'}.`)
+        }
+      }
+    } catch (e) {
+      setApiError("Erro de conexão com a API de tabelas.")
+    } finally {
+      setLoadingTables(false)
+    }
+  }
 
   useEffect(() => {
     const fetchClient = async () => {
@@ -116,6 +138,16 @@ export default function EditarClientePage() {
             tabela_estoque: data.tabela_estoque || "",
           })
           setModuloEstoqueAtivo(Boolean(data.tabela_estoque))
+
+          // Auto-detecta provedor baseado nas tabelas
+          const isNocoDB = Boolean(
+            data.tabela_estoque?.includes("cr_motors") ||
+            data.tabela_leads?.includes("cr_motors") ||
+            data.tabela_estoque?.startsWith("m0")
+          )
+          const detectedProvider = isNocoDB ? 'nocodb' : 'supabase'
+          setBancoProvider(detectedProvider)
+          fetchTables(detectedProvider)
         }
       } catch (e) {
         console.error("Erro ao buscar cliente", e)
@@ -125,31 +157,6 @@ export default function EditarClientePage() {
     }
     fetchClient()
   }, [id])
-
-  const fetchTables = async () => {
-    setLoadingTables(true)
-    setApiError(null)
-    try {
-      const res = await fetch("/api/admin/tables")
-      const json = await res.json()
-      if (json.error) {
-        setApiError(json.error)
-      } else if (json.tables) {
-        setTables(json.tables)
-        if (json.tables.length === 0) {
-          setApiError("Nenhuma tabela encontrada no schema público do seu Supabase.")
-        }
-      }
-    } catch (e) {
-      setApiError("Erro de conexão com a API de tabelas.")
-    } finally {
-      setLoadingTables(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchTables()
-  }, [])
 
   const [wacloudInstance, setWacloudInstance] = useState<any>(null)
   const [wacloudLoading, setWacloudLoading] = useState(false)
@@ -267,11 +274,60 @@ export default function EditarClientePage() {
         </div>
 
         <div>
-          <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-gray-100 mb-4 gap-2">
             <div>
-              <h3 className="text-base font-semibold text-gray-900">Vincular Tabelas do Supabase</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Selecione as tabelas que pertencem a este cliente.</p>
+              <h3 className="text-base font-semibold text-gray-900">Vincular Tabelas do Cliente</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Escolha o banco de dados (NocoDB ou Supabase) e vincule as tabelas deste cliente.</p>
             </div>
+
+            {/* Seletor NocoDB vs Supabase */}
+            <div className="flex items-center p-1 bg-gray-100 rounded-xl self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setBancoProvider('nocodb')
+                  fetchTables('nocodb')
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  bancoProvider === 'nocodb'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-white"></span>
+                NocoDB
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setBancoProvider('supabase')
+                  fetchTables('supabase')
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  bancoProvider === 'supabase'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-white"></span>
+                Supabase
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 mb-4 text-xs text-gray-500">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-100 font-medium text-gray-700">
+              {bancoProvider === 'nocodb' ? '🟢 Conectado ao NocoDB' : '🔵 Conectado ao Supabase'}
+            </span>
+            <span>• {loadingTables ? "Carregando tabelas..." : `${tables.length} tabelas encontradas`}</span>
+            <button
+              type="button"
+              onClick={() => fetchTables(bancoProvider)}
+              className="text-indigo-600 hover:underline flex items-center gap-1 ml-auto font-medium"
+            >
+              <RefreshCw className={`w-3 h-3 ${loadingTables ? 'animate-spin' : ''}`} />
+              Recarregar tabelas
+            </button>
           </div>
 
           <div className="grid grid-cols-1 gap-y-5 gap-x-4 sm:grid-cols-2">

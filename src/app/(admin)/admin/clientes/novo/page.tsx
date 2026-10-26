@@ -90,6 +90,7 @@ export default function NovoClientePage() {
 
   const [tipoAtendimento, setTipoAtendimento] = useState<'com_ia' | 'sem_ia'>('sem_ia')
   const [moduloEstoqueAtivo, setModuloEstoqueAtivo] = useState(false)
+  const [bancoProvider, setBancoProvider] = useState<'nocodb' | 'supabase'>('nocodb')
 
   const [formData, setFormData] = useState({
     nome: "",
@@ -107,10 +108,10 @@ export default function NovoClientePage() {
     whatsapp_token: "",
   })
 
-  const fetchTables = async () => {
+  const fetchTables = async (provider: 'nocodb' | 'supabase' = bancoProvider) => {
     setLoadingTables(true)
     try {
-      const res = await fetch("/api/admin/tables")
+      const res = await fetch(`/api/admin/tables?provider=${provider}`)
       const json = await res.json()
       if (json.tables) {
         setTables(json.tables)
@@ -325,11 +326,60 @@ export default function NovoClientePage() {
         {tipoAtendimento === 'com_ia' && (
           <>
             <div>
-              <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-gray-100 mb-4 gap-2">
                 <div>
-                  <h3 className="text-base font-semibold text-gray-900">Vincular Tabelas do Supabase</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Selecione as tabelas que pertencem a este cliente.</p>
+                  <h3 className="text-base font-semibold text-gray-900">Vincular Tabelas do Cliente</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Escolha o banco de dados (NocoDB ou Supabase) e vincule as tabelas deste cliente.</p>
                 </div>
+
+                {/* Seletor NocoDB vs Supabase */}
+                <div className="flex items-center p-1 bg-gray-100 rounded-xl self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBancoProvider('nocodb')
+                      fetchTables('nocodb')
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                      bancoProvider === 'nocodb'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-white"></span>
+                    NocoDB
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBancoProvider('supabase')
+                      fetchTables('supabase')
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                      bancoProvider === 'supabase'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-white"></span>
+                    Supabase
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 mb-4 text-xs text-gray-500">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-100 font-medium text-gray-700">
+                  {bancoProvider === 'nocodb' ? '🟢 Conectado ao NocoDB' : '🔵 Conectado ao Supabase'}
+                </span>
+                <span>• {loadingTables ? "Carregando tabelas..." : `${tables.length} tabelas encontradas`}</span>
+                <button
+                  type="button"
+                  onClick={() => fetchTables(bancoProvider)}
+                  className="text-indigo-600 hover:underline flex items-center gap-1 ml-auto font-medium"
+                >
+                  <RefreshCw className={`w-3 h-3 ${loadingTables ? 'animate-spin' : ''}`} />
+                  Recarregar tabelas
+                </button>
               </div>
 
               <div className="grid grid-cols-1 gap-y-5 gap-x-4 sm:grid-cols-2">
