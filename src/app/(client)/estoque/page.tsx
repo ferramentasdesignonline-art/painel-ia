@@ -73,6 +73,10 @@ export default function EstoquePage() {
   const [galleryPhotos, setGalleryPhotos] = useState<string[]>([])
   const [galleryIndex, setGalleryIndex] = useState(0)
 
+  // Controle de reordenação das fotos (Drag & Drop)
+  const [draggedPhotoIndex, setDraggedPhotoIndex] = useState<number | null>(null)
+  const [dragOverPhotoIndex, setDragOverPhotoIndex] = useState<number | null>(null)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function fetchEstoque() {
@@ -316,6 +320,53 @@ export default function EstoquePage() {
       fotos.unshift(selected)
       return { ...prev, fotos }
     })
+  }
+
+  function handleMovePhoto(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return
+    setFormData((prev) => {
+      const fotos = [...(prev.fotos || [])]
+      if (fromIndex >= fotos.length || toIndex >= fotos.length) return prev
+      const [moved] = fotos.splice(fromIndex, 1)
+      fotos.splice(toIndex, 0, moved)
+      return { ...prev, fotos }
+    })
+  }
+
+  function handleMovePhotoLeft(index: number) {
+    if (index > 0) {
+      handleMovePhoto(index, index - 1)
+    }
+  }
+
+  function handleMovePhotoRight(index: number) {
+    if (formData.fotos && index < formData.fotos.length - 1) {
+      handleMovePhoto(index, index + 1)
+    }
+  }
+
+  function handleDragStart(index: number) {
+    setDraggedPhotoIndex(index)
+  }
+
+  function handleDragOver(e: React.DragEvent, index: number) {
+    e.preventDefault()
+    if (dragOverPhotoIndex !== index) {
+      setDragOverPhotoIndex(index)
+    }
+  }
+
+  function handleDrop(index: number) {
+    if (draggedPhotoIndex !== null && draggedPhotoIndex !== index) {
+      handleMovePhoto(draggedPhotoIndex, index)
+    }
+    setDraggedPhotoIndex(null)
+    setDragOverPhotoIndex(null)
+  }
+
+  function handleDragEnd() {
+    setDraggedPhotoIndex(null)
+    setDragOverPhotoIndex(null)
   }
 
   // Salvar Veículo (Criar ou Editar)
@@ -951,53 +1002,121 @@ export default function EstoquePage() {
                   )}
                 </div>
 
-                {/* Preview das Fotos Carregadas com Opção de Imagem Principal */}
+                {/* Preview das Fotos Carregadas com Opção de Imagem Principal e Reordenação */}
                 {formData.fotos && formData.fotos.length > 0 && (
                   <div className="mt-4 space-y-2">
-                    <p className="text-[11px] text-gray-500">
-                      💡 A foto com badge dourado é a <strong>Foto Principal (Capa)</strong>. Clique em <strong>"Tornar Principal"</strong> para mudar.
-                    </p>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-gray-500 gap-1 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
+                      <span>
+                        💡 <strong>Arraste e solte</strong> para reordenar ou use as setas <strong>◀ ▶</strong>. A primeira foto (<strong>#1</strong>) é a <strong>Capa Principal</strong>.
+                      </span>
+                      <span className="font-semibold text-gray-700 shrink-0">
+                        {formData.fotos.length} foto{formData.fotos.length > 1 ? "s" : ""}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                       {formData.fotos.map((url, idx) => {
                         const isPrincipal = idx === 0
+                        const isDragging = draggedPhotoIndex === idx
+                        const isDragOver = dragOverPhotoIndex === idx
+
                         return (
                           <div
-                            key={idx}
-                            className={`relative group aspect-square rounded-xl overflow-hidden border transition-all ${
+                            key={`${url}-${idx}`}
+                            draggable
+                            onDragStart={() => handleDragStart(idx)}
+                            onDragOver={(e) => handleDragOver(e, idx)}
+                            onDrop={() => handleDrop(idx)}
+                            onDragEnd={handleDragEnd}
+                            className={`relative group aspect-square rounded-xl overflow-hidden border transition-all cursor-grab active:cursor-grabbing select-none ${
                               isPrincipal
                                 ? "ring-2 ring-amber-500 border-amber-500 shadow-md"
-                                : "border-gray-200 bg-gray-100 hover:border-gray-400"
+                                : "border-gray-200 bg-gray-100 hover:border-indigo-400"
+                            } ${isDragging ? "opacity-40 scale-95 border-dashed border-indigo-500" : ""} ${
+                              isDragOver && !isDragging ? "ring-2 ring-indigo-500 scale-105 shadow-lg" : ""
                             }`}
                           >
-                            <img src={url} alt="" className="w-full h-full object-cover" />
+                            <img src={url} alt="" className="w-full h-full object-cover pointer-events-none" />
 
-                            {/* Badge Principal ou Botão para Tornar Principal */}
-                            {isPrincipal ? (
-                              <span className="absolute top-1.5 left-1.5 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-1">
-                                <Star className="w-3 h-3 fill-current" />
-                                Principal
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleSetPrincipalPhoto(idx)}
-                                className="absolute bottom-1.5 left-1.5 right-1.5 bg-black/75 hover:bg-amber-600 text-white text-[10px] font-semibold py-1 px-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-center flex items-center justify-center gap-1 shadow-sm"
-                                title="Definir esta imagem como capa principal"
-                              >
-                                <Star className="w-3 h-3 text-amber-300 fill-current" />
-                                Tornar Principal
-                              </button>
-                            )}
+                            {/* Número da Ordem e Badge Principal */}
+                            <div className="absolute top-1.5 left-1.5 flex items-center gap-1 z-10 pointer-events-none">
+                              {isPrincipal ? (
+                                <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-1">
+                                  <Star className="w-3 h-3 fill-current" />
+                                  1 • Capa
+                                </span>
+                              ) : (
+                                <span className="bg-black/75 backdrop-blur-xs text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-xs">
+                                  #{idx + 1}
+                                </span>
+                              )}
+                            </div>
 
                             {/* Botão Remover */}
                             <button
                               type="button"
-                              onClick={() => handleRemovePhoto(idx)}
-                              className="absolute top-1.5 right-1.5 p-1 bg-red-600 hover:bg-red-700 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleRemovePhoto(idx)
+                              }}
+                              className="absolute top-1.5 right-1.5 p-1 bg-red-600 hover:bg-red-700 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm z-20 cursor-pointer"
                               title="Remover foto"
                             >
                               <X className="w-3 h-3" />
                             </button>
+
+                            {/* Controles Inferiores: Mover Esquerda, Tornar Principal, Mover Direita */}
+                            <div className="absolute bottom-1.5 inset-x-1.5 flex items-center justify-between gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                              {/* Seta Esquerda */}
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleMovePhotoLeft(idx)
+                                }}
+                                className={`p-1 rounded bg-black/80 text-white hover:bg-indigo-600 transition-colors shadow-sm cursor-pointer ${
+                                  idx === 0 ? "opacity-30 cursor-not-allowed" : ""
+                                }`}
+                                title="Mover foto para trás / esquerda"
+                              >
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Tornar Capa (se não for a primeira) */}
+                              {!isPrincipal && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleSetPrincipalPhoto(idx)
+                                  }}
+                                  className="flex-1 bg-black/80 hover:bg-amber-600 text-white text-[9px] font-bold py-1 px-1 rounded transition-colors text-center truncate flex items-center justify-center gap-0.5 shadow-sm cursor-pointer"
+                                  title="Mover diretamente para a primeira posição (Capa)"
+                                >
+                                  <Star className="w-2.5 h-2.5 text-amber-300 fill-current shrink-0" />
+                                  <span>Capa</span>
+                                </button>
+                              )}
+
+                              {/* Seta Direita */}
+                              <button
+                                type="button"
+                                disabled={!formData.fotos || idx === formData.fotos.length - 1}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleMovePhotoRight(idx)
+                                }}
+                                className={`p-1 rounded bg-black/80 text-white hover:bg-indigo-600 transition-colors shadow-sm cursor-pointer ${
+                                  !formData.fotos || idx === formData.fotos.length - 1
+                                    ? "opacity-30 cursor-not-allowed"
+                                    : ""
+                                }`}
+                                title="Mover foto para frente / direita"
+                              >
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         )
                       })}
