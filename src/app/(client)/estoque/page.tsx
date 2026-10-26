@@ -677,7 +677,7 @@ export default function EstoquePage() {
                       {vehicle.quilometragem && (
                         <div className="flex items-center gap-1.5">
                           <Gauge className="w-3.5 h-3.5 text-gray-400" />
-                          <span>{vehicle.quilometragem} km</span>
+                          <span>{String(vehicle.quilometragem).replace(/\s*km$/i, "")} km</span>
                         </div>
                       )}
                       {vehicle.combustivel && (
@@ -695,7 +695,7 @@ export default function EstoquePage() {
                     </div>
                   </div>
 
-                  {/* Barra de Ações: Switch Ativar/Desativar + Editar/Excluir */}
+                  {/* Barra de Ações: Switch Ativar/Desativar + Editar */}
                   <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between">
                     {/* Toggle Switch */}
                     <button
@@ -720,17 +720,11 @@ export default function EstoquePage() {
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handleOpenEdit(vehicle)}
-                        className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors border border-gray-200"
                         title="Editar veículo"
                       >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(vehicle)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Excluir permanentemente"
-                      >
-                        <Trash2 className="w-4 h-4" />
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Editar</span>
                       </button>
                     </div>
                   </div>
@@ -789,7 +783,9 @@ export default function EstoquePage() {
                         </div>
                       </td>
                       <td className="py-3.5 px-4 font-mono text-xs">{vehicle.ano || "-"}</td>
-                      <td className="py-3.5 px-4 text-xs">{vehicle.quilometragem ? `${vehicle.quilometragem} km` : "-"}</td>
+                      <td className="py-3.5 px-4 text-xs font-mono">
+                        {vehicle.quilometragem ? `${String(vehicle.quilometragem).replace(/\s*km$/i, "")} km` : "-"}
+                      </td>
                       <td className="py-3.5 px-4 text-xs">
                         <span>{vehicle.cambio || "-"}</span>
                         <span className="text-gray-400 block">{vehicle.combustivel || ""}</span>
@@ -820,18 +816,14 @@ export default function EstoquePage() {
                         </button>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end">
                           <button
                             onClick={() => handleOpenEdit(vehicle)}
-                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-gray-200"
+                            title="Editar veículo"
                           >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(vehicle)}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                          >
-                            <Trash2 className="w-4 h-4" />
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>Editar</span>
                           </button>
                         </div>
                       </td>
