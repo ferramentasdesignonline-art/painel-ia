@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
-import { getActiveClientConfig } from "@/lib/auth/helpers"
+import { getActiveClientConfig, getUserRole } from "@/lib/auth/helpers"
 import { listarEstoqueCliente, criarVeiculo } from "@/lib/estoque/service"
 
 export const dynamic = "force-dynamic"
@@ -26,9 +26,13 @@ export async function GET() {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
     }
 
+    const { role } = await getUserRole(supabase)
+    const isMasterAdmin = role === "master_admin"
+
     if (!clientConfig.tabela_estoque) {
       return NextResponse.json({
         enabled: false,
+        isMasterAdmin,
         message: "Módulo de estoque desativado para este cliente",
         ativos: [],
         inativos: [],
@@ -38,6 +42,7 @@ export async function GET() {
     const data = await listarEstoqueCliente(clientConfig.tabela_estoque)
     return NextResponse.json({
       enabled: true,
+      isMasterAdmin,
       tabela: clientConfig.tabela_estoque,
       ...data,
     })

@@ -35,6 +35,7 @@ export default function EstoquePage() {
   const [inativos, setInativos] = useState<VeiculoEstoque[]>([])
   const [loading, setLoading] = useState(true)
   const [enabled, setEnabled] = useState(true)
+  const [isMasterAdmin, setIsMasterAdmin] = useState(false)
   const [message, setMessage] = useState("")
 
   const [activeTab, setActiveTab] = useState<"ativos" | "inativos">("ativos")
@@ -81,11 +82,13 @@ export default function EstoquePage() {
 
       if (json.enabled === false) {
         setEnabled(false)
+        setIsMasterAdmin(Boolean(json.isMasterAdmin))
         setMessage(json.message || "Módulo de estoque não habilitado.")
         return
       }
 
       setEnabled(true)
+      setIsMasterAdmin(Boolean(json.isMasterAdmin))
       setAtivos(json.ativos || [])
       setInativos(json.inativos || [])
     } catch (err: any) {
@@ -717,7 +720,7 @@ export default function EstoquePage() {
                       <span>{vehicle.ativo ? "Ativo" : "Desativado"}</span>
                     </button>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => handleOpenEdit(vehicle)}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors border border-gray-200"
@@ -726,6 +729,15 @@ export default function EstoquePage() {
                         <Edit2 className="w-3.5 h-3.5" />
                         <span>Editar</span>
                       </button>
+                      {isMasterAdmin && (
+                        <button
+                          onClick={() => handleDelete(vehicle)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors border border-transparent hover:border-red-200"
+                          title="Excluir veículo (Exclusivo Administrador)"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -816,7 +828,7 @@ export default function EstoquePage() {
                         </button>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => handleOpenEdit(vehicle)}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-gray-200"
@@ -825,6 +837,15 @@ export default function EstoquePage() {
                             <Edit2 className="w-3.5 h-3.5" />
                             <span>Editar</span>
                           </button>
+                          {isMasterAdmin && (
+                            <button
+                              onClick={() => handleDelete(vehicle)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200"
+                              title="Excluir veículo (Exclusivo Administrador)"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1125,30 +1146,49 @@ export default function EstoquePage() {
               </div>
 
               {/* Botões do Rodapé */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setModalOpen(false)}
-                  disabled={saving}
-                  className="rounded-xl"
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={saving || uploadingPhotos}
-                  className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white"
-                >
-                  {saving ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      Salvando...
-                    </>
-                  ) : (
-                    "Salvar Veículo"
+              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                <div>
+                  {isMasterAdmin && editingVehicle && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        handleDelete(editingVehicle)
+                        setModalOpen(false)
+                      }}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 text-xs font-semibold rounded-xl flex items-center gap-1.5"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Excluir Veículo</span>
+                    </Button>
                   )}
-                </Button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setModalOpen(false)}
+                    disabled={saving}
+                    className="rounded-xl"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={saving || uploadingPhotos}
+                    className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white"
+                  >
+                    {saving ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      "Salvar Veículo"
+                    )}
+                  </Button>
+                </div>
               </div>
             </form>
           </div>
