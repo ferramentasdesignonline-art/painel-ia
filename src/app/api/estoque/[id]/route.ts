@@ -61,8 +61,9 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
 
     const { searchParams } = new URL(request.url)
     const ativo = searchParams.get("ativo") !== "false"
+    const chave = searchParams.get("chave") || undefined
 
-    const result = await excluirVeiculo(clientConfig.tabela_estoque, params.id, ativo)
+    const result = await excluirVeiculo(clientConfig.tabela_estoque, params.id, ativo, chave)
     return NextResponse.json(result)
   } catch (error: any) {
     console.error("Erro ao excluir veículo:", error)

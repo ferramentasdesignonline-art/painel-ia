@@ -24,12 +24,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Módulo de estoque não configurado" }, { status: 400 })
     }
 
-    const { id, tornarAtivo } = await request.json()
+    const { id, chave_externa, tornarAtivo } = await request.json()
     if (!id || typeof tornarAtivo !== "boolean") {
       return NextResponse.json({ error: "Parâmetros inválidos (id e tornarAtivo são obrigatórios)" }, { status: 400 })
     }
 
-    const result = await alternarStatusVeiculo(clientConfig.tabela_estoque, id, tornarAtivo)
+    const result = await alternarStatusVeiculo(clientConfig.tabela_estoque, id, tornarAtivo, chave_externa)
     return NextResponse.json(result)
   } catch (error: any) {
     console.error("Erro ao alternar status do veículo:", error)

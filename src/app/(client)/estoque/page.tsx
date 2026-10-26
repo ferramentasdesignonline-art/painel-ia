@@ -119,7 +119,11 @@ export default function EstoquePage() {
       const res = await fetch("/api/estoque/toggle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, tornarAtivo }),
+        body: JSON.stringify({
+          id,
+          chave_externa: vehicle.chave_externa,
+          tornarAtivo,
+        }),
       })
 
       if (!res.ok) {
@@ -128,14 +132,7 @@ export default function EstoquePage() {
         return
       }
 
-      // Atualiza estado local imediatamente
-      if (tornarAtivo) {
-        setInativos((prev) => prev.filter((v) => (v.Id || v.id) !== id))
-        setAtivos((prev) => [{ ...vehicle, ativo: true }, ...prev])
-      } else {
-        setAtivos((prev) => prev.filter((v) => (v.Id || v.id) !== id))
-        setInativos((prev) => [{ ...vehicle, ativo: false }, ...prev])
-      }
+      await fetchEstoque()
     } catch (err) {
       alert("Falha de conexão ao alterar status.")
     } finally {
@@ -156,9 +153,12 @@ export default function EstoquePage() {
     }
 
     try {
-      const res = await fetch(`/api/estoque/${id}?ativo=${vehicle.ativo}`, {
-        method: "DELETE",
-      })
+      const res = await fetch(
+        `/api/estoque/${id}?ativo=${vehicle.ativo}&chave=${encodeURIComponent(vehicle.chave_externa || "")}`,
+        {
+          method: "DELETE",
+        }
+      )
 
       if (!res.ok) {
         const err = await res.json()
@@ -166,11 +166,7 @@ export default function EstoquePage() {
         return
       }
 
-      if (vehicle.ativo) {
-        setAtivos((prev) => prev.filter((v) => (v.Id || v.id) !== id))
-      } else {
-        setInativos((prev) => prev.filter((v) => (v.Id || v.id) !== id))
-      }
+      await fetchEstoque()
     } catch {
       alert("Falha ao excluir veículo.")
     }

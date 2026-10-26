@@ -215,7 +215,12 @@ export async function listarEstoqueCliente(tabelaEstoque: string) {
   }
 }
 
-export async function alternarStatusVeiculo(tabelaEstoque: string, id: number | string, tornarAtivo: boolean) {
+export async function alternarStatusVeiculo(
+  tabelaEstoque: string,
+  id: number | string,
+  tornarAtivo: boolean,
+  chaveExterna?: string
+) {
   const tableMap = await getNocoDBTableMap()
   const cleanName = (tabelaEstoque || "").toLowerCase().trim()
   const activeMeta = tableMap[cleanName]
@@ -239,17 +244,22 @@ export async function alternarStatusVeiculo(tabelaEstoque: string, id: number | 
 
     // 1. Buscar dados do registro na tabela de origem
     let item: any = null
-    const resGet = await fetch(`${NOCODB_URL}/api/v2/tables/${originTableId}/records/${id}`, {
-      headers: { "xc-token": NOCODB_TOKEN },
-    })
-
-    if (resGet.ok) {
-      item = await resGet.json()
-    } else {
-      // Tenta buscar por chave_externa
-      const resWhere = await fetch(`${NOCODB_URL}/api/v2/tables/${originTableId}/records?where=(chave_externa,eq,${id})`, {
+    if (id && !isNaN(Number(id))) {
+      const resGet = await fetch(`${NOCODB_URL}/api/v2/tables/${originTableId}/records/${id}`, {
         headers: { "xc-token": NOCODB_TOKEN },
       })
+      if (resGet.ok) {
+        item = await resGet.json()
+      }
+    }
+
+    // Se não achou pelo ID ou id não era numérico, tenta por chave_externa
+    const searchKey = chaveExterna || String(id)
+    if (!item && searchKey) {
+      const resWhere = await fetch(
+        `${NOCODB_URL}/api/v2/tables/${originTableId}/records?where=(chave_externa,eq,${searchKey})`,
+        { headers: { "xc-token": NOCODB_TOKEN } }
+      )
       if (resWhere.ok) {
         const jsonWhere = await resWhere.json()
         item = jsonWhere.list?.[0]
@@ -294,6 +304,8 @@ export async function alternarStatusVeiculo(tabelaEstoque: string, id: number | 
       throw new Error(`Falha ao inserir na tabela de destino: ${err}`)
     }
 
+    const insertedData = await resInsert.json()
+
     // 4. Remover da tabela de origem
     const originRecordId = item.Id || item.id || id
     await fetch(`${NOCODB_URL}/api/v2/tables/${originTableId}/records`, {
@@ -305,7 +317,12 @@ export async function alternarStatusVeiculo(tabelaEstoque: string, id: number | 
       body: JSON.stringify([{ Id: Number(originRecordId) }]),
     })
 
-    return { success: true, novoStatus: tornarAtivo }
+    return {
+      success: true,
+      novoStatus: tornarAtivo,
+      novoId: insertedData.Id || insertedData.id,
+      chave_externa: payload.chave_externa,
+    }
   }
 
   throw new Error("Tabela de estoque não encontrada no NocoDB ou Supabase.")
@@ -404,7 +421,12 @@ export async function editarVeiculo(tabelaEstoque: string, id: number | string, 
   throw new Error("Tabela de estoque não configurada")
 }
 
-export async function excluirVeiculo(tabelaEstoque: string, id: number | string, ativo: boolean) {
+export async function excluirVeiculo(
+  tabelaEstoque: string,
+  id: number | string,
+  ativo: boolean,
+  chaveExterna?: string
+) {
   const tableMap = await getNocoDBTableMap()
   const cleanName = (tabelaEstoque || "").toLowerCase().trim()
   const activeMeta = tableMap[cleanName]
@@ -412,25 +434,35 @@ export async function excluirVeiculo(tabelaEstoque: string, id: number | string,
   const tableId = ativo ? activeMeta?.id : inativoMeta?.id
 
   if (tableId) {
-    let res = await fetch(`${NOCODB_URL}/api/v2/tables/${tableId}/records`, {
-      method: "DELETE",
-      headers: {
-        "xc-token": NOCODB_TOKEN,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify([{ Id: Number(id) }]),
-    })
+    let deleted = false
 
-    if (!res.ok) {
-      // Se falhar, busca por chave_externa
-      const resWhere = await fetch(`${NOCODB_URL}/api/v2/tables/${tableId}/records?where=(chave_externa,eq,${id})`, {
-        headers: { "xc-token": NOCODB_TOKEN },
+    // 1. Tentar deletar diretamente pelo Id se for válido
+    if (id && !isNaN(Number(id))) {
+      const resDel = await fetch(`${NOCODB_URL}/api/v2/tables/${tableId}/records`, {
+        method: "DELETE",
+        headers: {
+          "xc-token": NOCODB_TOKEN,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify([{ Id: Number(id) }]),
       })
+      if (resDel.ok) {
+        deleted = true
+      }
+    }
+
+    // 2. Se não deletou pelo Id, busca pelo chave_externa na tabela para achar o Id atual
+    const searchKey = chaveExterna || String(id)
+    if (!deleted && searchKey) {
+      const resWhere = await fetch(
+        `${NOCODB_URL}/api/v2/tables/${tableId}/records?where=(chave_externa,eq,${searchKey})`,
+        { headers: { "xc-token": NOCODB_TOKEN } }
+      )
       if (resWhere.ok) {
         const jsonWhere = await resWhere.json()
         const found = jsonWhere.list?.[0]
         if (found && (found.Id || found.id)) {
-          res = await fetch(`${NOCODB_URL}/api/v2/tables/${tableId}/records`, {
+          const resDelReal = await fetch(`${NOCODB_URL}/api/v2/tables/${tableId}/records`, {
             method: "DELETE",
             headers: {
               "xc-token": NOCODB_TOKEN,
@@ -438,13 +470,15 @@ export async function excluirVeiculo(tabelaEstoque: string, id: number | string,
             },
             body: JSON.stringify([{ Id: Number(found.Id || found.id) }]),
           })
+          if (resDelReal.ok) {
+            deleted = true
+          }
         }
       }
     }
 
-    if (!res.ok) {
-      const err = await res.text()
-      throw new Error(`Erro ao excluir veículo: ${err}`)
+    if (!deleted) {
+      throw new Error(`Veículo não encontrado para exclusão (Id: ${id})`)
     }
 
     return { success: true }
