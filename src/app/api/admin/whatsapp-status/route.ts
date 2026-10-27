@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { getNocoDBClienteById } from "@/lib/nocodb/sistema"
 
 export async function GET(request: Request) {
   try {
@@ -10,26 +11,38 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Missing clientId" }, { status: 400 })
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
+    // 1. Tenta buscar no NocoDB
+    let client: any = null
+    try {
+      client = await getNocoDBClienteById(clientId)
+    } catch (nocoErr) {
+      console.warn("Erro ao buscar cliente no NocoDB para whatsapp-status:", nocoErr)
+    }
+
+    // 2. Fallback Supabase
+    if (!client) {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+          },
+        }
+      )
+
+      const { data: sbClient, error } = await supabase
+        .from('sistema-dash-ia_clientes')
+        .select('whatsapp_token')
+        .eq('id', clientId)
+        .single()
+
+      if (error || !sbClient) {
+        console.error("Supabase Error:", error)
+        return NextResponse.json({ error: "Client not found", details: error }, { status: 404 })
       }
-    )
-
-    const { data: client, error } = await supabase
-      .from('sistema-dash-ia_clientes')
-      .select('whatsapp_token')
-      .eq('id', clientId)
-      .single()
-
-    if (error || !client) {
-      console.error("Supabase Error:", error);
-      return NextResponse.json({ error: "Client not found", details: error }, { status: 404 })
+      client = sbClient
     }
 
     if (!client.whatsapp_token) {

@@ -66,29 +66,58 @@ export async function autoBlockLeadOnHumanMessage({
       }
       const { data: instData } = await instanceQuery.maybeSingle()
 
-      const mainAdmin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        { auth: { autoRefreshToken: false, persistSession: false } }
-      )
-
+      // 1. Tenta buscar cliente no NocoDB
       if (instData?.cliente_id) {
-        const { data: clientById } = await mainAdmin
-          .from('sistema-dash-ia_clientes')
-          .select('*')
-          .or(`id.eq.${instData.cliente_id},auth_user_id.eq.${instData.cliente_id}`)
-          .maybeSingle()
-        if (clientById) clientConfig = clientById
+        try {
+          const { getNocoDBClienteById } = await import('@/lib/nocodb/sistema')
+          const nocoCli = await getNocoDBClienteById(instData.cliente_id)
+          if (nocoCli) clientConfig = nocoCli
+        } catch (nocoErr) {
+          console.warn("Aviso ao buscar cliente no NocoDB em auto-block:", nocoErr)
+        }
       }
 
       if (!clientConfig && instData?.nome_instancia) {
-        const { data: allClients } = await mainAdmin.from('sistema-dash-ia_clientes').select('*')
-        const normInst = normalizeStr(instData.nome_instancia)
-        clientConfig = allClients?.find((c: any) => {
-          const normCli = normalizeStr(c.whatsapp_instancia || c.nome || '')
-          const normSlug = normalizeStr(c.slug || '')
-          return normCli === normInst || normSlug === normInst || normInst.includes(normCli) || normCli.includes(normInst)
-        })
+        try {
+          const { getNocoDBClientes } = await import('@/lib/nocodb/sistema')
+          const allNocoClients = await getNocoDBClientes()
+          const normInst = normalizeStr(instData.nome_instancia)
+          clientConfig = allNocoClients?.find((c: any) => {
+            const normCli = normalizeStr(c.whatsapp_instancia || c.nome || '')
+            const normSlug = normalizeStr(c.slug || '')
+            return normCli === normInst || normSlug === normInst || normInst.includes(normCli) || normCli.includes(normInst)
+          })
+        } catch (nocoListErr) {
+          console.warn("Aviso ao buscar clientes no NocoDB em auto-block:", nocoListErr)
+        }
+      }
+
+      // 2. Fallback Supabase
+      if (!clientConfig) {
+        const mainAdmin = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { auth: { autoRefreshToken: false, persistSession: false } }
+        )
+
+        if (instData?.cliente_id) {
+          const { data: clientById } = await mainAdmin
+            .from('sistema-dash-ia_clientes')
+            .select('*')
+            .or(`id.eq.${instData.cliente_id},auth_user_id.eq.${instData.cliente_id}`)
+            .maybeSingle()
+          if (clientById) clientConfig = clientById
+        }
+
+        if (!clientConfig && instData?.nome_instancia) {
+          const { data: allClients } = await mainAdmin.from('sistema-dash-ia_clientes').select('*')
+          const normInst = normalizeStr(instData.nome_instancia)
+          clientConfig = allClients?.find((c: any) => {
+            const normCli = normalizeStr(c.whatsapp_instancia || c.nome || '')
+            const normSlug = normalizeStr(c.slug || '')
+            return normCli === normInst || normSlug === normInst || normInst.includes(normCli) || normCli.includes(normInst)
+          })
+        }
       }
     }
 

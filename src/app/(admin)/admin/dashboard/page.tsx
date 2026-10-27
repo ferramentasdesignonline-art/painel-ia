@@ -1,27 +1,41 @@
 import { createClient } from "@supabase/supabase-js"
 import Link from "next/link"
 import { AdminAnalyticsDashboard } from "@/components/admin/AdminAnalyticsDashboard"
+import { getNocoDBClientes } from "@/lib/nocodb/sistema"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export default async function AdminDashboardPage() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  )
+  let clients: any[] = []
 
-  // Query all clients
-  const { data: clients, error } = await supabase
-    .from('sistema-dash-ia_clientes')
-    .select('*')
-    .order('created_at', { ascending: false })
+  // 1. Tenta buscar no NocoDB
+  try {
+    clients = await getNocoDBClientes()
+  } catch (err) {
+    console.warn("Erro ao buscar clientes no NocoDB para dashboard:", err)
+  }
+
+  // 2. Fallback Supabase
+  if (!clients || clients.length === 0) {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    )
+
+    const { data: supabaseClients } = await supabase
+      .from('sistema-dash-ia_clientes')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    clients = supabaseClients || []
+  }
 
   return (
     <div className="flex h-full flex-col sm:px-6 lg:px-8 py-8 space-y-8">

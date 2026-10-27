@@ -8,6 +8,7 @@ import { construirDataAgendamentoIso } from "@/lib/agendamento-utils"
 import { getClientWhatsappLabelsData } from "@/lib/wacloud/labels"
 import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
 import { isNocoDBClient, getNocoDBLeads, getNocoDBBlockedNumbers } from "@/lib/nocodb/service"
+import { getNocoDBLeadsManuais, getNocoDBTags, getNocoDBLeadTags } from "@/lib/nocodb/sistema"
 
 export async function GET(request: Request) {
   try {
@@ -312,15 +313,25 @@ export async function GET(request: Request) {
     }
 
     // 5. Busca leads manuais
-    let manuaisQuery = supabaseAdmin
-      .from('sistema-dash-ia_leads_manuais')
-      .select('*, etapa:etapa_id(nome)')
-      .eq('cliente_id', clientConfig.id);
+    let leadsManuais: any[] = [];
+    try {
+      leadsManuais = await getNocoDBLeadsManuais(clientConfig.id);
+    } catch (nocoManErr) {
+      console.warn("Aviso ao buscar leads manuais no NocoDB:", nocoManErr);
+    }
 
-    if (from) manuaisQuery = manuaisQuery.gte('created_at', from);
-    if (to) manuaisQuery = manuaisQuery.lte('created_at', to);
+    if (leadsManuais.length === 0) {
+      let manuaisQuery = supabaseAdmin
+        .from('sistema-dash-ia_leads_manuais')
+        .select('*, etapa:etapa_id(nome)')
+        .eq('cliente_id', clientConfig.id);
 
-    const { data: leadsManuais } = await manuaisQuery;
+      if (from) manuaisQuery = manuaisQuery.gte('created_at', from);
+      if (to) manuaisQuery = manuaisQuery.lte('created_at', to);
+
+      const { data: sbManuais } = await manuaisQuery;
+      leadsManuais = sbManuais || [];
+    }
 
     // Formata leads manuais para padrão compatível com a UI
     const manuaisFormatados = (leadsManuais || []).map(lead => {
@@ -445,8 +456,21 @@ export async function GET(request: Request) {
     const todosLeads = [...iaFormatados, ...manuaisFormatados];
 
     // Busca tags
-    const { data: allTags } = await supabaseAdmin.from('sistema-dash-ia_tags').select('*').eq('cliente_id', clientConfig.id);
-    const { data: leadTagsMap } = await supabaseAdmin.from('sistema-dash-ia_lead_tags').select('*').eq('cliente_id', clientConfig.id);
+    let allTags: any[] = [];
+    let leadTagsMap: any[] = [];
+    try {
+      allTags = await getNocoDBTags(clientConfig.id);
+      leadTagsMap = await getNocoDBLeadTags(clientConfig.id);
+    } catch (nocoTagsErr) {
+      console.warn("Aviso ao buscar tags no NocoDB:", nocoTagsErr);
+    }
+
+    if (allTags.length === 0) {
+      const { data: sbTags } = await supabaseAdmin.from('sistema-dash-ia_tags').select('*').eq('cliente_id', clientConfig.id);
+      const { data: sbLeadTags } = await supabaseAdmin.from('sistema-dash-ia_lead_tags').select('*').eq('cliente_id', clientConfig.id);
+      allTags = sbTags || [];
+      leadTagsMap = sbLeadTags || [];
+    }
     
     const tagsById = new Map((allTags || []).map((t: any) => [t.id, t]));
     const tagsByLeadId = new Map();

@@ -45,10 +45,20 @@ export async function POST(request: Request, { params }: { params: { id: string 
     // Se for cliente com IA, salva diretamente na tabela de leads do cliente!
     // Se for cliente sem IA (CRM), salva na tabela wacloud_contatos.
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const sbMain = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-      
-      const { data: clients } = await sbMain.from('sistema-dash-ia_clientes').select('*');
+      const { getNocoDBClientes } = await import('@/lib/nocodb/sistema');
+      let clients: any[] = [];
+      try {
+        clients = await getNocoDBClientes();
+      } catch (nocoErr) {
+        console.warn("Aviso ao buscar clientes no NocoDB em chat-labels:", nocoErr);
+      }
+
+      if (!clients || clients.length === 0) {
+        const { createClient } = await import('@supabase/supabase-js');
+        const sbMain = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+        const { data: sbClients } = await sbMain.from('sistema-dash-ia_clientes').select('*');
+        clients = sbClients || [];
+      }
       
       const norm = (s: string) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
       const targetInst = norm(instance.nome_instancia);

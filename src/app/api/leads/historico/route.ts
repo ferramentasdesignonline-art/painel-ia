@@ -1,34 +1,44 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-
 import { getActiveClientConfig } from '@/lib/auth/helpers';
+import { getNocoDBLeadHistorico } from '@/lib/nocodb/sistema';
 
 export async function GET(request: Request) {
-  const supabase = createClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const cliente = await getActiveClientConfig();
+  if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado ou sem permissão' }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
   const leadId = searchParams.get('leadId');
   if (!leadId) return NextResponse.json({ error: 'leadId is required' }, { status: 400 });
 
-  const cliente = await getActiveClientConfig(supabase);
-
-  if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 });
-
-  const { data: historico, error } = await supabase
-    .from('sistema-dash-ia_lead_historico')
-    .select('*')
-    .eq('cliente_id', cliente.id)
-    .eq('lead_id', leadId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    if (error.message?.includes('does not exist')) {
-      return NextResponse.json({ historico: [] });
+  // 1. Tenta buscar no NocoDB
+  try {
+    const cleanLeadId = leadId.startsWith('ia-') ? leadId.replace('ia-', '') : (leadId.startsWith('manual-') ? leadId.replace('manual-', '') : leadId);
+    const historico = await getNocoDBLeadHistorico(cliente.id, cleanLeadId);
+    if (historico && historico.length > 0) {
+      return NextResponse.json({ historico });
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (nocoErr) {
+    console.warn("Aviso ao buscar histórico no NocoDB:", nocoErr);
   }
 
-  return NextResponse.json({ historico });
+  // 2. Fallback Supabase
+  try {
+    const { createClient: createSupabaseAdmin } = require('@supabase/supabase-js');
+    const supabaseAdmin = createSupabaseAdmin(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+
+    const { data: historico, error } = await supabaseAdmin
+      .from('sistema-dash-ia_lead_historico')
+      .select('*')
+      .eq('cliente_id', cliente.id)
+      .eq('lead_id', leadId)
+      .order('created_at', { ascending: false });
+
+    return NextResponse.json({ historico: historico || [] });
+  } catch (sbErr) {
+    return NextResponse.json({ historico: [] });
+  }
 }

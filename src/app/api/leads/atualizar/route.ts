@@ -1,32 +1,20 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { getActiveClientConfig } from "@/lib/auth/helpers";
+import { getActiveClientConfig, getUserRole } from "@/lib/auth/helpers";
 import { NextResponse } from "next/server";
 import { isNocoDBClient, getNocoDBLeadById, updateNocoDBLead } from "@/lib/nocodb/service";
+import { updateNocoDBLeadManual, addNocoDBLeadHistorico } from "@/lib/nocodb/sistema";
 
 export async function POST(request: Request) {
   try {
-    const cookieStore = cookies();
-    const supabaseSession = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
-      }
-    );
-
-    const clientConfig = await getActiveClientConfig(supabaseSession);
+    const { user } = await getUserRole();
+    const clientConfig = await getActiveClientConfig();
     if (!clientConfig) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: { session } } = await supabaseSession.auth.getSession();
-    const emailPrefix = session?.user?.email?.split('@')[0] || 'Vendedor';
+    const emailPrefix = user?.email?.split('@')[0] || user?.nome || 'Vendedor';
 
     const supabaseAdmin = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -46,6 +34,12 @@ export async function POST(request: Request) {
     const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_leads;
 
     if (origem === 'manual') {
+      try {
+        await updateNocoDBLeadManual(leadId, novasInformacoes);
+      } catch (nocoErr) {
+        console.warn("Aviso ao atualizar lead manual no NocoDB:", nocoErr);
+      }
+
       const { data: old } = await supabaseAdmin
         .from('sistema-dash-ia_leads_manuais')
         .select('nome, veiculo_interessado, etapa_id')
@@ -199,6 +193,21 @@ export async function POST(request: Request) {
     if (novasInformacoes.veiculo_interessado && novasInformacoes.veiculo_interessado !== oldLead?.veiculo_interessado) mudancas.push(`Veículo alterado de '${oldLead?.veiculo_interessado || "Vazio"}' para '${novasInformacoes.veiculo_interessado}'`);
 
     if (mudancas.length > 0) {
+      try {
+        await addNocoDBLeadHistorico({
+          cliente_id: clientConfig.id,
+          lead_id: leadId.toString(),
+          tipo_lead: origem || 'ia',
+          etapa_origem_id: oldLead?.etapa_id || null,
+          etapa_destino_id: oldLead?.etapa_id || null,
+          vendedor_nome: emailPrefix,
+          evento: 'update',
+          descricao: mudancas.join(' | '),
+        });
+      } catch (nocoHistErr) {
+        console.warn("Aviso ao salvar histórico no NocoDB:", nocoHistErr);
+      }
+
       try {
         await supabaseAdmin
           .from('sistema-dash-ia_lead_historico')

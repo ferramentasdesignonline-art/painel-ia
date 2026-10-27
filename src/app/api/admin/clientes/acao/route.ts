@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
+import { updateNocoDBCliente, deleteNocoDBCliente } from "@/lib/nocodb/sistema"
 
 export async function POST(req: Request) {
   try {
@@ -9,40 +10,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Faltam parâmetros" }, { status: 400 })
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    )
-
     if (acao === 'activate') {
-      const { error } = await supabase
-        .from('sistema-dash-ia_clientes')
-        .update({ active: true })
-        .eq('id', id)
-      
-      if (error) throw error
+      try { await updateNocoDBCliente(id, { active: true }) } catch (e) { console.warn("NocoDB activate err:", e) }
     } else if (acao === 'deactivate') {
-      const { error } = await supabase
-        .from('sistema-dash-ia_clientes')
-        .update({ active: false })
-        .eq('id', id)
-      
-      if (error) throw error
+      try { await updateNocoDBCliente(id, { active: false }) } catch (e) { console.warn("NocoDB deactivate err:", e) }
     } else if (acao === 'delete') {
-      const { error } = await supabase
-        .from('sistema-dash-ia_clientes')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
+      try { await deleteNocoDBCliente(id) } catch (e) { console.warn("NocoDB delete err:", e) }
     } else {
       return NextResponse.json({ error: "Ação inválida" }, { status: 400 })
+    }
+
+    // Compatibilidade com Supabase
+    try {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+          },
+        }
+      )
+
+      if (acao === 'activate') {
+        await supabase.from('sistema-dash-ia_clientes').update({ active: true }).eq('id', id)
+      } else if (acao === 'deactivate') {
+        await supabase.from('sistema-dash-ia_clientes').update({ active: false }).eq('id', id)
+      } else if (acao === 'delete') {
+        await supabase.from('sistema-dash-ia_clientes').delete().eq('id', id)
+      }
+    } catch (sbErr) {
+      console.warn("Supabase action fallback warn:", sbErr)
     }
 
     return NextResponse.json({ success: true })

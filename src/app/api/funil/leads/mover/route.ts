@@ -1,8 +1,15 @@
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { getActiveClientConfig } from '@/lib/auth/helpers';
+import { getActiveClientConfig, getUserRole } from '@/lib/auth/helpers';
 import { isNocoDBClient, getNocoDBLeadById, updateNocoDBLead } from '@/lib/nocodb/service';
+import {
+  updateNocoDBLeadManual,
+  upsertNocoDBLeadPosicao,
+  addNocoDBLeadHistorico,
+  getNocoDBFunil,
+  getNocoDBEtapasFunil,
+} from '@/lib/nocodb/sistema';
 
 function findMatchingEtiquetaForEtapa(
   etapa: { nome: string; tipo: string },
@@ -93,15 +100,12 @@ function findMatchingEtiquetaForEtapa(
 
 export async function PUT(request: Request) {
   try {
-    const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { user } = await getUserRole();
+    const cliente = await getActiveClientConfig();
+    if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado ou sem permissão' }, { status: 401 });
 
     const { lead_id, etapa_id, origem } = await request.json();
     console.log('Mover lead:', { lead_id, etapa_id, origem });
-
-    const cliente = await getActiveClientConfig(supabase);
-    if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 });
 
     const supabaseAdmin = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -110,25 +114,47 @@ export async function PUT(request: Request) {
     );
 
     if (origem === 'manual') {
-      const { error } = await supabaseAdmin
-        .from('sistema-dash-ia_leads_manuais')
-        .update({ etapa_id, updated_at: new Date().toISOString() })
-        .eq('id', lead_id)
-        .eq('cliente_id', cliente.id);
-
-      if (error) {
-        console.error('Erro ao mover lead manual:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+      // 1. Atualizar lead manual no NocoDB
+      try {
+        await updateNocoDBLeadManual(lead_id, { etapa_id });
+      } catch (nocoErr) {
+        console.warn("Aviso ao mover lead manual no NocoDB:", nocoErr);
       }
+
+      // 2. Sincronizar com Supabase se aplicável
+      try {
+        await supabaseAdmin
+          .from('sistema-dash-ia_leads_manuais')
+          .update({ etapa_id, updated_at: new Date().toISOString() })
+          .eq('id', lead_id)
+          .eq('cliente_id', cliente.id);
+      } catch (sbErr) {
+        console.warn("Aviso ao mover lead manual no Supabase:", sbErr);
+      }
+
       return NextResponse.json({ success: true });
     }
 
     // Lead da IA / wacloud
-    const { data: etapaDestino } = await supabaseAdmin
-      .from('sistema-dash-ia_etapas_funil')
-      .select('nome, tipo')
-      .eq('id', etapa_id)
-      .maybeSingle();
+    let etapaDestino: any = null;
+    try {
+      const funil = await getNocoDBFunil(cliente.id);
+      if (funil?.Id) {
+        const etapas = await getNocoDBEtapasFunil(funil.Id);
+        etapaDestino = etapas.find(e => String(e.Id) === String(etapa_id) || String(e.id) === String(etapa_id) || e.uuid_antigo === String(etapa_id));
+      }
+    } catch (nocoEtapaErr) {
+      console.warn("Aviso ao buscar etapa no NocoDB:", nocoEtapaErr);
+    }
+
+    if (!etapaDestino) {
+      const { data: sbEtapaDestino } = await supabaseAdmin
+        .from('sistema-dash-ia_etapas_funil')
+        .select('nome, tipo')
+        .eq('id', etapa_id)
+        .maybeSingle();
+      etapaDestino = sbEtapaDestino;
+    }
 
     if (!etapaDestino) {
       return NextResponse.json({ error: 'Etapa de destino não encontrada' }, { status: 404 });
@@ -382,17 +408,35 @@ export async function PUT(request: Request) {
       console.warn('Erro ao atualizar wacloud_contatos:', errWacloud);
     }
 
-    // Registrar no histórico de forma não bloqueante
+    const vendedorNome = user?.email?.split('@')[0] || user?.nome || 'Vendedor';
+    const cleanLeadId = lead_id.toString().startsWith('ia-') ? lead_id.toString().replace('ia-', '') : lead_id.toString();
+
+    // Registrar no histórico de forma não bloqueante (NocoDB + Supabase)
+    try {
+      await addNocoDBLeadHistorico({
+        cliente_id: cliente.id,
+        lead_id: cleanLeadId,
+        tipo_lead: origem,
+        etapa_origem_id: null,
+        etapa_destino_id: etapa_id,
+        vendedor_nome: vendedorNome,
+        evento: 'move',
+        descricao: `Lead movido para: ${etapaDestino.nome}`,
+      });
+    } catch (hNocoErr) {
+      console.warn("Aviso ao registrar histórico no NocoDB:", hNocoErr);
+    }
+
     try {
       await supabaseAdmin
         .from('sistema-dash-ia_lead_historico')
         .insert({
           cliente_id: cliente.id,
-          lead_id: lead_id.toString(),
+          lead_id: cleanLeadId,
           tipo_lead: origem,
           etapa_origem_id: null,
           etapa_destino_id: etapa_id,
-          vendedor_nome: session.user.email?.split('@')[0] || 'Vendedor',
+          vendedor_nome: vendedorNome,
           evento: 'move',
           descricao: `Lead movido para: ${etapaDestino.nome}`,
           created_at: new Date().toISOString()
@@ -401,9 +445,14 @@ export async function PUT(request: Request) {
       // Ignora erro se tabela de histórico não existir
     }
 
-    // Registrar posição manual no funil
+    // Registrar posição manual no funil (NocoDB + Supabase)
     try {
-      const cleanLeadId = lead_id.toString().startsWith('ia-') ? lead_id.toString().replace('ia-', '') : lead_id;
+      await upsertNocoDBLeadPosicao(cliente.id, cleanLeadId, etapa_id);
+    } catch (posNocoErr) {
+      console.warn("Aviso ao salvar posicao manual no NocoDB:", posNocoErr);
+    }
+
+    try {
       await supabaseAdmin
         .from('sistema-dash-ia_lead_posicoes')
         .upsert({
@@ -416,7 +465,7 @@ export async function PUT(request: Request) {
           onConflict: 'cliente_id, lead_id'
         });
     } catch (posErr) {
-      console.warn('Aviso ao salvar posicao manual:', posErr);
+      console.warn('Aviso ao salvar posicao manual no Supabase:', posErr);
     }
 
     return NextResponse.json({ success: true, whatsapp_labels: finalLabels, etapa_id });

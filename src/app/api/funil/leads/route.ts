@@ -7,20 +7,24 @@ import { getActiveClientConfig } from '@/lib/auth/helpers';
 import { getAllBlockedNumbers } from '@/lib/supabase/queries';
 import { construirDataAgendamentoIso } from '@/lib/agendamento-utils';
 import { isNocoDBClient, getNocoDBLeads, getNocoDBBlockedNumbers } from '@/lib/nocodb/service';
+import {
+  getNocoDBFunil,
+  getNocoDBEtapasFunil,
+  getNocoDBLeadPosicoes,
+  getNocoDBLeadsManuais,
+  getNocoDBTags,
+  getNocoDBLeadTags,
+} from '@/lib/nocodb/sistema';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET(request: Request) {
-  const supabase = createClient();
   const { searchParams } = new URL(request.url);
   const periodo = searchParams.get('periodo') || '30d';
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const cliente = await getActiveClientConfig(supabase);
-  if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 });
+  const cliente = await getActiveClientConfig();
+  if (!cliente) return NextResponse.json({ error: 'Cliente não encontrado ou sem permissão' }, { status: 401 });
 
   // Usar sempre service role para evitar bloqueios de RLS
   const supabaseAdmin = createAdminClient(
@@ -43,28 +47,50 @@ export async function GET(request: Request) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
-  let { data: funil } = await supabaseAdmin
-    .from('sistema-dash-ia_funis')
-    .select('id, meta_followup')
-    .eq('cliente_id', cliente.id)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  // 1. Tenta carregar funil e etapas do NocoDB
+  let funil: any = null;
+  let etapas: any[] = [];
+  try {
+    funil = await getNocoDBFunil(cliente.id);
+    if (!funil) {
+      funil = await criarFunilPadrao(cliente.id);
+    }
+    if (funil?.Id) {
+      etapas = await getNocoDBEtapasFunil(funil.Id);
+    }
+  } catch (nocoFunilErr) {
+    console.warn("Erro ao buscar funil/etapas no NocoDB:", nocoFunilErr);
+  }
 
-  if (!funil) {
-    const criado = await criarFunilPadrao(cliente.id, supabaseAdmin);
-    funil = criado ? { id: criado.id, meta_followup: 5 } : null;
+  // 2. Fallback Supabase para funil e etapas se vazio
+  if (!funil || etapas.length === 0) {
+    let { data: sbFunil } = await supabaseAdmin
+      .from('sistema-dash-ia_funis')
+      .select('id, meta_followup')
+      .eq('cliente_id', cliente.id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (!sbFunil) {
+      const criado = await criarFunilPadrao(cliente.id, supabaseAdmin);
+      sbFunil = criado ? { id: criado.id, meta_followup: 5 } : null;
+    }
+    funil = sbFunil;
+
+    if (funil) {
+      const { data: sbEtapas } = await supabaseAdmin
+        .from('sistema-dash-ia_etapas_funil')
+        .select('*')
+        .eq('funil_id', funil.id)
+        .order('ordem');
+      etapas = sbEtapas || [];
+    }
   }
 
   if (!funil) {
     return NextResponse.json({ error: 'Falha ao inicializar funil' }, { status: 500 });
   }
-
-  const { data: etapas } = await supabaseAdmin
-    .from('sistema-dash-ia_etapas_funil')
-    .select('*')
-    .eq('funil_id', funil.id)
-    .order('ordem');
 
   const dataInicioStr = searchParams.get('dataInicio');
   const dataFimStr = searchParams.get('dataFim');
@@ -249,21 +275,41 @@ export async function GET(request: Request) {
   const limite30d = new Date();
   limite30d.setDate(limite30d.getDate() - 30);
 
-  const { data: posicoesManuais } = await supabaseAdmin
-    .from('sistema-dash-ia_lead_posicoes')
-    .select('lead_id, etapa_id, movido_manualmente_em')
-    .eq('cliente_id', cliente.id)
-    .gte('movido_manualmente_em', limite30d.toISOString());
+  let posicoesManuais: any[] = [];
+  try {
+    posicoesManuais = await getNocoDBLeadPosicoes(cliente.id, { since: limite30d });
+  } catch (nocoPosErr) {
+    console.warn("Erro ao buscar posições manuais no NocoDB:", nocoPosErr);
+  }
+
+  if (posicoesManuais.length === 0) {
+    const { data: sbPos } = await supabaseAdmin
+      .from('sistema-dash-ia_lead_posicoes')
+      .select('lead_id, etapa_id, movido_manualmente_em')
+      .eq('cliente_id', cliente.id)
+      .gte('movido_manualmente_em', limite30d.toISOString());
+    posicoesManuais = sbPos || [];
+  }
 
   const mapaPosicoesManuais = new Map(
-    posicoesManuais?.map(p => [String(p.lead_id), p.etapa_id]) || []
+    posicoesManuais.map(p => [String(p.lead_id), p.etapa_id])
   );
 
   // Buscar leads manuais
-  const { data: leadsManuais } = await supabaseAdmin
-    .from('sistema-dash-ia_leads_manuais')
-    .select('*')
-    .eq('cliente_id', cliente.id);
+  let leadsManuais: any[] = [];
+  try {
+    leadsManuais = await getNocoDBLeadsManuais(cliente.id);
+  } catch (nocoManErr) {
+    console.warn("Erro ao buscar leads manuais no NocoDB:", nocoManErr);
+  }
+
+  if (leadsManuais.length === 0) {
+    const { data: sbLeadsManuais } = await supabaseAdmin
+      .from('sistema-dash-ia_leads_manuais')
+      .select('*')
+      .eq('cliente_id', cliente.id);
+    leadsManuais = sbLeadsManuais || [];
+  }
 
   // 7. Buscar contatos e etiquetas do WhatsApp Cloud para correlacionar
   let mapaWhatsappLabels = new Map<string, string[]>();
@@ -496,8 +542,21 @@ export async function GET(request: Request) {
   }
 
   // Busca tags
-  const { data: allTags } = await supabaseAdmin.from('sistema-dash-ia_tags').select('*').eq('cliente_id', cliente.id);
-  const { data: leadTagsMap } = await supabaseAdmin.from('sistema-dash-ia_lead_tags').select('*').eq('cliente_id', cliente.id);
+  let allTags: any[] = [];
+  let leadTagsMap: any[] = [];
+  try {
+    allTags = await getNocoDBTags(cliente.id);
+    leadTagsMap = await getNocoDBLeadTags(cliente.id);
+  } catch (nocoTagsErr) {
+    console.warn("Erro ao buscar tags no NocoDB:", nocoTagsErr);
+  }
+
+  if (allTags.length === 0) {
+    const { data: sbTags } = await supabaseAdmin.from('sistema-dash-ia_tags').select('*').eq('cliente_id', cliente.id);
+    const { data: sbLeadTags } = await supabaseAdmin.from('sistema-dash-ia_lead_tags').select('*').eq('cliente_id', cliente.id);
+    allTags = sbTags || [];
+    leadTagsMap = sbLeadTags || [];
+  }
   
   if (allTags && leadTagsMap) {
     const tagsById = new Map(allTags.map((t: any) => [t.id, t]));

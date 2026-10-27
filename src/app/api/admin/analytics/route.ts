@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
 import { isNocoDBClient, getNocoDBLeads } from "@/lib/nocodb/service"
+import { getNocoDBClientes } from "@/lib/nocodb/sistema"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -12,22 +13,33 @@ export async function GET(request: Request) {
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
+    // 1. Tenta buscar clientes ativos no NocoDB
+    let clients: any[] = []
+    try {
+      clients = await getNocoDBClientes({ activeOnly: true })
+    } catch (nocoErr) {
+      console.warn("Erro ao buscar clientes ativos no NocoDB:", nocoErr)
+    }
 
-    // Buscar clientes
-    const { data: clients, error: clientsError } = await supabaseAdmin
-      .from('sistema-dash-ia_clientes')
-      .select('*')
-      .eq('active', true)
-      .order('nome')
-    
-    if (clientsError || !clients) {
-      console.error("Erro ao buscar clientes:", clientsError)
-      return NextResponse.json({ error: "Failed to fetch clients" }, { status: 500 })
+    // 2. Fallback Supabase se necessário
+    if (!clients || clients.length === 0) {
+      const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+      )
+
+      const { data: sbClients, error: clientsError } = await supabaseAdmin
+        .from('sistema-dash-ia_clientes')
+        .select('*')
+        .eq('active', true)
+        .order('nome')
+
+      if (clientsError || !sbClients) {
+        console.error("Erro ao buscar clientes:", clientsError)
+        return NextResponse.json({ error: "Failed to fetch clients" }, { status: 500 })
+      }
+      clients = sbClients
     }
 
     const clientsKpis: any[] = []
