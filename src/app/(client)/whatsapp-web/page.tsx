@@ -17,20 +17,7 @@ function normalize(str: string) {
 }
 
 export default async function WhatsAppWebPage({ searchParams }: { searchParams?: { tel?: string; msg?: string; nome?: string } }) {
-  const cookieStore = cookies()
-  const supabaseSession = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-      },
-    }
-  )
-
-  const clientConfig = await getActiveClientConfig(supabaseSession)
+  const clientConfig = await getActiveClientConfig()
 
   if (!clientConfig) {
     return (
@@ -42,11 +29,23 @@ export default async function WhatsAppWebPage({ searchParams }: { searchParams?:
     )
   }
 
-  // Buscar instâncias da Uazapi/Wacloud cadastradas
-  const supabaseAdmin = getWacloudSupabaseAdmin()
-  const { data: instances } = await supabaseAdmin
-    .from("wacloud_instancias")
-    .select("id, nome_instancia, status, token, cliente_id")
+  // 1. Buscar instâncias no NocoDB (WaCloud)
+  let instances: any[] = []
+  try {
+    const { getWacloudInstancias } = await import('@/lib/nocodb/wacloud')
+    instances = await getWacloudInstancias()
+  } catch (nocoErr) {
+    console.warn("Aviso ao buscar instâncias no NocoDB:", nocoErr)
+  }
+
+  // 2. Fallback Supabase se necessário
+  if (!instances || instances.length === 0) {
+    const supabaseAdmin = getWacloudSupabaseAdmin()
+    const { data: sbInstances } = await supabaseAdmin
+      .from("wacloud_instancias")
+      .select("id, nome_instancia, status, token, cliente_id")
+    instances = sbInstances || []
+  }
 
   const clientNameNormalized = normalize(clientConfig.nome || "")
   const clientSlugNormalized = normalize(clientConfig.slug || "")

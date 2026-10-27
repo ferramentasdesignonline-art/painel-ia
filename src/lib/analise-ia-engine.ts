@@ -150,14 +150,25 @@ export async function runAnalise(clientConfig: any, openAiKey: string, log: (s: 
     const wacloudAdmin = getWacloudSupabaseAdmin();
 
     leadsPromise = (async () => {
-      const { data: contatos } = await wacloudAdmin
-        .from('wacloud_contatos')
-        .select('*')
-        .eq('nome_instancia', nomeInstancia)
-        .order('atualizado_em', { ascending: false })
-        .limit(5000);
+      let contatos: any[] = [];
+      try {
+        const { getWacloudContatos } = await import('@/lib/nocodb/wacloud');
+        contatos = await getWacloudContatos({ nomeInstancia, limit: 5000 });
+      } catch (nocoErr) {
+        console.warn("Aviso ao buscar contatos no NocoDB em analise-ia-engine:", nocoErr);
+      }
 
-      return (contatos || []).map(c => ({
+      if (!contatos || contatos.length === 0) {
+        const { data: sbContatos } = await wacloudAdmin
+          .from('wacloud_contatos')
+          .select('*')
+          .eq('nome_instancia', nomeInstancia)
+          .order('atualizado_em', { ascending: false })
+          .limit(5000);
+        contatos = sbContatos || [];
+      }
+
+      return contatos.map(c => ({
         id: c.id,
         nome: c.nome_contato || 'Cliente',
         telefone: c.telefone_contato,
@@ -175,14 +186,25 @@ export async function runAnalise(clientConfig: any, openAiKey: string, log: (s: 
     })();
 
     msgsPromise = (async () => {
-      const { data: cloudMsgs } = await wacloudAdmin
-        .from('wacloud_mensagens')
-        .select('id, telefone_contato, mensagem, enviado_por_mim, created_at')
-        .eq('nome_instancia', nomeInstancia)
-        .order('created_at', { ascending: true })
-        .limit(20000);
+      let cloudMsgs: any[] = [];
+      try {
+        const { getWacloudMensagens } = await import('@/lib/nocodb/wacloud');
+        cloudMsgs = await getWacloudMensagens("", nomeInstancia, 20000);
+      } catch (nocoMsgErr) {
+        console.warn("Aviso ao buscar mensagens no NocoDB em analise-ia-engine:", nocoMsgErr);
+      }
 
-      return (cloudMsgs || []).map(m => ({
+      if (!cloudMsgs || cloudMsgs.length === 0) {
+        const { data: sbMsgs } = await wacloudAdmin
+          .from('wacloud_mensagens')
+          .select('id, telefone_contato, mensagem, enviado_por_mim, created_at')
+          .eq('nome_instancia', nomeInstancia)
+          .order('created_at', { ascending: true })
+          .limit(20000);
+        cloudMsgs = sbMsgs || [];
+      }
+
+      return cloudMsgs.map(m => ({
         id: m.id,
         session_id: m.telefone_contato,
         message: {
@@ -209,7 +231,18 @@ export async function runAnalise(clientConfig: any, openAiKey: string, log: (s: 
       const { fetchUazapiLabels } = await import("@/lib/wacloud/uazapi")
       const wacloudAdmin = getWacloudSupabaseAdmin()
 
-      const { data: insts } = await wacloudAdmin.from("wacloud_instancias").select("id, nome_instancia, token, cliente_id")
+      let insts: any[] = []
+      try {
+        const { getWacloudInstancias } = await import("@/lib/nocodb/wacloud")
+        insts = await getWacloudInstancias()
+      } catch (nocoInstErr) {
+        console.warn("Aviso ao buscar instâncias no NocoDB em analise-ia-engine:", nocoInstErr)
+      }
+
+      if (!insts || insts.length === 0) {
+        const { data: sbInsts } = await wacloudAdmin.from("wacloud_instancias").select("id, nome_instancia, token, cliente_id")
+        insts = sbInsts || []
+      }
       const instNorm = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase()
       const clientNameNorm = instNorm(clientConfig.nome_instancia || clientConfig.whatsapp_instancia || clientConfig.nome || "")
 

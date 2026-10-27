@@ -18,25 +18,40 @@ export async function GET(request: Request) {
       }
     )
 
-    const clientConfig = await getActiveClientConfig(supabase)
+    const clientConfig = await getActiveClientConfig()
     if (!clientConfig) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     let token = clientConfig.whatsapp_token
     if (!token) {
-      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase')
-      const wacloudAdmin = getWacloudSupabaseAdmin()
       const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome
-      const { data: inst } = await wacloudAdmin
-        .from('wacloud_instancias')
-        .select('token')
-        .or(`nome_instancia.eq.${nomeInstancia},cliente_id.eq.${clientConfig.id}`)
-        .limit(1)
-        .maybeSingle()
+      try {
+        const { getWacloudInstanciaByIdOrName, getWacloudInstancias } = await import('@/lib/nocodb/wacloud')
+        const instByName = await getWacloudInstanciaByIdOrName(nomeInstancia)
+        if (instByName?.token) {
+          token = instByName.token
+        } else {
+          const list = await getWacloudInstancias({ clienteId: clientConfig.id })
+          if (list[0]?.token) token = list[0].token
+        }
+      } catch (nocoErr) {
+        console.warn("Aviso ao buscar token no NocoDB:", nocoErr)
+      }
 
-      if (inst?.token) {
-        token = inst.token
+      if (!token) {
+        const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase')
+        const wacloudAdmin = getWacloudSupabaseAdmin()
+        const { data: inst } = await wacloudAdmin
+          .from('wacloud_instancias')
+          .select('token')
+          .or(`nome_instancia.eq.${nomeInstancia},cliente_id.eq.${clientConfig.id}`)
+          .limit(1)
+          .maybeSingle()
+
+        if (inst?.token) {
+          token = inst.token
+        }
       }
     }
 
@@ -75,25 +90,40 @@ export async function POST(request: Request) {
       }
     )
 
-    const clientConfig = await getActiveClientConfig(supabase)
+    const clientConfig = await getActiveClientConfig()
     if (!clientConfig) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     let token = clientConfig.whatsapp_token
     if (!token) {
-      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase')
-      const wacloudAdmin = getWacloudSupabaseAdmin()
       const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome
-      const { data: inst } = await wacloudAdmin
-        .from('wacloud_instancias')
-        .select('token')
-        .or(`nome_instancia.eq.${nomeInstancia},cliente_id.eq.${clientConfig.id}`)
-        .limit(1)
-        .maybeSingle()
+      try {
+        const { getWacloudInstanciaByIdOrName, getWacloudInstancias } = await import('@/lib/nocodb/wacloud')
+        const instByName = await getWacloudInstanciaByIdOrName(nomeInstancia)
+        if (instByName?.token) {
+          token = instByName.token
+        } else {
+          const list = await getWacloudInstancias({ clienteId: clientConfig.id })
+          if (list[0]?.token) token = list[0].token
+        }
+      } catch (nocoErr) {
+        console.warn("Aviso ao buscar token no NocoDB:", nocoErr)
+      }
 
-      if (inst?.token) {
-        token = inst.token
+      if (!token) {
+        const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase')
+        const wacloudAdmin = getWacloudSupabaseAdmin()
+        const { data: inst } = await wacloudAdmin
+          .from('wacloud_instancias')
+          .select('token')
+          .or(`nome_instancia.eq.${nomeInstancia},cliente_id.eq.${clientConfig.id}`)
+          .limit(1)
+          .maybeSingle()
+
+        if (inst?.token) {
+          token = inst.token
+        }
       }
     }
 

@@ -22,23 +22,27 @@ function normalizeStr(str: string) {
  */
 export async function GET() {
   try {
-    const cookieStore = cookies();
-    const supabaseSession = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
-    );
-
-    const clientConfig = await getActiveClientConfig(supabaseSession);
+    const clientConfig = await getActiveClientConfig();
     if (!clientConfig) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const wacloudAdmin = getWacloudSupabaseAdmin();
 
-    // 1. Localizar a instância correspondente ao cliente
-    const { data: instancias } = await wacloudAdmin
-      .from('wacloud_instancias')
-      .select('id, nome_instancia, token')
-      .limit(50);
+    // 1. Localizar a instância correspondente ao cliente no NocoDB ou Supabase
+    let instancias: any[] = [];
+    try {
+      const { getWacloudInstancias } = await import('@/lib/nocodb/wacloud');
+      instancias = await getWacloudInstancias();
+    } catch (nocoErr) {
+      console.warn("Aviso ao buscar instâncias no NocoDB em leads/etiquetas:", nocoErr);
+    }
+
+    if (!instancias || instancias.length === 0) {
+      const { data: sbInsts } = await wacloudAdmin
+        .from('wacloud_instancias')
+        .select('id, nome_instancia, token')
+        .limit(50);
+      instancias = sbInsts || [];
+    }
 
     const nomeNorm = normalizeStr(clientConfig.nome);
     const slugNorm = normalizeStr(clientConfig.slug || '');
@@ -82,12 +86,23 @@ export async function GET() {
       }
     }
 
-    // 3. Complementar com banco de dados wacloud_etiquetas_instancia
+    // 3. Complementar com banco de dados wacloud_etiquetas_instancia (NocoDB + Supabase)
     if (nomeInstancia) {
-      const { data: dbLabels } = await wacloudAdmin
-        .from('wacloud_etiquetas_instancia')
-        .select('*')
-        .eq('nome_instancia', nomeInstancia);
+      let dbLabels: any[] = [];
+      try {
+        const { getWacloudEtiquetas } = await import('@/lib/nocodb/wacloud');
+        dbLabels = await getWacloudEtiquetas(nomeInstancia);
+      } catch (nocoLblErr) {
+        console.warn("Aviso ao buscar etiquetas no NocoDB:", nocoLblErr);
+      }
+
+      if (!dbLabels || dbLabels.length === 0) {
+        const { data: sbLabels } = await wacloudAdmin
+          .from('wacloud_etiquetas_instancia')
+          .select('*')
+          .eq('nome_instancia', nomeInstancia);
+        dbLabels = sbLabels || [];
+      }
 
       for (const lbl of dbLabels || []) {
         const cleanId = String(lbl.uazapi_label_id);
@@ -117,14 +132,7 @@ export async function GET() {
  */
 export async function POST(request: Request) {
   try {
-    const cookieStore = cookies();
-    const supabaseSession = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { get(name: string) { return cookieStore.get(name)?.value; } } }
-    );
-
-    const clientConfig = await getActiveClientConfig(supabaseSession);
+    const clientConfig = await getActiveClientConfig();
     if (!clientConfig) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
@@ -142,11 +150,22 @@ export async function POST(request: Request) {
 
     const wacloudAdmin = getWacloudSupabaseAdmin();
 
-    // Localizar a instância
-    const { data: instancias } = await wacloudAdmin
-      .from('wacloud_instancias')
-      .select('id, nome_instancia, token')
-      .limit(50);
+    // Localizar a instância no NocoDB ou Supabase
+    let instancias: any[] = [];
+    try {
+      const { getWacloudInstancias } = await import('@/lib/nocodb/wacloud');
+      instancias = await getWacloudInstancias();
+    } catch (nocoErr) {
+      console.warn("Aviso ao buscar instâncias no NocoDB:", nocoErr);
+    }
+
+    if (!instancias || instancias.length === 0) {
+      const { data: sbInsts } = await wacloudAdmin
+        .from('wacloud_instancias')
+        .select('id, nome_instancia, token')
+        .limit(50);
+      instancias = sbInsts || [];
+    }
 
     const nomeNorm = normalizeStr(clientConfig.nome);
     const slugNorm = normalizeStr(clientConfig.slug || '');
@@ -211,12 +230,23 @@ export async function POST(request: Request) {
           console.warn('Erro ao buscar lead no banco do cliente:', dbErr);
         }
       } else {
-        const { data: contatoRow } = await wacloudAdmin
-          .from('wacloud_contatos')
-          .select('whatsapp_labels')
-          .ilike('telefone_contato', `%${tailPhone}%`)
-          .limit(1)
-          .maybeSingle();
+        let contatoRow: any = null;
+        try {
+          const { getWacloudContato } = await import('@/lib/nocodb/wacloud');
+          contatoRow = await getWacloudContato(nomeInstancia, rawPhone);
+        } catch (nocoCtErr) {
+          console.warn("Aviso ao buscar contato no NocoDB:", nocoCtErr);
+        }
+
+        if (!contatoRow) {
+          const { data: sbRow } = await wacloudAdmin
+            .from('wacloud_contatos')
+            .select('whatsapp_labels')
+            .ilike('telefone_contato', `%${tailPhone}%`)
+            .limit(1)
+            .maybeSingle();
+          contatoRow = sbRow;
+        }
 
         if (contatoRow && Array.isArray(contatoRow.whatsapp_labels)) {
           currentLabels = contatoRow.whatsapp_labels.map((l: any) => String(l).includes(':') ? String(l).split(':')[1] : String(l));
@@ -300,16 +330,29 @@ export async function POST(request: Request) {
         atualizado_em: new Date().toISOString() 
       };
       if (novoCanalOrigem) updateData.origem_lead = novoCanalOrigem;
-      
-      let updateQuery = wacloudAdmin
-        .from('wacloud_contatos')
-        .update(updateData)
-        .ilike('telefone_contato', `%${tailPhone}%`);
 
-      if (nomeInstancia) {
-        updateQuery = updateQuery.eq('nome_instancia', nomeInstancia);
+      // 1. Atualizar no NocoDB
+      try {
+        const { updateWacloudContato } = await import('@/lib/nocodb/wacloud');
+        await updateWacloudContato(rawPhone, nomeInstancia, updateData);
+      } catch (nocoErr) {
+        console.warn("Aviso ao atualizar contato no NocoDB:", nocoErr);
       }
-      await updateQuery;
+
+      // 2. Sincronizar no Supabase
+      try {
+        let updateQuery = wacloudAdmin
+          .from('wacloud_contatos')
+          .update(updateData)
+          .ilike('telefone_contato', `%${tailPhone}%`);
+
+        if (nomeInstancia) {
+          updateQuery = updateQuery.eq('nome_instancia', nomeInstancia);
+        }
+        await updateQuery;
+      } catch (sbErr) {
+        // Ignora
+      }
     }
 
     return NextResponse.json({ 

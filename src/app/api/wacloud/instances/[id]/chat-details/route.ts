@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getWacloudInstanciaByIdOrName, upsertWacloudContato } from '@/lib/nocodb/wacloud';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
 import { WACLOUD_CONFIG } from '@/lib/wacloud/config';
 
@@ -16,14 +17,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     const cleanNumber = String(number).split('@')[0].replace(/\D/g, '');
 
-    const supabase = getWacloudSupabaseAdmin();
-    const { data: instance, error } = await supabase
-      .from('wacloud_instancias')
-      .select('id, nome_instancia, token')
-      .eq('id', params.id)
-      .single();
+    let instance = await getWacloudInstanciaByIdOrName(params.id);
+    if (!instance?.token) {
+      const supabase = getWacloudSupabaseAdmin();
+      const { data: sbInst } = await supabase
+        .from('wacloud_instancias')
+        .select('id, nome_instancia, token')
+        .eq('id', params.id)
+        .single();
+      instance = sbInst;
+    }
 
-    if (error || !instance?.token) {
+    if (!instance?.token) {
       return NextResponse.json({ error: 'Instância não encontrada ou sem token' }, { status: 404 });
     }
 
@@ -47,24 +52,39 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     const labels = Array.isArray(data.wa_label) ? data.wa_label : [];
 
-    // Atualiza no banco de dados para sincronizar
-    await supabase
-      .from('wacloud_contatos')
-      .update({
+    // Atualiza no NocoDB (wacloud_contatos)
+    try {
+      await upsertWacloudContato(instance.nome_instancia, cleanNumber, {
         whatsapp_labels: labels,
-        nome_contato: data.wa_contactName || data.name || data.wa_name || undefined,
-        atualizado_em: new Date().toISOString(),
-      })
-      .eq('instancia_id', instance.id)
-      .eq('telefone_contato', cleanNumber);
+        ...(data.wa_contactName || data.name || data.wa_name ? { nome_contato: data.wa_contactName || data.name || data.wa_name } : {}),
+      });
+    } catch (nocoErr) {
+      console.warn("Aviso ao atualizar contato no NocoDB:", nocoErr);
+    }
+
+    // Atualiza no Supabase para sincronização
+    try {
+      const supabase = getWacloudSupabaseAdmin();
+      await supabase
+        .from('wacloud_contatos')
+        .update({
+          whatsapp_labels: labels,
+          nome_contato: data.wa_contactName || data.name || data.wa_name || undefined,
+          atualizado_em: new Date().toISOString(),
+        })
+        .eq('nome_instancia', instance.nome_instancia)
+        .eq('telefone_contato', cleanNumber);
+    } catch (sbErr) {
+      // Ignora
+    }
 
     return NextResponse.json({
       success: true,
-      chat: data,
-      whatsapp_labels: labels,
+      labels,
+      data,
     });
   } catch (err: any) {
-    console.error('chat-details error:', err);
-    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
+    console.error('API chat-details error:', err);
+    return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 });
   }
 }

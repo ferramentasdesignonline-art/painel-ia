@@ -55,16 +55,28 @@ export async function autoBlockLeadOnHumanMessage({
 
     // 2. Se ainda não tiver clientConfig, busca através da instância do Wacloud
     if (!clientConfig && instanceIdOrName) {
-      const wacloudAdmin = getWacloudSupabaseAdmin()
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(instanceIdOrName)
-      
-      let instanceQuery = wacloudAdmin.from('wacloud_instancias').select('*')
-      if (isUuid) {
-        instanceQuery = instanceQuery.eq('id', instanceIdOrName)
-      } else {
-        instanceQuery = instanceQuery.eq('nome_instancia', instanceIdOrName)
+      let instData: any = null
+      try {
+        const { getWacloudInstanciaByIdOrName } = await import('@/lib/nocodb/wacloud')
+        instData = await getWacloudInstanciaByIdOrName(instanceIdOrName)
+      } catch (nocoInstErr) {
+        console.warn("Aviso ao buscar instancia no NocoDB em auto-block:", nocoInstErr)
       }
-      const { data: instData } = await instanceQuery.maybeSingle()
+
+      if (!instData) {
+        try {
+          const wacloudAdmin = getWacloudSupabaseAdmin()
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(instanceIdOrName)
+          let instanceQuery = wacloudAdmin.from('wacloud_instancias').select('*')
+          if (isUuid) {
+            instanceQuery = instanceQuery.eq('id', instanceIdOrName)
+          } else {
+            instanceQuery = instanceQuery.eq('nome_instancia', instanceIdOrName)
+          }
+          const { data } = await instanceQuery.maybeSingle()
+          instData = data
+        } catch (_) {}
+      }
 
       // 1. Tenta buscar cliente no NocoDB
       if (instData?.cliente_id) {

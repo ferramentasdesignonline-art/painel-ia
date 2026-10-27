@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getWacloudInstanciaByIdOrName, saveWacloudMensagensBulk } from '@/lib/nocodb/wacloud';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
 import { fetchUazapiMessages } from '@/lib/wacloud/uazapi';
 
@@ -18,14 +19,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: 'chatid é obrigatório' }, { status: 400 });
     }
 
-    const supabase = getWacloudSupabaseAdmin();
-    const { data: instance, error } = await supabase
-      .from('wacloud_instancias')
-      .select('id, nome_instancia, token')
-      .eq('id', params.id)
-      .single();
+    let instance = await getWacloudInstanciaByIdOrName(params.id);
+    if (!instance?.token) {
+      const supabase = getWacloudSupabaseAdmin();
+      const { data: sbInst } = await supabase
+        .from('wacloud_instancias')
+        .select('id, nome_instancia, token')
+        .eq('id', params.id)
+        .single();
+      instance = sbInst;
+    }
 
-    if (error || !instance?.token) {
+    if (!instance?.token) {
       return NextResponse.json({ error: 'Instância não encontrada ou sem token' }, { status: 404 });
     }
 
@@ -35,7 +40,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const telefoneContato = String(chatid).split('@')[0].replace(/\D/g, '');
 
     const rows = messages.map((m) => {
-      // Tentar pegar o conteúdo da mensagem (texto)
       let textContent = m.text || '';
       if (!textContent && m.content) {
         if (typeof m.content === 'string') textContent = m.content;
@@ -46,7 +50,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
       let mimetype = null;
       let urlMidia = m.fileURL || null;
 
-      // Simplificação do mimetype com base na mensagem original
       if (m.messageType === 'ImageMessage') mimetype = 'image/jpeg';
       else if (m.messageType === 'VideoMessage') mimetype = 'video/mp4';
       else if (m.messageType === 'AudioMessage') mimetype = 'audio/ogg';
@@ -66,13 +69,21 @@ export async function POST(request: Request, { params }: { params: { id: string 
     });
 
     if (rows.length > 0) {
-      const { error: upsertError } = await supabase
-        .from('wacloud_mensagens')
-        .upsert(rows, { onConflict: 'message_id' });
-        
-      if (upsertError) {
-        console.error('Erro ao salvar mensagens:', upsertError);
-        return NextResponse.json({ error: upsertError.message }, { status: 500 });
+      // 1. Salvar no NocoDB (wacloud_mensagens)
+      try {
+        await saveWacloudMensagensBulk(rows);
+      } catch (nocoErr) {
+        console.warn("Aviso ao salvar mensagens no NocoDB:", nocoErr);
+      }
+
+      // 2. Sincronizar com Supabase
+      try {
+        const supabase = getWacloudSupabaseAdmin();
+        await supabase
+          .from('wacloud_mensagens')
+          .upsert(rows, { onConflict: 'message_id' });
+      } catch (sbErr) {
+        // Ignora
       }
     }
 
@@ -83,11 +94,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
       success: true,
       processed: rows.length,
       offset,
-      next_offset: hasMore ? nextOffset : null,
-      done: !hasMore,
+      nextOffset,
+      hasMore,
     });
   } catch (err: any) {
-    console.error('sync-messages error:', err);
-    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
+    console.error('API sync-messages error:', err);
+    return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 });
   }
 }

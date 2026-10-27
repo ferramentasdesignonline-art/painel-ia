@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getWacloudInstancias } from '@/lib/nocodb/wacloud';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
 import { createWacloudInstance } from '@/lib/wacloud/uazapi';
 
@@ -6,6 +7,17 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    // 1. Tenta buscar no NocoDB
+    try {
+      const instances = await getWacloudInstancias();
+      if (instances && instances.length > 0) {
+        return NextResponse.json({ instances });
+      }
+    } catch (nocoErr) {
+      console.warn("Aviso ao buscar instâncias no NocoDB:", nocoErr);
+    }
+
+    // 2. Fallback Supabase
     const supabase = getWacloudSupabaseAdmin();
     const { data: instances, error } = await supabase
       .from('wacloud_instancias')
@@ -17,7 +29,7 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ instances });
+    return NextResponse.json({ instances: instances || [] });
   } catch (error) {
     console.error('API error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

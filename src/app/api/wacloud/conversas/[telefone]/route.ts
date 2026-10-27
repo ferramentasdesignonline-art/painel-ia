@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getWacloudInstanciaByIdOrName, getWacloudMensagens } from '@/lib/nocodb/wacloud';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
 import { fetchUazapiMessages } from '@/lib/wacloud/uazapi';
 
@@ -6,24 +7,27 @@ export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 export const revalidate = 0;
 
-// GET /api/wacloud/conversas/[telefone]?instancia=xxx&offset=0&limit=30
+// GET /api/wacloud/conversas/[telefone] - lista mensagens do contato sob demanda via UAZAPI (ou fallback no banco)
 export async function GET(request: Request, { params }: { params: { telefone: string } }) {
+  const { telefone } = params;
   const { searchParams } = new URL(request.url);
   const instancia = searchParams.get('instancia');
-  const telefone = params.telefone;
   const offset = Number(searchParams.get('offset')) || 0;
   const limit = Number(searchParams.get('limit')) || 30;
 
   try {
-    const supabase = getWacloudSupabaseAdmin();
-
     // 1. Tenta buscar direto na UAZAPI em tempo real (sob demanda)
     if (instancia) {
-      const { data: instData } = await supabase
-        .from('wacloud_instancias')
-        .select('token')
-        .eq('nome_instancia', instancia)
-        .single();
+      let instData = await getWacloudInstanciaByIdOrName(instancia);
+      if (!instData?.token) {
+        const supabase = getWacloudSupabaseAdmin();
+        const { data: sbInst } = await supabase
+          .from('wacloud_instancias')
+          .select('token')
+          .eq('nome_instancia', instancia)
+          .single();
+        instData = sbInst;
+      }
 
       if (instData?.token) {
         try {
@@ -48,28 +52,27 @@ export async function GET(request: Request, { params }: { params: { telefone: st
 
             return {
               id: m.id || m.messageid,
-              nome_instancia: instancia,
               telefone_contato: cleanPhone,
-              nome_contato: m.senderName || (m.fromMe ? 'Eu' : 'Cliente'),
-              mensagem: textContent || null,
-              enviado_por_mim: Boolean(m.fromMe),
+              nome_contato: m.senderName || null,
+              nome_instancia: instancia,
+              mensagem: textContent,
               tipo_mensagem: m.messageType || 'Conversation',
-              url_midia: m.fileURL || (typeof m.content?.URL === 'string' ? m.content.URL : null),
-              mimetype: mimetype,
               timestamp_whatsapp: m.messageTimestamp ? new Date(Number(m.messageTimestamp)).toISOString() : new Date().toISOString(),
-              created_at: m.messageTimestamp ? new Date(Number(m.messageTimestamp)).toISOString() : new Date().toISOString(),
+              message_id: m.messageid || m.id,
+              enviado_por_mim: Boolean(m.fromMe),
+              url_midia: m.fileURL || null,
+              mimetype: mimetype,
             };
           });
 
-          // UAZAPI retorna do mais novo para o mais antigo.
-          // Invertemos para que a lista fique cronológica (antigas no topo, novas embaixo)
-          mensagens.reverse();
+          // Reordena do mais antigo para o mais novo
+          mensagens.sort((a: any, b: any) => new Date(a.timestamp_whatsapp).getTime() - new Date(b.timestamp_whatsapp).getTime());
 
           return NextResponse.json({
             mensagens,
-            hasMore: result.hasMore,
-            nextOffset: result.nextOffset,
-            source: 'uazapi',
+            total: result.total || mensagens.length,
+            hasMore: result.hasMore ?? false,
+            source: 'uazapi_live',
           });
         } catch (uazErr) {
           console.warn('Erro ao buscar mensagens direto da UAZAPI, usando fallback do banco:', uazErr);
@@ -77,8 +80,19 @@ export async function GET(request: Request, { params }: { params: { telefone: st
       }
     }
 
-    // Fallback: busca no banco wacloud_mensagens
-    const { data, error } = instancia
+    // 2. Fallback: busca no banco NocoDB (wacloud_mensagens)
+    try {
+      const nocoMsgs = await getWacloudMensagens(telefone, instancia || undefined, 300);
+      if (nocoMsgs && nocoMsgs.length > 0) {
+        return NextResponse.json({ mensagens: nocoMsgs, source: 'nocodb' });
+      }
+    } catch (nocoErr) {
+      console.warn("Aviso ao buscar mensagens no NocoDB:", nocoErr);
+    }
+
+    // 3. Fallback Supabase
+    const supabase = getWacloudSupabaseAdmin();
+    const { data: sbMsgs } = instancia
       ? await supabase
           .from('wacloud_mensagens')
           .select('*')
@@ -93,12 +107,7 @@ export async function GET(request: Request, { params }: { params: { telefone: st
           .order('timestamp_whatsapp', { ascending: true })
           .limit(300);
 
-    if (error) {
-      console.warn('Supabase wacloud_mensagens error:', error.message);
-      return NextResponse.json({ mensagens: [] });
-    }
-
-    return NextResponse.json({ mensagens: data || [], source: 'db' });
+    return NextResponse.json({ mensagens: sbMsgs || [], source: 'db' });
   } catch (error) {
     console.error('API mensagens GET error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

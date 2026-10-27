@@ -120,23 +120,32 @@ export async function POST(request: Request) {
     const clientIdRef = nocoClient?.Id || dbData?.id
     if (nome_instancia && clientIdRef) {
       try {
-        const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase')
-        const wacloudAdmin = getWacloudSupabaseAdmin()
-        const { data: existingInst } = await wacloudAdmin
-          .from('wacloud_instancias')
-          .select('id')
-          .eq('nome_instancia', nome_instancia)
-          .maybeSingle()
-
-        if (existingInst) {
-          await wacloudAdmin
-            .from('wacloud_instancias')
-            .update({ cliente_id: clientIdRef, ativo: true })
-            .eq('nome_instancia', nome_instancia)
+        const { getWacloudInstanciaByIdOrName, updateWacloudInstancia } = await import('@/lib/nocodb/wacloud')
+        const nocoInst = await getWacloudInstanciaByIdOrName(nome_instancia)
+        if (nocoInst?.id) {
+          await updateWacloudInstancia(nocoInst.id, { cliente_id: clientIdRef, ativo: true })
         } else {
           const { createWacloudInstance } = await import('@/lib/wacloud/uazapi')
           await createWacloudInstance(nome_instancia, clientIdRef)
         }
+
+        // Supabase sync fallback
+        try {
+          const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase')
+          const wacloudAdmin = getWacloudSupabaseAdmin()
+          const { data: existingInst } = await wacloudAdmin
+            .from('wacloud_instancias')
+            .select('id')
+            .eq('nome_instancia', nome_instancia)
+            .maybeSingle()
+
+          if (existingInst) {
+            await wacloudAdmin
+              .from('wacloud_instancias')
+              .update({ cliente_id: clientIdRef, ativo: true })
+              .eq('nome_instancia', nome_instancia)
+          }
+        } catch (_) {}
       } catch (linkErr) {
         console.warn("Aviso ao vincular/criar wacloud_instancias:", linkErr)
       }

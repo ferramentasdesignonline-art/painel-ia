@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getWacloudInstanciaByIdOrName, saveWacloudMensagem } from '@/lib/nocodb/wacloud';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
 import { WACLOUD_CONFIG } from '@/lib/wacloud/config';
 
@@ -13,14 +14,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Faltam parâmetros' }, { status: 400 });
     }
 
-    const supabase = getWacloudSupabaseAdmin();
-    const { data: instance, error } = await supabase
-      .from('wacloud_instancias')
-      .select('id, token')
-      .eq('id', params.id)
-      .single();
+    let instance = await getWacloudInstanciaByIdOrName(params.id);
+    if (!instance?.token) {
+      const supabase = getWacloudSupabaseAdmin();
+      const { data: sbInst } = await supabase
+        .from('wacloud_instancias')
+        .select('id, token, nome_instancia')
+        .eq('id', params.id)
+        .single();
+      instance = sbInst;
+    }
 
-    if (error || !instance?.token) {
+    if (!instance?.token) {
       return NextResponse.json({ error: 'Instância não encontrada' }, { status: 404 });
     }
 
@@ -40,10 +45,25 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Erro Uazapi: ' + JSON.stringify(data) }, { status: res.status });
     }
 
+    // Salvar mídia enviada no NocoDB
+    try {
+      await saveWacloudMensagem({
+        nome_instancia: instance.nome_instancia,
+        telefone_contato: number,
+        mensagem: text || '',
+        enviado_por_mim: true,
+        tipo_mensagem: type || 'media',
+        url_midia: file,
+        timestamp_whatsapp: new Date().toISOString(),
+      });
+    } catch (msgErr) {
+      console.warn("Aviso ao salvar mídia enviada no NocoDB:", msgErr);
+    }
+
     // Bloqueia automaticamente a IA para o lead ao enviar mídia humana
     const { autoBlockLeadOnHumanMessage } = await import('@/lib/whatsapp/auto-block');
     await autoBlockLeadOnHumanMessage({
-      instanceIdOrName: params.id,
+      instanceIdOrName: instance.nome_instancia || params.id,
       phone: number,
       content: file || text || '[Mídia]'
     });

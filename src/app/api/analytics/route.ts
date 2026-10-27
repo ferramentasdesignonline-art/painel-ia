@@ -17,14 +17,7 @@ export async function GET(request: Request) {
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 
-    const cookieStore = cookies()
-    const supabaseSession = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
-    )
-
-    const clientConfig = await getActiveClientConfig(supabaseSession)
+    const clientConfig = await getActiveClientConfig()
     if (!clientConfig) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const isNocoDB = isNocoDBClient(clientConfig)
@@ -53,20 +46,28 @@ export async function GET(request: Request) {
     const toDate   = to   ? new Date(to)   : null
 
     if (isSemIA) {
-      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
-      const wacloudAdmin = getWacloudSupabaseAdmin();
+      let cloudMsgs: any[] = [];
+      try {
+        const { getWacloudMensagens } = await import('@/lib/nocodb/wacloud');
+        cloudMsgs = await getWacloudMensagens("", nomeInstancia, 10000);
+      } catch (nocoErr) {
+        console.warn("Aviso ao buscar mensagens no NocoDB em analytics:", nocoErr);
+      }
 
-      let msgQuery = wacloudAdmin
-        .from('wacloud_mensagens')
-        .select('id, mensagem, enviado_por_mim, created_at')
-        .eq('nome_instancia', nomeInstancia);
+      if (!cloudMsgs || cloudMsgs.length === 0) {
+        const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+        const wacloudAdmin = getWacloudSupabaseAdmin();
 
-      if (from) msgQuery = msgQuery.gte('created_at', from);
-      if (to)   msgQuery = msgQuery.lte('created_at', to);
+        let msgQuery = wacloudAdmin
+          .from('wacloud_mensagens')
+          .select('id, mensagem, enviado_por_mim, created_at')
+          .eq('nome_instancia', nomeInstancia);
 
-      const { data: cloudMsgs, error: cloudMsgErr } = await msgQuery.limit(10000);
-      if (cloudMsgErr) {
-        console.error("Erro ao buscar mensagens wacloud:", cloudMsgErr.message);
+        if (from) msgQuery = msgQuery.gte('created_at', from);
+        if (to)   msgQuery = msgQuery.lte('created_at', to);
+
+        const { data: sbCloudMsgs } = await msgQuery.limit(10000);
+        cloudMsgs = sbCloudMsgs || [];
       }
 
       for (const m of cloudMsgs || []) {
@@ -174,28 +175,38 @@ export async function GET(request: Request) {
     let perdas = 0
 
     if (isSemIA) {
-      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
-      const wacloudAdmin = getWacloudSupabaseAdmin();
-
-      let leadsQuery = wacloudAdmin
-        .from('wacloud_contatos')
-        .select('*')
-        .eq('nome_instancia', nomeInstancia);
-
-      if (from) leadsQuery = leadsQuery.gte('created_at', from);
-      if (to)   leadsQuery = leadsQuery.lte('created_at', to);
-
-      const { data: dbLeads, error: leadsError } = await leadsQuery.order('created_at', { ascending: false }).limit(50000);
-      if (leadsError) {
-        console.error("Erro ao buscar contatos wacloud:", leadsError.message);
-      } else if (dbLeads) {
-        allLeads = dbLeads.filter(c => 
-          c.is_group !== true && 
-          !c.wa_chatid?.includes('@g.us') && 
-          !c.telefone_contato?.includes('@g.us') && 
-          !c.telefone?.includes('@g.us')
-        );
+      let dbLeads: any[] = [];
+      try {
+        const { getWacloudContatos } = await import('@/lib/nocodb/wacloud');
+        dbLeads = await getWacloudContatos({ nomeInstancia, limit: 10000 });
+      } catch (nocoErr) {
+        console.warn("Aviso ao buscar contatos no NocoDB em analytics:", nocoErr);
       }
+
+      if (!dbLeads || dbLeads.length === 0) {
+        const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+        const wacloudAdmin = getWacloudSupabaseAdmin();
+
+        let leadsQuery = wacloudAdmin
+          .from('wacloud_contatos')
+          .select('*')
+          .eq('nome_instancia', nomeInstancia);
+
+        if (from) leadsQuery = leadsQuery.gte('created_at', from);
+        if (to)   leadsQuery = leadsQuery.lte('created_at', to);
+
+        const { data: sbLeads, error: leadsError } = await leadsQuery.order('created_at', { ascending: false }).limit(50000);
+        if (!leadsError && sbLeads) {
+          dbLeads = sbLeads;
+        }
+      }
+
+      allLeads = dbLeads.filter(c => 
+        c.is_group !== true && 
+        !c.wa_chatid?.includes('@g.us') && 
+        !c.telefone_contato?.includes('@g.us') && 
+        !c.telefone?.includes('@g.us')
+      );
     } else if (clientConfig.tabela_leads) {
       if (isNocoDB) {
         allLeads = await getNocoDBLeads(clientConfig.tabela_leads, { from, to });

@@ -70,31 +70,58 @@ export async function GET(request: Request) {
     }>();
 
     if (isSemIA) {
-      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
-      const wacloudAdmin = getWacloudSupabaseAdmin();
       const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome;
+      let contatos: any[] = [];
+      let mensagensRecentes: any[] = [];
 
-      let contatosQuery = wacloudAdmin
-        .from('wacloud_contatos')
-        .select('*')
-        .eq('nome_instancia', nomeInstancia)
-        .order('atualizado_em', { ascending: false });
+      try {
+        const { getWacloudContatos, getWacloudMensagens } = await import('@/lib/nocodb/wacloud');
+        const [nocoContatos, nocoMsgs] = await Promise.all([
+          getWacloudContatos(nomeInstancia),
+          getWacloudMensagens({ nomeInstancia, limit: 10000 })
+        ]);
 
-      if (from) contatosQuery = contatosQuery.gte('created_at', from);
-      if (to) contatosQuery = contatosQuery.lte('created_at', to);
+        if (nocoContatos && nocoContatos.length > 0) {
+          contatos = nocoContatos;
+        }
+        if (nocoMsgs && nocoMsgs.length > 0) {
+          mensagensRecentes = nocoMsgs;
+        }
+      } catch (nocoErr) {
+        console.warn("Aviso ao carregar contatos/mensagens do NocoDB:", nocoErr);
+      }
 
-      const [resContatos, resMsgs] = await Promise.all([
-        contatosQuery.limit(50000),
-        wacloudAdmin
-          .from('wacloud_mensagens')
-          .select('telefone_contato, mensagem, enviado_por_mim, created_at')
-          .eq('nome_instancia', nomeInstancia)
-          .order('created_at', { ascending: true })
-          .limit(10000)
-      ]);
+      // Supabase fallback if empty
+      if (contatos.length === 0 || mensagensRecentes.length === 0) {
+        try {
+          const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+          const wacloudAdmin = getWacloudSupabaseAdmin();
 
-      const contatos = resContatos.data || [];
-      const mensagensRecentes = resMsgs.data || [];
+          let contatosQuery = wacloudAdmin
+            .from('wacloud_contatos')
+            .select('*')
+            .eq('nome_instancia', nomeInstancia)
+            .order('atualizado_em', { ascending: false });
+
+          if (from) contatosQuery = contatosQuery.gte('created_at', from);
+          if (to) contatosQuery = contatosQuery.lte('created_at', to);
+
+          const [resContatos, resMsgs] = await Promise.all([
+            contatos.length === 0 ? contatosQuery.limit(50000) : Promise.resolve({ data: [] }),
+            mensagensRecentes.length === 0 ? wacloudAdmin
+              .from('wacloud_mensagens')
+              .select('telefone_contato, mensagem, enviado_por_mim, created_at')
+              .eq('nome_instancia', nomeInstancia)
+              .order('created_at', { ascending: true })
+              .limit(10000) : Promise.resolve({ data: [] })
+          ]);
+
+          if (contatos.length === 0 && resContatos.data) contatos = resContatos.data;
+          if (mensagensRecentes.length === 0 && resMsgs.data) mensagensRecentes = resMsgs.data;
+        } catch (sbErr) {
+          console.warn("Aviso ao carregar contatos/mensagens do Supabase fallback:", sbErr);
+        }
+      }
 
       // Agrupa mensagens por telefone limpo
       const msgsPorTelefone = new Map<string, any[]>();

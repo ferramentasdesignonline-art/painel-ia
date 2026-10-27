@@ -102,11 +102,24 @@ export async function POST(request: Request) {
 
       payload.atualizado_em = new Date().toISOString();
 
-      const { error } = await wacloudAdmin
-        .from('wacloud_contatos')
-        .update(payload)
-        .eq('id', leadId);
-      errorUpdate = error;
+      // 1. Atualizar no NocoDB (wacloud_contatos)
+      try {
+        const { updateWacloudContato } = await import('@/lib/nocodb/wacloud');
+        await updateWacloudContato(leadId, clientConfig.nome_instancia || clientConfig.nome || '', payload);
+      } catch (nocoUpErr) {
+        console.warn("Aviso ao atualizar contato no NocoDB em leads/atualizar:", nocoUpErr);
+      }
+
+      // 2. Sincronizar no Supabase
+      try {
+        const { error } = await wacloudAdmin
+          .from('wacloud_contatos')
+          .update(payload)
+          .eq('id', leadId);
+        errorUpdate = error;
+      } catch (sbErr) {
+        // Ignora
+      }
     } else if (isNocoDBClient(clientConfig)) {
       // IA Lead no NocoDB
       const cleanLeadId = leadId.toString().startsWith('ia-') ? leadId.toString().replace('ia-', '') : leadId;

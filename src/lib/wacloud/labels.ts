@@ -38,10 +38,21 @@ export async function getClientWhatsappLabelsData(clientConfig: any): Promise<{
     const slugNorm = normalizeStr(clientConfig.slug || '');
     const instConfigNorm = normalizeStr(clientConfig.nome_instancia || clientConfig.whatsapp_instancia || '');
 
-    const { data: instancias } = await wacloudAdmin
-      .from('wacloud_instancias')
-      .select('id, nome_instancia, token')
-      .limit(50);
+    let instancias: any[] = [];
+    try {
+      const { getWacloudInstancias } = await import('@/lib/nocodb/wacloud');
+      instancias = await getWacloudInstancias();
+    } catch (nocoErr) {
+      console.warn("Aviso ao buscar instâncias no NocoDB em labels.ts:", nocoErr);
+    }
+
+    if (!instancias || instancias.length === 0) {
+      const { data: sbInsts } = await wacloudAdmin
+        .from('wacloud_instancias')
+        .select('id, nome_instancia, token')
+        .limit(50);
+      instancias = sbInsts || [];
+    }
 
     let instanciaMatch = instConfigNorm
       ? instancias?.find(i => normalizeStr(i.nome_instancia) === instConfigNorm)
@@ -158,14 +169,25 @@ export async function getClientWhatsappLabelsData(clientConfig: any): Promise<{
       }
     }
 
-    // 3. Complementar com contatos do banco wacloud_contatos (para preencher qualquer contato que não estava no lote recente)
+    // 3. Complementar com contatos do banco wacloud_contatos
     if (nomeInstancia) {
-      const { data: chunk } = await wacloudAdmin
-        .from('wacloud_contatos')
-        .select('telefone_contato, whatsapp_labels')
-        .eq('nome_instancia', nomeInstancia)
-        .neq('whatsapp_labels', '[]')
-        .limit(2000);
+      let chunk: any[] = [];
+      try {
+        const { getWacloudContatos } = await import('@/lib/nocodb/wacloud');
+        chunk = await getWacloudContatos({ nomeInstancia, limit: 2000 });
+      } catch (nocoErr) {
+        console.warn("Aviso ao buscar contatos no NocoDB em labels.ts:", nocoErr);
+      }
+
+      if (!chunk || chunk.length === 0) {
+        const { data: sbChunk } = await wacloudAdmin
+          .from('wacloud_contatos')
+          .select('telefone_contato, whatsapp_labels')
+          .eq('nome_instancia', nomeInstancia)
+          .neq('whatsapp_labels', '[]')
+          .limit(2000);
+        chunk = sbChunk || [];
+      }
 
       for (const cc of chunk || []) {
         if (cc.telefone_contato && Array.isArray(cc.whatsapp_labels) && cc.whatsapp_labels.length > 0) {
@@ -184,10 +206,21 @@ export async function getClientWhatsappLabelsData(clientConfig: any): Promise<{
 
     // 4. Complementar com banco wacloud_etiquetas_instancia
     if (nomeInstancia) {
-      const { data: dbLabels } = await wacloudAdmin
-        .from('wacloud_etiquetas_instancia')
-        .select('*')
-        .eq('nome_instancia', nomeInstancia);
+      let dbLabels: any[] = [];
+      try {
+        const { getWacloudEtiquetas } = await import('@/lib/nocodb/wacloud');
+        dbLabels = await getWacloudEtiquetas(nomeInstancia);
+      } catch (nocoLblErr) {
+        console.warn("Aviso ao buscar etiquetas no NocoDB em labels.ts:", nocoLblErr);
+      }
+
+      if (!dbLabels || dbLabels.length === 0) {
+        const { data: sbLabels } = await wacloudAdmin
+          .from('wacloud_etiquetas_instancia')
+          .select('*')
+          .eq('nome_instancia', nomeInstancia);
+        dbLabels = sbLabels || [];
+      }
 
       for (const lbl of dbLabels || []) {
         const cleanKey = String(lbl.uazapi_label_id);

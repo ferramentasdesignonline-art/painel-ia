@@ -34,24 +34,41 @@ export async function createWacloudInstance(nomeInstancia: string, clienteId?: s
     console.warn('Erro ao configurar webhook:', await webhookRes.json().catch(() => null));
   }
 
-  const supabase = getWacloudSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('wacloud_instancias')
-    .insert({
+  // 1. Salvar no NocoDB (WaCloud)
+  let nocoRow: any = null;
+  try {
+    const { createWacloudInstancia } = await import('@/lib/nocodb/wacloud');
+    nocoRow = await createWacloudInstancia({
       nome_instancia: nomeInstancia,
       status: 'criada',
       token: instanceToken,
-      ...(clienteId ? { cliente_id: clienteId, ativo: true } : {}),
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Supabase insert error:', error);
-    throw new Error('Erro ao salvar no banco de dados: ' + error.message);
+      cliente_id: clienteId || null,
+      ativo: true,
+    });
+  } catch (nocoErr) {
+    console.warn("Aviso ao salvar instância no NocoDB:", nocoErr);
   }
 
-  return { instance: uazapiData.instance, row: data };
+  // 2. Sincronizar no Supabase
+  let sbRow: any = null;
+  try {
+    const supabase = getWacloudSupabaseAdmin();
+    const { data } = await supabase
+      .from('wacloud_instancias')
+      .insert({
+        nome_instancia: nomeInstancia,
+        status: 'criada',
+        token: instanceToken,
+        ...(clienteId ? { cliente_id: clienteId, ativo: true } : {}),
+      })
+      .select()
+      .single();
+    sbRow = data;
+  } catch (sbErr) {
+    console.warn("Aviso ao salvar instância no Supabase:", sbErr);
+  }
+
+  return { instance: uazapiData.instance, row: nocoRow || sbRow };
 }
 
 /** Busca uma página de chats na Uazapi (ordenados do mais recente para o mais antigo). */

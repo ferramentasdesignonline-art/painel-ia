@@ -100,36 +100,55 @@ export async function GET(request: Request) {
   let numerosBloqueados = new Set<string>();
 
   if (isSemIA) {
-    const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
-    const wacloudAdmin = getWacloudSupabaseAdmin();
     const nomeInstancia = cliente.nome_instancia || cliente.nome;
+    let contatos: any[] = [];
+    let mensagensRecentes: any[] = [];
 
-    let query = wacloudAdmin
-      .from('wacloud_contatos')
-      .select('*')
-      .eq('nome_instancia', nomeInstancia);
-
-    if (dataInicioStr && dataFimStr) {
-      query = query.gte('created_at', dataInicioStr).lte('created_at', dataFimStr);
-    } else {
-      const diasAtras = periodo === '7d' ? 7 : periodo === '30d' ? 30 : 90;
-      const dataLimite = new Date();
-      dataLimite.setDate(dataLimite.getDate() - diasAtras);
-      query = query.gte('created_at', dataLimite.toISOString());
+    // 1. Tenta buscar no NocoDB (WaCloud)
+    try {
+      const { getWacloudContatos, getWacloudMensagens } = await import('@/lib/nocodb/wacloud');
+      const [nocoContatos, nocoMsgs] = await Promise.all([
+        getWacloudContatos({ nomeInstancia, limit: 10000 }),
+        getWacloudMensagens("", nomeInstancia, 10000),
+      ]);
+      contatos = nocoContatos || [];
+      mensagensRecentes = nocoMsgs || [];
+    } catch (nocoErr) {
+      console.warn("Aviso ao buscar contatos e mensagens no NocoDB em funil/leads:", nocoErr);
     }
 
-    const [resContatos, resMsgs] = await Promise.all([
-      query.order('created_at', { ascending: false }).limit(10000),
-      wacloudAdmin
-        .from('wacloud_mensagens')
-        .select('telefone_contato, mensagem, enviado_por_mim, created_at')
-        .eq('nome_instancia', nomeInstancia)
-        .order('created_at', { ascending: true })
-        .limit(10000)
-    ]);
+    // 2. Fallback Supabase se necessário
+    if (contatos.length === 0) {
+      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+      const wacloudAdmin = getWacloudSupabaseAdmin();
 
-    const contatos = resContatos.data || [];
-    const mensagensRecentes = resMsgs.data || [];
+      let query = wacloudAdmin
+        .from('wacloud_contatos')
+        .select('*')
+        .eq('nome_instancia', nomeInstancia);
+
+      if (dataInicioStr && dataFimStr) {
+        query = query.gte('created_at', dataInicioStr).lte('created_at', dataFimStr);
+      } else {
+        const diasAtras = periodo === '7d' ? 7 : periodo === '30d' ? 30 : 90;
+        const dataLimite = new Date();
+        dataLimite.setDate(dataLimite.getDate() - diasAtras);
+        query = query.gte('created_at', dataLimite.toISOString());
+      }
+
+      const [resContatos, resMsgs] = await Promise.all([
+        query.order('created_at', { ascending: false }).limit(10000),
+        wacloudAdmin
+          .from('wacloud_mensagens')
+          .select('telefone_contato, mensagem, enviado_por_mim, created_at')
+          .eq('nome_instancia', nomeInstancia)
+          .order('created_at', { ascending: true })
+          .limit(10000)
+      ]);
+
+      contatos = resContatos.data || [];
+      mensagensRecentes = resMsgs.data || [];
+    }
 
     // Agrupa mensagens por telefone limpo
     const msgsPorTelefone = new Map<string, any[]>();
@@ -325,10 +344,21 @@ export async function GET(request: Request) {
     const nomeNorm = normalizeStr(cliente.nome);
     const slugNorm = normalizeStr(cliente.slug || '');
 
-    const { data: instancias } = await wacloudAdmin
-      .from('wacloud_instancias')
-      .select('id, nome_instancia, token')
-      .limit(50);
+    let instancias: any[] = [];
+    try {
+      const { getWacloudInstancias } = await import('@/lib/nocodb/wacloud');
+      instancias = await getWacloudInstancias();
+    } catch (nocoInstErr) {
+      console.warn("Aviso ao buscar instâncias no NocoDB:", nocoInstErr);
+    }
+
+    if (!instancias || instancias.length === 0) {
+      const { data: sbInsts } = await wacloudAdmin
+        .from('wacloud_instancias')
+        .select('id, nome_instancia, token')
+        .limit(50);
+      instancias = sbInsts || [];
+    }
 
     // Prioriza correspondência exata por cliente.nome_instancia ou cliente.whatsapp_instancia
     const instConfigNorm = normalizeStr(cliente.nome_instancia || cliente.whatsapp_instancia || '');
@@ -396,10 +426,21 @@ export async function GET(request: Request) {
       }
 
       // Complementar com etiquetas salvas em wacloud_etiquetas_instancia
-      const { data: dbLabels } = await wacloudAdmin
-        .from('wacloud_etiquetas_instancia')
-        .select('*')
-        .eq('nome_instancia', instanciaMatch.nome_instancia);
+      let dbLabels: any[] = [];
+      try {
+        const { getWacloudEtiquetas } = await import('@/lib/nocodb/wacloud');
+        dbLabels = await getWacloudEtiquetas(instanciaMatch.nome_instancia);
+      } catch (nocoLblErr) {
+        console.warn("Aviso ao buscar etiquetas no NocoDB:", nocoLblErr);
+      }
+
+      if (!dbLabels || dbLabels.length === 0) {
+        const { data: sbLabels } = await wacloudAdmin
+          .from('wacloud_etiquetas_instancia')
+          .select('*')
+          .eq('nome_instancia', instanciaMatch.nome_instancia);
+        dbLabels = sbLabels || [];
+      }
 
       for (const lbl of dbLabels || []) {
         const key = String(lbl.uazapi_label_id);

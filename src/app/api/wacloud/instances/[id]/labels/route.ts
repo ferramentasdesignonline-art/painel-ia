@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getWacloudInstanciaByIdOrName, saveWacloudEtiqueta } from '@/lib/nocodb/wacloud';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
 import { WACLOUD_CONFIG } from '@/lib/wacloud/config';
 import { fetchUazapiLabels } from '@/lib/wacloud/uazapi';
@@ -8,14 +9,18 @@ export const dynamic = 'force-dynamic';
 // GET: Buscar todas as etiquetas da instância
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    const supabase = getWacloudSupabaseAdmin();
-    const { data: instance, error } = await supabase
-      .from('wacloud_instancias')
-      .select('id, token')
-      .eq('id', params.id)
-      .single();
+    let instance = await getWacloudInstanciaByIdOrName(params.id);
+    if (!instance?.token) {
+      const supabase = getWacloudSupabaseAdmin();
+      const { data: sbInst } = await supabase
+        .from('wacloud_instancias')
+        .select('id, token, nome_instancia')
+        .eq('id', params.id)
+        .single();
+      instance = sbInst;
+    }
 
-    if (error || !instance?.token) {
+    if (!instance?.token) {
       return NextResponse.json({ error: 'Instância não encontrada ou sem token' }, { status: 404 });
     }
 
@@ -37,14 +42,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: 'labelid é obrigatório ("new" para criar)' }, { status: 400 });
     }
 
-    const supabase = getWacloudSupabaseAdmin();
-    const { data: instance, error } = await supabase
-      .from('wacloud_instancias')
-      .select('id, token')
-      .eq('id', params.id)
-      .single();
+    let instance = await getWacloudInstanciaByIdOrName(params.id);
+    if (!instance?.token) {
+      const supabase = getWacloudSupabaseAdmin();
+      const { data: sbInst } = await supabase
+        .from('wacloud_instancias')
+        .select('id, token, nome_instancia')
+        .eq('id', params.id)
+        .single();
+      instance = sbInst;
+    }
 
-    if (error || !instance?.token) {
+    if (!instance?.token) {
       return NextResponse.json({ error: 'Instância não encontrada ou sem token' }, { status: 404 });
     }
 
@@ -58,28 +67,33 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const res = await fetch(`${WACLOUD_CONFIG.uazapiBaseUrl}/label/edit`, {
       method: 'POST',
       headers: {
-        Accept: 'application/json',
         'Content-Type': 'application/json',
         token: instance.token,
       },
       body: JSON.stringify(payload),
     });
 
-    const data = await res.json().catch(() => null);
-
+    const data = await res.json();
     if (!res.ok) {
-      return NextResponse.json(
-        { error: 'Falha na Uazapi: ' + JSON.stringify(data) },
-        { status: res.status }
-      );
+      return NextResponse.json({ error: data?.message || 'Erro na UAZAPI' }, { status: res.status });
     }
 
-    // Busca a lista atualizada de labels para retornar
-    const updatedLabels = await fetchUazapiLabels(instance.token);
+    // Se criou/editou com sucesso, salvar também no NocoDB
+    if (!isDelete && name) {
+      try {
+        const uazLabelId = data?.labelid || labelid;
+        await saveWacloudEtiqueta(instance.nome_instancia, {
+          uazapi_label_id: String(uazLabelId),
+          nome: name,
+        });
+      } catch (saveErr) {
+        console.warn("Aviso ao salvar etiqueta no NocoDB:", saveErr);
+      }
+    }
 
-    return NextResponse.json({ success: true, data, labels: updatedLabels });
+    return NextResponse.json({ success: true, data });
   } catch (err: any) {
     console.error('Edit label error:', err);
-    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 });
   }
 }

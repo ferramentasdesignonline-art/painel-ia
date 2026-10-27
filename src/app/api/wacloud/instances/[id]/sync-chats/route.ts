@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getWacloudInstanciaByIdOrName, upsertWacloudContato } from '@/lib/nocodb/wacloud';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
 import { fetchUazapiChats } from '@/lib/wacloud/uazapi';
 
@@ -14,14 +15,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const body = await request.json().catch(() => ({}));
     const offset = Number(body?.offset) || 0;
 
-    const supabase = getWacloudSupabaseAdmin();
-    const { data: instance, error } = await supabase
-      .from('wacloud_instancias')
-      .select('id, nome_instancia, token')
-      .eq('id', params.id)
-      .single();
+    let instance = await getWacloudInstanciaByIdOrName(params.id);
+    if (!instance?.token) {
+      const supabase = getWacloudSupabaseAdmin();
+      const { data: sbInst } = await supabase
+        .from('wacloud_instancias')
+        .select('id, nome_instancia, token')
+        .eq('id', params.id)
+        .single();
+      instance = sbInst;
+    }
 
-    if (error || !instance?.token) {
+    if (!instance?.token) {
       return NextResponse.json({ error: 'Instância não encontrada ou sem token' }, { status: 404 });
     }
 
@@ -32,7 +37,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const rows = chats
       .filter((c) => c?.wa_chatid)
       .map((c) => ({
-        instancia_id: instance.id,
+        instancia_id: String(instance.id),
         nome_instancia: instance.nome_instancia,
         wa_chatid: c.wa_chatid,
         wa_chatlid: c.wa_chatlid || null,
@@ -49,12 +54,25 @@ export async function POST(request: Request, { params }: { params: { id: string 
       }));
 
     if (rows.length > 0) {
-      const { error: upsertError } = await supabase
-        .from('wacloud_contatos')
-        .upsert(rows, { onConflict: 'nome_instancia,wa_chatid' });
-      if (upsertError) {
-        console.error('Erro ao salvar contatos:', upsertError);
-        return NextResponse.json({ error: upsertError.message }, { status: 500 });
+      // 1. Salvar no NocoDB (wacloud_contatos)
+      try {
+        await Promise.all(
+          rows.map((row) =>
+            upsertWacloudContato(instance.nome_instancia, row.telefone_contato, row)
+          )
+        );
+      } catch (nocoErr) {
+        console.warn("Aviso ao salvar contatos no NocoDB:", nocoErr);
+      }
+
+      // 2. Sincronizar com Supabase
+      try {
+        const supabase = getWacloudSupabaseAdmin();
+        await supabase
+          .from('wacloud_contatos')
+          .upsert(rows, { onConflict: 'nome_instancia,wa_chatid' });
+      } catch (sbErr) {
+        // Ignora
       }
     }
 
@@ -64,13 +82,12 @@ export async function POST(request: Request, { params }: { params: { id: string 
     return NextResponse.json({
       success: true,
       processed: rows.length,
-      offset,
-      next_offset: done ? null : nextOffset,
+      next_offset: nextOffset,
       total,
       done,
     });
   } catch (err: any) {
-    console.error('sync-chats error:', err);
-    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
+    console.error('API sync-chats error:', err);
+    return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 });
   }
 }

@@ -14,20 +14,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "O parâmetro telefone é obrigatório" }, { status: 400 })
     }
 
-    const cookieStore = cookies()
-    const supabaseSession = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value
-          },
-        },
-      }
-    )
-
-    const clientConfig = await getActiveClientConfig(supabaseSession)
+    const clientConfig = await getActiveClientConfig()
     
     if (!clientConfig) {
       return NextResponse.json({ error: "Unauthorized or no client config found" }, { status: 401 })
@@ -58,23 +45,29 @@ export async function GET(request: Request) {
     const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_memoria;
 
     if (isSemIA) {
-      const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
-      const wacloudAdmin = getWacloudSupabaseAdmin();
       const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome;
+      let mensagens: any[] = [];
 
-      const { data: mensagens, error } = await wacloudAdmin
-        .from('wacloud_mensagens')
-        .select('*')
-        .eq('nome_instancia', nomeInstancia)
-        .or(`telefone_contato.ilike.%${pureNumbers}%,telefone_contato.ilike.%${pureNumbers.slice(-8)}%`)
-        .order('created_at', { ascending: true });
-
-      if (error) {
-        console.error("Error fetching chat from wacloud_mensagens:", error);
-        return NextResponse.json({ error: "Erro ao buscar mensagens", details: error.message }, { status: 400 });
+      try {
+        const { getWacloudMensagens } = await import('@/lib/nocodb/wacloud');
+        mensagens = await getWacloudMensagens(pureNumbers, nomeInstancia, 500);
+      } catch (nocoErr) {
+        console.warn("Aviso ao buscar mensagens no NocoDB em chat:", nocoErr);
       }
 
-      const formattedMessages = mensagens?.map((row) => ({
+      if (!mensagens || mensagens.length === 0) {
+        const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+        const wacloudAdmin = getWacloudSupabaseAdmin();
+        const { data: sbMsgs } = await wacloudAdmin
+          .from('wacloud_mensagens')
+          .select('*')
+          .eq('nome_instancia', nomeInstancia)
+          .or(`telefone_contato.ilike.%${pureNumbers}%,telefone_contato.ilike.%${pureNumbers.slice(-8)}%`)
+          .order('created_at', { ascending: true });
+        mensagens = sbMsgs || [];
+      }
+
+      const formattedMessages = mensagens.map((row) => ({
         id: row.id ? row.id.toString() : `${row.telefone_contato}-${row.created_at}`,
         type: row.enviado_por_mim ? 'ai' : 'human',
         message: row.mensagem || '',
@@ -126,20 +119,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "O parâmetro telefone é obrigatório" }, { status: 400 })
     }
 
-    const cookieStore = cookies()
-    const supabaseSession = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value
-          },
-        },
-      }
-    )
-
-    const clientConfig = await getActiveClientConfig(supabaseSession)
+    const clientConfig = await getActiveClientConfig()
     
     if (!clientConfig) {
       return NextResponse.json({ error: "Unauthorized or no client config found" }, { status: 401 })
@@ -161,14 +141,25 @@ export async function POST(request: Request) {
     const whatsappJid = telefone.includes('@') ? telefone : `${pureNumbers}@s.whatsapp.net`
     const numberOnly = pureNumbers
 
-    // 1. Localiza a instância Wacloud do cliente
+    // 1. Localiza a instância Wacloud do cliente (NocoDB + Supabase)
     const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase')
     const { WACLOUD_CONFIG } = await import('@/lib/wacloud/config')
     const wacloudAdmin = getWacloudSupabaseAdmin()
 
-    const { data: instances } = await wacloudAdmin
-      .from('wacloud_instancias')
-      .select('id, nome_instancia, token, cliente_id')
+    let instances: any[] = []
+    try {
+      const { getWacloudInstancias } = await import('@/lib/nocodb/wacloud')
+      instances = await getWacloudInstancias()
+    } catch (nocoErr) {
+      console.warn("Aviso ao buscar instâncias no NocoDB em chat:", nocoErr)
+    }
+
+    if (!instances || instances.length === 0) {
+      const { data: sbInsts } = await wacloudAdmin
+        .from('wacloud_instancias')
+        .select('id, nome_instancia, token, cliente_id')
+      instances = sbInsts || []
+    }
 
     const normalize = (str: string) =>
       str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase()
@@ -234,11 +225,30 @@ export async function POST(request: Request) {
       : `[ATENDIMENTO HUMANO] ${text ? text.trim() : ''}`;
 
     if (isSemIAClient) {
+      const nomeInstancia = instance?.nome_instancia || clientConfig.nome_instancia || clientConfig.nome;
+
+      // 1. Salva no NocoDB (WaCloud)
+      try {
+        const { saveWacloudMensagem } = await import('@/lib/nocodb/wacloud');
+        await saveWacloudMensagem({
+          nome_instancia: nomeInstancia,
+          telefone_contato: pureNumbers,
+          nome_contato: 'Atendente',
+          mensagem: text || fileName || '',
+          enviado_por_mim: true,
+          tipo_mensagem: type || 'text',
+          url_midia: mediaUrl || null,
+        });
+      } catch (nocoMsgErr) {
+        console.warn("Aviso ao salvar mensagem no NocoDB:", nocoMsgErr);
+      }
+
+      // 2. Sincroniza no Supabase
       try {
         await wacloudAdmin
           .from('wacloud_mensagens')
           .insert({
-            nome_instancia: instance?.nome_instancia || clientConfig.nome_instancia || clientConfig.nome,
+            nome_instancia: nomeInstancia,
             telefone_contato: pureNumbers,
             nome_contato: 'Atendente',
             mensagem: text || fileName || '',

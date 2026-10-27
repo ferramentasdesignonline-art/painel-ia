@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getWacloudInstanciaByIdOrName, updateWacloudContato } from '@/lib/nocodb/wacloud';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
 import { WACLOUD_CONFIG } from '@/lib/wacloud/config';
 
@@ -13,14 +14,18 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Parâmetros inválidos' }, { status: 400 });
     }
 
-    const supabase = getWacloudSupabaseAdmin();
-    const { data: instance, error } = await supabase
-      .from('wacloud_instancias')
-      .select('id, token, nome_instancia, cliente_id')
-      .eq('id', params.id)
-      .single();
+    let instance = await getWacloudInstanciaByIdOrName(params.id);
+    if (!instance?.token) {
+      const supabase = getWacloudSupabaseAdmin();
+      const { data: sbInst } = await supabase
+        .from('wacloud_instancias')
+        .select('id, token, nome_instancia, cliente_id')
+        .eq('id', params.id)
+        .single();
+      instance = sbInst;
+    }
 
-    if (error || !instance?.token) {
+    if (!instance?.token) {
       return NextResponse.json({ error: 'Instância não encontrada ou sem token' }, { status: 404 });
     }
 
@@ -43,7 +48,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     // 2. Atualizar no banco correto:
     // Se for cliente com IA, salva diretamente na tabela de leads do cliente!
-    // Se for cliente sem IA (CRM), salva na tabela wacloud_contatos.
+    // Se for cliente sem IA (CRM), salva na tabela wacloud_contatos no NocoDB.
     try {
       const { getNocoDBClientes } = await import('@/lib/nocodb/sistema');
       let clients: any[] = [];
@@ -59,7 +64,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         const { data: sbClients } = await sbMain.from('sistema-dash-ia_clientes').select('*');
         clients = sbClients || [];
       }
-      
+
       const norm = (s: string) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
       const targetInst = norm(instance.nome_instancia);
 
@@ -72,6 +77,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       });
 
       if (client && client.tabela_leads) {
+        const { createClient } = await import('@supabase/supabase-js');
         const clientDb = createClient(
           client.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
           client.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -82,11 +88,26 @@ export async function POST(request: Request, { params }: { params: { id: string 
           .update({ whatsapp_labels: labelids })
           .ilike('telefone', `%${cleanNumber}%`);
       } else {
-        await supabase
-          .from('wacloud_contatos')
-          .update({ whatsapp_labels: labelids, atualizado_em: new Date().toISOString() })
-          .eq('instancia_id', instance.id)
-          .eq('telefone_contato', number);
+        // Atualiza no NocoDB (wacloud_contatos)
+        try {
+          await updateWacloudContato(number, instance.nome_instancia, {
+            whatsapp_labels: labelids,
+          });
+        } catch (nocoCtErr) {
+          console.warn("Aviso ao atualizar contato no NocoDB:", nocoCtErr);
+        }
+
+        // Sincroniza no Supabase
+        try {
+          const supabase = getWacloudSupabaseAdmin();
+          await supabase
+            .from('wacloud_contatos')
+            .update({ whatsapp_labels: labelids, atualizado_em: new Date().toISOString() })
+            .eq('nome_instancia', instance.nome_instancia)
+            .eq('telefone_contato', number);
+        } catch (sbErr) {
+          // Ignora
+        }
       }
     } catch (dbErr) {
       console.warn('Erro ao atualizar etiqueta no banco local:', dbErr);

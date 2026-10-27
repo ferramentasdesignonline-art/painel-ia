@@ -172,10 +172,21 @@ export async function PUT(request: Request) {
     const slugNorm = normalizeStr(cliente.slug || '');
     const instConfigNorm = normalizeStr(cliente.nome_instancia || cliente.whatsapp_instancia || '');
 
-    const { data: instancias } = await wacloudAdmin
-      .from('wacloud_instancias')
-      .select('id, nome_instancia, token')
-      .limit(50);
+    let instancias: any[] = [];
+    try {
+      const { getWacloudInstancias } = await import('@/lib/nocodb/wacloud');
+      instancias = await getWacloudInstancias();
+    } catch (nocoErr) {
+      console.warn("Aviso ao buscar instâncias no NocoDB:", nocoErr);
+    }
+
+    if (!instancias || instancias.length === 0) {
+      const { data: sbInsts } = await wacloudAdmin
+        .from('wacloud_instancias')
+        .select('id, nome_instancia, token')
+        .limit(50);
+      instancias = sbInsts || [];
+    }
 
     let instanciaMatch = instConfigNorm
       ? instancias?.find(i => normalizeStr(i.nome_instancia) === instConfigNorm)
@@ -204,11 +215,22 @@ export async function PUT(request: Request) {
 
     // Localizar contato e telefone
     if (isSemIA) {
-      const { data: contatoRow } = await wacloudAdmin
-        .from('wacloud_contatos')
-        .select('id, telefone_contato, whatsapp_labels')
-        .eq('id', lead_id)
-        .maybeSingle();
+      let contatoRow: any = null;
+      try {
+        const { getWacloudContato } = await import('@/lib/nocodb/wacloud');
+        contatoRow = await getWacloudContato(instanciaMatch?.nome_instancia || '', String(lead_id));
+      } catch (nocoCtErr) {
+        console.warn("Aviso ao buscar contato no NocoDB:", nocoCtErr);
+      }
+
+      if (!contatoRow) {
+        const { data: sbRow } = await wacloudAdmin
+          .from('wacloud_contatos')
+          .select('id, telefone_contato, whatsapp_labels')
+          .eq('id', lead_id)
+          .maybeSingle();
+        contatoRow = sbRow;
+      }
 
       if (contatoRow) {
         rawPhone = String(contatoRow.telefone_contato || '').replace(/@.*$/, '').replace(/\D/g, '');
@@ -393,16 +415,29 @@ export async function PUT(request: Request) {
         atualizado_em: new Date().toISOString(),
       };
 
-      if (isSemIA) {
-        await wacloudAdmin
-          .from('wacloud_contatos')
-          .update(updateWacloud)
-          .eq('id', lead_id);
-      } else if (rawPhone) {
-        await wacloudAdmin
-          .from('wacloud_contatos')
-          .update(updateWacloud)
-          .eq('telefone_contato', `${rawPhone}@s.whatsapp.net`);
+      // 1. Atualizar no NocoDB (wacloud_contatos)
+      try {
+        const { updateWacloudContato } = await import('@/lib/nocodb/wacloud');
+        await updateWacloudContato(rawPhone || lead_id, instanciaMatch?.nome_instancia || '', updateWacloud);
+      } catch (nocoUpErr) {
+        console.warn("Aviso ao atualizar contato no NocoDB:", nocoUpErr);
+      }
+
+      // 2. Sincronizar com Supabase
+      try {
+        if (isSemIA) {
+          await wacloudAdmin
+            .from('wacloud_contatos')
+            .update(updateWacloud)
+            .eq('id', lead_id);
+        } else if (rawPhone) {
+          await wacloudAdmin
+            .from('wacloud_contatos')
+            .update(updateWacloud)
+            .eq('telefone_contato', `${rawPhone}@s.whatsapp.net`);
+        }
+      } catch (sbUpErr) {
+        // Ignora
       }
     } catch (errWacloud) {
       console.warn('Erro ao atualizar wacloud_contatos:', errWacloud);

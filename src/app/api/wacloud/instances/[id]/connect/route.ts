@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getWacloudInstanciaByIdOrName } from '@/lib/nocodb/wacloud';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
 import { WACLOUD_CONFIG } from '@/lib/wacloud/config';
 
@@ -7,16 +8,27 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
     const instanceId = params.id;
-    const supabase = getWacloudSupabaseAdmin();
-    
-    // Buscar a instância para pegar o token
-    const { data: instance, error } = await supabase
-      .from('wacloud_instancias')
-      .select('token')
-      .eq('id', instanceId)
-      .single();
+    let instance: any = null;
 
-    if (error || !instance?.token) {
+    // 1. Tenta buscar no NocoDB
+    try {
+      instance = await getWacloudInstanciaByIdOrName(instanceId);
+    } catch (nocoErr) {
+      console.warn("Aviso ao buscar instância no NocoDB:", nocoErr);
+    }
+
+    // 2. Fallback Supabase
+    if (!instance?.token) {
+      const supabase = getWacloudSupabaseAdmin();
+      const { data: sbInst } = await supabase
+        .from('wacloud_instancias')
+        .select('token')
+        .eq('id', instanceId)
+        .single();
+      instance = sbInst;
+    }
+
+    if (!instance?.token) {
       return NextResponse.json({ error: 'Instância não encontrada ou sem token' }, { status: 404 });
     }
 
