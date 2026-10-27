@@ -31,7 +31,8 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       tabela_leads, 
       tabela_bloqueios, 
       tabela_memoria,
-      tabela_estoque
+      tabela_estoque,
+      supabase_url,
     } = body
 
     const supabaseAdmin = createClient(
@@ -40,17 +41,22 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
+    const updatePayload: any = {
+      nome,
+      slug,
+      email,
+      tabela_leads,
+      tabela_bloqueios,
+      tabela_memoria,
+      tabela_estoque,
+    }
+    if (supabase_url !== undefined) {
+      updatePayload.supabase_url = supabase_url
+    }
+
     const { error: dbError } = await supabaseAdmin
       .from('sistema-dash-ia_clientes')
-      .update({
-        nome,
-        slug,
-        email,
-        tabela_leads,
-        tabela_bloqueios,
-        tabela_memoria,
-        tabela_estoque,
-      })
+      .update(updatePayload)
       .eq('id', params.id)
 
     if (dbError) throw dbError

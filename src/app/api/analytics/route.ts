@@ -6,6 +6,7 @@ import { getActiveClientConfig } from "@/lib/auth/helpers"
 import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
 import { getAllBlockedNumbers, getClientLeads } from "@/lib/supabase/queries"
 import { getClientWhatsappLabelsData } from "@/lib/wacloud/labels"
+import { isNocoDBClient, getNocoDBLeads, getNocoDBBlockedNumbers } from "@/lib/nocodb/service"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -26,8 +27,13 @@ export async function GET(request: Request) {
     const clientConfig = await getActiveClientConfig(supabaseSession)
     if (!clientConfig) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const clientSupabaseUrl = clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const clientSupabaseKey = clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!
+    const isNocoDB = isNocoDBClient(clientConfig)
+    const clientSupabaseUrl = (!isNocoDB && clientConfig.supabase_url && clientConfig.supabase_url !== 'nocodb') 
+      ? clientConfig.supabase_url 
+      : process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const clientSupabaseKey = (!isNocoDB && clientConfig.supabase_service_role_key) 
+      ? clientConfig.supabase_service_role_key 
+      : process.env.SUPABASE_SERVICE_ROLE_KEY!
 
     const supabaseAdmin = createClient(
       clientSupabaseUrl,
@@ -77,7 +83,7 @@ export async function GET(request: Request) {
           messagesByDay[day][type]++;
         }
       }
-    } else if (clientConfig.tabela_memoria) {
+    } else if (!isNocoDB && clientConfig.tabela_memoria) {
       console.log('Buscando mensagens da tabela:', clientConfig.tabela_memoria);
       let msgQuery = supabaseAdmin
         .from(clientConfig.tabela_memoria)
@@ -191,7 +197,11 @@ export async function GET(request: Request) {
         );
       }
     } else if (clientConfig.tabela_leads) {
-      allLeads = await getClientLeads(supabaseAdmin, clientConfig.tabela_leads, { from, to });
+      if (isNocoDB) {
+        allLeads = await getNocoDBLeads(clientConfig.tabela_leads, { from, to });
+      } else {
+        allLeads = await getClientLeads(supabaseAdmin, clientConfig.tabela_leads, { from, to });
+      }
     }
 
     // Carregar todas as etiquetas da instância para enriquecer leads (com e sem IA)
@@ -267,6 +277,8 @@ export async function GET(request: Request) {
     // Busca os bloqueios para nao contar como em andamento nem somar followups
     const blockedNumbers = (isSemIA || !clientConfig.tabela_bloqueios)
       ? new Set<string>()
+      : isNocoDB
+      ? await getNocoDBBlockedNumbers(clientConfig.tabela_bloqueios)
       : await getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios);
 
     for (const lead of leadsFiltrados) {

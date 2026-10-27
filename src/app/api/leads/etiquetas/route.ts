@@ -190,7 +190,7 @@ export async function POST(request: Request) {
 
     // Se a Uazapi não retornou labels, tenta pegar do banco
     if (currentLabels.length === 0) {
-      if (clientConfig.tabela_leads) {
+      if (clientConfig.tabela_leads && clientConfig.supabase_url !== 'nocodb') {
         try {
           const { createClient } = await import('@supabase/supabase-js');
           const clientDb = createClient(
@@ -278,7 +278,7 @@ export async function POST(request: Request) {
     }
 
     // 5. Atualizar no banco correto
-    if (clientConfig.tabela_leads) {
+    if (clientConfig.tabela_leads && clientConfig.supabase_url !== 'nocodb') {
       try {
         const { createClient } = await import('@supabase/supabase-js');
         const clientDb = createClient(

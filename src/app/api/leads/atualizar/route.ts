@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { getActiveClientConfig } from "@/lib/auth/helpers";
 import { NextResponse } from "next/server";
+import { isNocoDBClient, getNocoDBLeadById, updateNocoDBLead } from "@/lib/nocodb/service";
 
 export async function POST(request: Request) {
   try {
@@ -112,9 +113,47 @@ export async function POST(request: Request) {
         .update(payload)
         .eq('id', leadId);
       errorUpdate = error;
+    } else if (isNocoDBClient(clientConfig)) {
+      // IA Lead no NocoDB
+      const cleanLeadId = leadId.toString().startsWith('ia-') ? leadId.toString().replace('ia-', '') : leadId;
+      const old = await getNocoDBLeadById(clientConfig.tabela_leads, cleanLeadId);
+      oldLead = old ? { nome: old.nome, veiculo_interessado: old.veiculo_interessado } : null;
+
+      const payload = { ...novasInformacoes };
+      if ('data_agendamento' in payload) {
+        if (payload.data_agendamento) {
+          const d = new Date(payload.data_agendamento);
+          const brasilStr = d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+          const parts = brasilStr.replace(',', '').split(' ');
+          const dateParts = (parts[0] || '').split('/');
+          const timeParts = (parts[1] || '').split(':');
+          if (dateParts.length === 3) {
+            payload.data_agendamento_visita = `${dateParts[2]}-${dateParts[1].padStart(2, '0')}-${dateParts[0].padStart(2, '0')}`;
+          }
+          if (timeParts.length >= 2) {
+            payload.horario_agendamento_visita = `${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}`;
+          }
+        } else {
+          payload.data_agendamento_visita = null;
+          payload.horario_agendamento_visita = null;
+        }
+        delete payload.data_agendamento;
+      }
+
+      try {
+        await updateNocoDBLead(clientConfig.tabela_leads, cleanLeadId, payload);
+      } catch (errNoco: any) {
+        errorUpdate = errNoco;
+      }
     } else {
-      // IA Lead
-      const { data: old } = await supabaseAdmin
+      // IA Lead (Supabase)
+      const clientDb = createAdminClient(
+        clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+      );
+
+      const { data: old } = await clientDb
         .from(clientConfig.tabela_leads)
         .select('nome, veiculo_interessado')
         .eq('id', leadId)
@@ -142,7 +181,7 @@ export async function POST(request: Request) {
         delete payload.data_agendamento;
       }
 
-      const { error } = await supabaseAdmin
+      const { error } = await clientDb
         .from(clientConfig.tabela_leads)
         .update(payload)
         .eq('id', leadId);

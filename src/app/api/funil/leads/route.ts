@@ -6,6 +6,7 @@ import { criarFunilPadrao } from '@/lib/funil/criar-funil-padrao';
 import { getActiveClientConfig } from '@/lib/auth/helpers';
 import { getAllBlockedNumbers } from '@/lib/supabase/queries';
 import { construirDataAgendamentoIso } from '@/lib/agendamento-utils';
+import { isNocoDBClient, getNocoDBLeads, getNocoDBBlockedNumbers } from '@/lib/nocodb/service';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -28,9 +29,17 @@ export async function GET(request: Request) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
+  const isNocoDB = isNocoDBClient(cliente);
+  const clientSupabaseUrl = (!isNocoDB && cliente.supabase_url && cliente.supabase_url !== 'nocodb')
+    ? cliente.supabase_url
+    : process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const clientSupabaseKey = (!isNocoDB && cliente.supabase_service_role_key)
+    ? cliente.supabase_service_role_key
+    : process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
   const supabaseClientDB = createAdminClient(
-    cliente.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    cliente.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    clientSupabaseUrl,
+    clientSupabaseKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
@@ -203,6 +212,18 @@ export async function GET(request: Request) {
         valor_entrada: c.valor_entrada || null,
       };
     });
+  } else if (isNocoDB) {
+    const diasAtras = periodo === '7d' ? 7 : periodo === '30d' ? 30 : 90;
+    const [leadsData, blockedSet] = await Promise.all([
+      getNocoDBLeads(cliente.tabela_leads, {
+        from: dataInicioStr || undefined,
+        to: dataFimStr || undefined,
+        diasAtras: dataInicioStr ? undefined : diasAtras,
+      }),
+      getNocoDBBlockedNumbers(cliente.tabela_bloqueios),
+    ]);
+    leads = leadsData;
+    numerosBloqueados = blockedSet;
   } else {
     let queryLeads = supabaseClientDB
       .from(cliente.tabela_leads)

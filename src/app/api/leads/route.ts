@@ -7,6 +7,7 @@ import { getClientLeads, getAllBlockedNumbers } from "@/lib/supabase/queries"
 import { construirDataAgendamentoIso } from "@/lib/agendamento-utils"
 import { getClientWhatsappLabelsData } from "@/lib/wacloud/labels"
 import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
+import { isNocoDBClient, getNocoDBLeads, getNocoDBBlockedNumbers } from "@/lib/nocodb/service"
 
 export async function GET(request: Request) {
   try {
@@ -33,7 +34,17 @@ export async function GET(request: Request) {
 
     // 3. Instanciamos um client com a SERVICE ROLE KEY, porque as tabelas dinâmicas
     // podem não ter políticas RLS amigáveis configuradas, sendo o backend a ponte segura.
-    const supabaseAdmin = createClient(clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!, clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    const isNocoDB = isNocoDBClient(clientConfig)
+    const clientSupabaseUrl = (!isNocoDB && clientConfig.supabase_url && clientConfig.supabase_url !== 'nocodb') 
+      ? clientConfig.supabase_url 
+      : process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const clientSupabaseKey = (!isNocoDB && clientConfig.supabase_service_role_key) 
+      ? clientConfig.supabase_service_role_key 
+      : process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+    const supabaseAdmin = createClient(
+      clientSupabaseUrl,
+      clientSupabaseKey,
       {
         auth: {
           autoRefreshToken: false,
@@ -197,14 +208,18 @@ export async function GET(request: Request) {
       });
     } else {
       const [leadsRes, blockedRes] = await Promise.all([
-        getClientLeads(supabaseAdmin, clientConfig.tabela_leads, { from, to }),
-        getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios)
+        isNocoDB
+          ? getNocoDBLeads(clientConfig.tabela_leads, { from, to })
+          : getClientLeads(supabaseAdmin, clientConfig.tabela_leads, { from, to }),
+        isNocoDB
+          ? getNocoDBBlockedNumbers(clientConfig.tabela_bloqueios)
+          : getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios)
       ]);
       leadsIA = leadsRes;
       blockedNumbers = blockedRes;
 
       // Se cliente tem tabela_memoria, enriquece com as mensagens reais e estatísticas de resposta da IA
-      if (clientConfig.tabela_memoria) {
+      if (!isNocoDB && clientConfig.tabela_memoria) {
         try {
           const { data: rawMsgs } = await supabaseAdmin
             .from(clientConfig.tabela_memoria)

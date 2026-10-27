@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { getActiveClientConfig } from '@/lib/auth/helpers';
+import { isNocoDBClient, getNocoDBLeadById, updateNocoDBLead } from '@/lib/nocodb/service';
 
 function findMatchingEtiquetaForEtapa(
   etapa: { nome: string; tipo: string },
@@ -170,6 +171,7 @@ export async function PUT(request: Request) {
 
     const token = instanciaMatch?.token || cliente.whatsapp_token;
     const isSemIA = cliente.tipo_atendimento === 'sem_ia' || !cliente.tabela_leads;
+    const isNocoDB = isNocoDBClient(cliente);
 
     let rawPhone = '';
     let currentLabels: string[] = [];
@@ -186,6 +188,15 @@ export async function PUT(request: Request) {
         rawPhone = String(contatoRow.telefone_contato || '').replace(/@.*$/, '').replace(/\D/g, '');
         if (Array.isArray(contatoRow.whatsapp_labels)) {
           currentLabels = contatoRow.whatsapp_labels;
+        }
+      }
+    } else if (isNocoDB && cliente.tabela_leads) {
+      const cleanLeadId = lead_id.toString().startsWith('ia-') ? lead_id.toString().replace('ia-', '') : lead_id;
+      const leadRow = await getNocoDBLeadById(cliente.tabela_leads, cleanLeadId);
+      if (leadRow) {
+        rawPhone = String(leadRow.telefone || leadRow.phone || '').replace(/\D/g, '');
+        if (Array.isArray(leadRow.whatsapp_labels)) {
+          currentLabels = leadRow.whatsapp_labels;
         }
       }
     } else if (cliente.tabela_leads) {
@@ -311,12 +322,6 @@ export async function PUT(request: Request) {
     // 1. Atualizar na tabela do cliente (SaaS com IA)
     if (cliente.tabela_leads) {
       try {
-        const clientDb = createAdminClient(
-          cliente.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          cliente.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
-          { auth: { autoRefreshToken: false, persistSession: false } }
-        );
-
         const updateData: any = {
           whatsapp_labels: finalLabels,
           lead_visita_confirmada: isVisita,
@@ -326,17 +331,29 @@ export async function PUT(request: Request) {
           update_lead: new Date().toISOString(),
         };
 
-        const targetLeadId = Number(lead_id) || lead_id;
-        const { error: updErr } = await clientDb
-          .from(cliente.tabela_leads)
-          .update(updateData)
-          .eq('id', targetLeadId);
+        const cleanLeadId = lead_id.toString().startsWith('ia-') ? lead_id.toString().replace('ia-', '') : lead_id;
 
-        if (updErr) {
-          console.error('Erro ao atualizar tabela de leads do cliente:', updErr);
+        if (isNocoDB) {
+          await updateNocoDBLead(cliente.tabela_leads, cleanLeadId, updateData);
+        } else {
+          const clientDb = createAdminClient(
+            cliente.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            cliente.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            { auth: { autoRefreshToken: false, persistSession: false } }
+          );
+
+          const targetLeadId = Number(cleanLeadId) || cleanLeadId;
+          const { error: updErr } = await clientDb
+            .from(cliente.tabela_leads)
+            .update(updateData)
+            .eq('id', targetLeadId);
+
+          if (updErr) {
+            console.error('Erro ao atualizar tabela de leads do cliente:', updErr);
+          }
         }
       } catch (errDb) {
-        console.error('Falha de conexão com clientDb:', errDb);
+        console.error('Falha de conexão com clientDb / NocoDB:', errDb);
       }
     }
 
@@ -382,6 +399,24 @@ export async function PUT(request: Request) {
         });
     } catch (hErr) {
       // Ignora erro se tabela de histórico não existir
+    }
+
+    // Registrar posição manual no funil
+    try {
+      const cleanLeadId = lead_id.toString().startsWith('ia-') ? lead_id.toString().replace('ia-', '') : lead_id;
+      await supabaseAdmin
+        .from('sistema-dash-ia_lead_posicoes')
+        .upsert({
+          cliente_id: cliente.id,
+          lead_id: cleanLeadId,
+          etapa_id: etapa_id,
+          movido_manualmente_em: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'cliente_id, lead_id'
+        });
+    } catch (posErr) {
+      console.warn('Aviso ao salvar posicao manual:', posErr);
     }
 
     return NextResponse.json({ success: true, whatsapp_labels: finalLabels, etapa_id });

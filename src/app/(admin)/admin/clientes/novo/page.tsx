@@ -158,6 +158,7 @@ export default function NovoClientePage() {
       const payload = {
         ...formData,
         tipo_atendimento: tipoAtendimento,
+        supabase_url: bancoProvider === 'nocodb' ? 'nocodb' : (formData.supabase_url || ''),
       }
 
       const res = await fetch("/api/admin/clientes", {

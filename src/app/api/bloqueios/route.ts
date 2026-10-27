@@ -4,6 +4,7 @@ import { cookies } from "next/headers"
 import { createClient } from "@supabase/supabase-js"
 import { getActiveClientConfig } from "@/lib/auth/helpers"
 import { getClientBloqueios } from "@/lib/supabase/queries"
+import { isNocoDBClient, getClientBloqueiosNocoDB, addNocoDBBloqueio, removeNocoDBBloqueio } from "@/lib/nocodb/service"
 
 export async function GET(request: Request) {
   try {
@@ -28,6 +29,11 @@ export async function GET(request: Request) {
 
     if (clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_bloqueios) {
       return NextResponse.json({ data: [] }, { status: 200 })
+    }
+
+    if (isNocoDBClient(clientConfig)) {
+      const bloqueios = await getClientBloqueiosNocoDB(clientConfig.tabela_bloqueios)
+      return NextResponse.json({ data: bloqueios }, { status: 200 })
     }
 
     const supabaseAdmin = createClient(clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!, clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -69,6 +75,17 @@ export async function POST(request: Request) {
 
     if (!clientConfig) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    if (isNocoDBClient(clientConfig)) {
+      if (!clientConfig.tabela_bloqueios) {
+        return NextResponse.json({ error: "Tabela de bloqueios não configurada" }, { status: 400 })
+      }
+      const limpo = telefone.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '')
+      const instanciaNome = clientConfig.whatsapp_instancia || clientConfig.nome.replace(/\s+/g, '')
+      const numeroClientePadrao = `${instanciaNome} ${limpo}@s.whatsapp.net block`
+      await addNocoDBBloqueio(clientConfig.tabela_bloqueios, numeroClientePadrao)
+      return NextResponse.json({ success: true, message: "Bloqueio criado com sucesso" }, { status: 200 })
     }
 
     const supabaseAdmin = createClient(
@@ -136,6 +153,22 @@ export async function DELETE(request: Request) {
 
     if (!clientConfig) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    if (isNocoDBClient(clientConfig)) {
+      if (!clientConfig.tabela_bloqueios) {
+        return NextResponse.json({ error: "Tabela de bloqueios não configurada" }, { status: 400 })
+      }
+      const bloqueios = await getClientBloqueiosNocoDB(clientConfig.tabela_bloqueios)
+      const limpo = String(numero_cliente).replace(/\D/g, '')
+      const match = bloqueios.find((b: any) => {
+        const bLimpo = String(b.numero_cliente || '').replace(/\D/g, '')
+        return b.numero_cliente === numero_cliente || (limpo && bLimpo.includes(limpo))
+      })
+      if (match && match.id) {
+        await removeNocoDBBloqueio(clientConfig.tabela_bloqueios, match.id)
+      }
+      return NextResponse.json({ success: true, message: "IA reativada com sucesso" }, { status: 200 })
     }
 
     const supabaseAdmin = createClient(clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!, clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,

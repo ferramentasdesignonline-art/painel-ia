@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
+import { isNocoDBClient, getNocoDBLeads } from "@/lib/nocodb/service"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -43,21 +44,33 @@ export async function GET(request: Request) {
     await Promise.all(clients.map(async (client) => {
       if (!client.tabela_leads) return
 
-      const clientSupabaseAdmin = createClient(
-        client.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        client.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        { auth: { autoRefreshToken: false, persistSession: false } }
-      )
+      let leads: any[] | null = null
+      let error: any = null
 
-      let leadsQuery = clientSupabaseAdmin
-        .from(client.tabela_leads)
-        .select('*')
+      if (isNocoDBClient(client)) {
+        try {
+          leads = await getNocoDBLeads(client.tabela_leads, { from, to })
+        } catch (errNoco) {
+          error = errNoco
+        }
+      } else {
+        const clientSupabaseAdmin = createClient(
+          client.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          client.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { auth: { autoRefreshToken: false, persistSession: false } }
+        )
 
-      if (from) leadsQuery = leadsQuery.gte('created_at', from)
-      if (to) leadsQuery = leadsQuery.lte('created_at', to)
+        let leadsQuery = clientSupabaseAdmin
+          .from(client.tabela_leads)
+          .select('*')
 
-      // Se a query falhar por algum motivo (ex: tabela nao existe), capturamos o erro
-      const { data: leads, error } = await leadsQuery
+        if (from) leadsQuery = leadsQuery.gte('created_at', from)
+        if (to) leadsQuery = leadsQuery.lte('created_at', to)
+
+        const res = await leadsQuery
+        leads = res.data
+        error = res.error
+      }
 
       let cTotal = 0
       let cQuali = 0

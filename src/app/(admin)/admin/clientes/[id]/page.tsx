@@ -136,11 +136,13 @@ export default function EditarClientePage() {
             tabela_bloqueios: data.tabela_bloqueios || "",
             tabela_memoria: data.tabela_memoria || "",
             tabela_estoque: data.tabela_estoque || "",
+            supabase_url: data.supabase_url || "",
           })
           setModuloEstoqueAtivo(Boolean(data.tabela_estoque))
 
-          // Auto-detecta provedor baseado nas tabelas
+          // Auto-detecta provedor baseado nas tabelas e supabase_url
           const isNocoDB = Boolean(
+            data.supabase_url === "nocodb" ||
             data.tabela_estoque?.includes("cr_motors") ||
             data.tabela_leads?.includes("cr_motors") ||
             data.tabela_estoque?.startsWith("m0")
@@ -202,10 +204,15 @@ export default function EditarClientePage() {
     setError("")
 
     try {
+      const payload = {
+        ...formData,
+        supabase_url: bancoProvider === 'nocodb' ? 'nocodb' : (formData.supabase_url === 'nocodb' ? '' : formData.supabase_url),
+      }
+
       const res = await fetch(`/api/admin/clientes/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       })
 
       if (!res.ok) {

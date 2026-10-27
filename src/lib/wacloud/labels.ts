@@ -121,7 +121,7 @@ export async function getClientWhatsappLabelsData(clientConfig: any): Promise<{
 
           // Se o cliente tem IA e tabela de leads própria (ex: auto_prosperita_leads, domine_leads, titanium_leads):
           // Atualiza em lote diretamente na coluna whatsapp_labels do Supabase do cliente
-          if (clientConfig.tabela_leads && labeledChats.length > 0) {
+          if (clientConfig.tabela_leads && clientConfig.supabase_url !== 'nocodb' && labeledChats.length > 0) {
             const clientDb = createClient(
               clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
               clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!
