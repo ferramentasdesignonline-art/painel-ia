@@ -264,20 +264,21 @@ export async function saveWacloudEtiqueta(
 /**
  * Busca contatos (conversas) ordenados por último timestamp
  */
-export async function getWacloudContatos(options?: {
+export async function getWacloudContatos(options?: string | {
   nomeInstancia?: string;
   limit?: number;
   offset?: number;
 }): Promise<any[]> {
   try {
+    const opts = typeof options === 'string' ? { nomeInstancia: options } : options;
     const filters: string[] = [];
-    if (options?.nomeInstancia) {
-      filters.push(`(nome_instancia,eq,${options.nomeInstancia})`);
+    if (opts?.nomeInstancia) {
+      filters.push(`(nome_instancia,eq,${opts.nomeInstancia})`);
     }
 
     const where = filters.length > 0 ? `where=${encodeURIComponent(filters.join("~and"))}&` : "";
-    const limit = options?.limit || 1000;
-    const offset = options?.offset || 0;
+    const limit = opts?.limit || 1000;
+    const offset = opts?.offset || 0;
 
     const data = await nocoRequest(
       `/api/v2/tables/${WACLOUD_TABLES.CONTATOS}/records?${where}sort=-ultimo_timestamp&limit=${limit}&offset=${offset}`
