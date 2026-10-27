@@ -299,3 +299,76 @@ export async function updateNocoDBLead(tableName: string, leadId: string | numbe
   }
   return await res.json()
 }
+
+export async function getNocoDBChatMessages(tableName: string, telefone: string): Promise<any[]> {
+  const tableId = await getNocoDBTableId(tableName)
+  if (!tableId) return []
+
+  const pureNumbers = telefone.replace(/\D/g, "")
+  const tailPhone = pureNumbers.slice(-8)
+
+  try {
+    const url = `${NOCODB_URL}/api/v2/tables/${tableId}/records?where=(session_id,like,%25${tailPhone}%25)&sort=id&limit=1000`
+    const res = await fetch(url, {
+      headers: { "xc-token": NOCODB_TOKEN },
+      cache: "no-store",
+    })
+
+    if (!res.ok) {
+      console.error(`Erro ao buscar chat NocoDB ${tableName}:`, await res.text())
+      return []
+    }
+
+    const data = await res.json()
+    const list = data.list || []
+
+    return list.map((row: any) => {
+      let msgData = row.message
+      if (typeof msgData === "string") {
+        try {
+          msgData = JSON.parse(msgData)
+        } catch {
+          msgData = { type: "human", content: row.message }
+        }
+      }
+
+      let content = msgData?.content || ""
+      if (typeof content !== "string") {
+        content = JSON.stringify(content)
+      }
+
+      return {
+        id: row.id ? row.id.toString() : `${row.session_id}-${row.Id || Math.random()}`,
+        type: msgData?.type === "human" ? "human" : "ai",
+        message: content,
+        created_at: row.created_at || row.CreatedAt || "",
+      }
+    })
+  } catch (err) {
+    console.error(`Erro getNocoDBChatMessages ${tableName}:`, err)
+    return []
+  }
+}
+
+export async function addNocoDBChatMessage(tableName: string, sessionId: string, message: any): Promise<any> {
+  const tableId = await getNocoDBTableId(tableName)
+  if (!tableId) throw new Error("Tabela de memória não encontrada no NocoDB")
+
+  const res = await fetch(`${NOCODB_URL}/api/v2/tables/${tableId}/records`, {
+    method: "POST",
+    headers: {
+      "xc-token": NOCODB_TOKEN,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      message: message,
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Erro ao salvar mensagem no NocoDB: ${err}`)
+  }
+  return await res.json()
+}

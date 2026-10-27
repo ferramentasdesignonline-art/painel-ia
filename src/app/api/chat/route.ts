@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { createClient } from "@supabase/supabase-js"
 import { getActiveClientConfig } from "@/lib/auth/helpers"
+import { isNocoDBClient, getNocoDBChatMessages, addNocoDBChatMessage, addNocoDBBloqueio } from "@/lib/nocodb/service"
 
 export async function GET(request: Request) {
   try {
@@ -32,13 +33,28 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized or no client config found" }, { status: 401 })
     }
 
-    const supabaseAdmin = createClient(clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!, clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: { autoRefreshToken: false, persistSession: false },
-      }
-    )
-
     const pureNumbers = telefone.replace(/\D/g, '')
+    const isNocoDB = isNocoDBClient(clientConfig)
+
+    if (isNocoDB) {
+      if (!clientConfig.tabela_memoria) {
+        return NextResponse.json({ data: [] }, { status: 200 })
+      }
+      const formattedMessages = await getNocoDBChatMessages(clientConfig.tabela_memoria, pureNumbers)
+      return NextResponse.json({ data: formattedMessages }, { status: 200 })
+    }
+
+    const clientSupabaseUrl = (!isNocoDB && clientConfig.supabase_url && clientConfig.supabase_url !== 'nocodb')
+      ? clientConfig.supabase_url
+      : process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const clientSupabaseKey = (!isNocoDB && clientConfig.supabase_service_role_key)
+      ? clientConfig.supabase_service_role_key
+      : process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+    const supabaseAdmin = createClient(clientSupabaseUrl, clientSupabaseKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
     const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_memoria;
 
     if (isSemIA) {
@@ -129,13 +145,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized or no client config found" }, { status: 401 })
     }
 
-    const supabaseAdmin = createClient(
-      clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!, 
-      clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: { autoRefreshToken: false, persistSession: false },
-      }
-    )
+    const isNocoDB = isNocoDBClient(clientConfig)
+    const clientSupabaseUrl = (!isNocoDB && clientConfig.supabase_url && clientConfig.supabase_url !== 'nocodb')
+      ? clientConfig.supabase_url
+      : process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const clientSupabaseKey = (!isNocoDB && clientConfig.supabase_service_role_key)
+      ? clientConfig.supabase_service_role_key
+      : process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+    const supabaseAdmin = createClient(clientSupabaseUrl, clientSupabaseKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
 
     const pureNumbers = telefone.replace(/\D/g, '')
     const whatsappJid = telefone.includes('@') ? telefone : `${pureNumbers}@s.whatsapp.net`
@@ -243,15 +263,23 @@ export async function POST(request: Request) {
 
       const sessionIdCandidate = pureNumbers.startsWith('55') ? whatsappJid : `55${whatsappJid}`
 
-      try {
-        await supabaseAdmin
-          .from(clientConfig.tabela_memoria)
-          .insert({
-            session_id: sessionIdCandidate,
-            message: messageJson
-          })
-      } catch (memErr) {
-        console.warn("Aviso ao salvar mensagem na memória da IA:", memErr);
+      if (isNocoDB) {
+        try {
+          await addNocoDBChatMessage(clientConfig.tabela_memoria, sessionIdCandidate, messageJson);
+        } catch (memErr) {
+          console.warn("Aviso ao salvar mensagem na memória da IA (NocoDB):", memErr);
+        }
+      } else {
+        try {
+          await supabaseAdmin
+            .from(clientConfig.tabela_memoria)
+            .insert({
+              session_id: sessionIdCandidate,
+              message: messageJson
+            })
+        } catch (memErr) {
+          console.warn("Aviso ao salvar mensagem na memória da IA:", memErr);
+        }
       }
     }
 
@@ -261,28 +289,36 @@ export async function POST(request: Request) {
       const instanciaNome = clientConfig.whatsapp_instancia || clientConfig.nome.replace(/\s+/g, '')
       const numeroClientePadrao = `${instanciaNome} ${pureWith55}@s.whatsapp.net block`
 
-      try {
-        const { data: existente } = await supabaseAdmin
-          .from(clientConfig.tabela_bloqueios)
-          .select('id, bloqueio_existe')
-          .or(`numero_cliente.eq.${numeroClientePadrao},numero_cliente.ilike.%${pureNumbers}%,numero_cliente.ilike.%${pureWith55}%`)
-          .limit(1)
-
-        if (!existente || existente.length === 0) {
-          await supabaseAdmin
-            .from(clientConfig.tabela_bloqueios)
-            .insert({
-              numero_cliente: numeroClientePadrao,
-              bloqueio_existe: true
-            })
-        } else if (existente[0].bloqueio_existe === false) {
-          await supabaseAdmin
-            .from(clientConfig.tabela_bloqueios)
-            .update({ bloqueio_existe: true })
-            .eq('id', existente[0].id)
+      if (isNocoDB) {
+        try {
+          await addNocoDBBloqueio(clientConfig.tabela_bloqueios, numeroClientePadrao);
+        } catch (e: any) {
+          console.error("Erro ao criar bloqueio humano NocoDB:", e);
         }
-      } catch (e: any) {
-        console.error("Erro ao criar bloqueio humano:", e)
+      } else {
+        try {
+          const { data: existente } = await supabaseAdmin
+            .from(clientConfig.tabela_bloqueios)
+            .select('id, bloqueio_existe')
+            .or(`numero_cliente.eq.${numeroClientePadrao},numero_cliente.ilike.%${pureNumbers}%,numero_cliente.ilike.%${pureWith55}%`)
+            .limit(1)
+
+          if (!existente || existente.length === 0) {
+            await supabaseAdmin
+              .from(clientConfig.tabela_bloqueios)
+              .insert({
+                numero_cliente: numeroClientePadrao,
+                bloqueio_existe: true
+              })
+          } else if (existente[0].bloqueio_existe === false) {
+            await supabaseAdmin
+              .from(clientConfig.tabela_bloqueios)
+              .update({ bloqueio_existe: true })
+              .eq('id', existente[0].id)
+          }
+        } catch (e: any) {
+          console.error("Erro ao criar bloqueio humano:", e)
+        }
       }
     }
 
