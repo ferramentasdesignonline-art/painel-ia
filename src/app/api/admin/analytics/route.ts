@@ -1,11 +1,36 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
-import { isNocoDBClient, getNocoDBLeads } from "@/lib/nocodb/service"
+import { isNocoDBClient, getNocoDBLeads, getNocoDBBlockedNumbers } from "@/lib/nocodb/service"
+import { getAllBlockedNumbers } from "@/lib/supabase/queries"
+import { getClientWhatsappLabelsData } from "@/lib/wacloud/labels"
 import { getNocoDBClientes } from "@/lib/nocodb/sistema"
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+
+function normalizarCanal(lead: any, labelNames: string[]): string {
+  // 1. Prioridade: etiqueta Canal | ...
+  for (const nome of labelNames) {
+    if (nome.startsWith('canal')) {
+      const clean = nome.replace(/^canal\s*\|\s*/i, '').trim()
+      if (clean) return clean
+    }
+  }
+
+  // 2. Campo origem_lead
+  const raw = String(lead.origem_lead || '').toLowerCase().trim()
+  if (raw === 'facebook_ads' || raw === 'instagram_ads' || raw === 'meta_ads') return 'Meta Ads'
+  if (raw === 'facebook_marketplace' || raw === 'marketplace') return 'Marketplace'
+  if (raw === 'google_ads' || raw === 'google') return 'Google Ads'
+  if (raw === 'webmotors') return 'WebMotors'
+  if (raw === 'olx') return 'OLX'
+  if (raw === 'mercado_livre' || raw === 'mercadolivre') return 'Mercado Livre'
+  if (raw === 'icarros') return 'iCarros'
+  if (raw === 'desconhecido') return 'Desconhecido'
+  if (raw) return raw.charAt(0).toUpperCase() + raw.slice(1)
+
+  return 'Sem Origem'
+}
 
 export async function GET(request: Request) {
   try {
@@ -43,21 +68,60 @@ export async function GET(request: Request) {
     }
 
     const clientsKpis: any[] = []
+    const globalCanaisMap = new Map<string, number>()
 
     let globalTotalLeads = 0
-    let globalQualifiedLeads = 0
+    let globalEmAtendimento = 0
+    let globalAtendimentoHumano = 0
+    let globalOportunidades = 0
     let globalVisitasAgendadas = 0
+    let globalVisitasRealizadas = 0
     let globalSimulacoesAprovadas = 0
-    let globalSimulacoesPreAprovadas = 0
-    let globalSimulacoesReprovadas = 0
-    let globalPerdas = 0
+    let globalPerdidos = 0
 
-    // Fetch leads for each client concurrently
+    // Fetch leads e bloqueios para cada cliente em paralelo
     await Promise.all(clients.map(async (client) => {
       let leads: any[] | null = null
       let error: any = null
       const isSemIA = client.tipo_atendimento === 'sem_ia' || !client.tabela_leads
+      const isNoco = isNocoDBClient(client)
 
+      // Supabase client instance se aplicável
+      let clientSupabaseAdmin: any = null
+      if (!isNoco && client.supabase_url && client.supabase_url.startsWith('http')) {
+        clientSupabaseAdmin = createClient(
+          client.supabase_url,
+          client.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { auth: { autoRefreshToken: false, persistSession: false } }
+        )
+      }
+
+      // ── 1. Carregar Bloqueios do Cliente (Atendimento Humano) ──
+      let blockedNumbers = new Set<string>()
+      if (client.tabela_bloqueios) {
+        try {
+          if (isNoco) {
+            blockedNumbers = await getNocoDBBlockedNumbers(client.tabela_bloqueios)
+          } else if (clientSupabaseAdmin) {
+            blockedNumbers = await getAllBlockedNumbers(clientSupabaseAdmin, client.tabela_bloqueios)
+          }
+        } catch (errBloq) {
+          console.warn(`Aviso ao carregar bloqueios de ${client.nome}:`, errBloq)
+        }
+      }
+
+      // ── 2. Carregar Etiquetas do WhatsApp da Instância ──
+      let mapaNomes = new Map<string, string>()
+      let mapaWhatsappLabels = new Map<string, string[]>()
+      try {
+        const labelsData = await getClientWhatsappLabelsData(client)
+        mapaNomes = labelsData.mapaNomes || new Map()
+        mapaWhatsappLabels = labelsData.mapaWhatsappLabels || new Map()
+      } catch (errLbl) {
+        console.warn(`Aviso ao carregar etiquetas de ${client.nome}:`, errLbl)
+      }
+
+      // ── 3. Carregar Leads do Período ──
       if (isSemIA) {
         try {
           const { getWacloudContatos } = await import('@/lib/nocodb/wacloud')
@@ -79,20 +143,14 @@ export async function GET(request: Request) {
         } catch (errSemIA) {
           error = errSemIA
         }
-      } else if (isNocoDBClient(client)) {
+      } else if (isNoco) {
         try {
           leads = await getNocoDBLeads(client.tabela_leads, { from, to })
         } catch (errNoco) {
           error = errNoco
         }
-      } else if (client.supabase_url && client.supabase_url.startsWith('http')) {
+      } else if (clientSupabaseAdmin) {
         try {
-          const clientSupabaseAdmin = createClient(
-            client.supabase_url,
-            client.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
-            { auth: { autoRefreshToken: false, persistSession: false } }
-          )
-
           let allClientLeads: any[] = []
           let offset = 0
           while (true) {
@@ -121,72 +179,147 @@ export async function GET(request: Request) {
         }
       }
 
+      // ── 4. Apuração das Métricas do Cliente ──
       let cTotal = 0
-      let cQuali = 0
-      let cVisita = 0
-      let cSimA = 0
-      let cSimPA = 0
-      let cSimR = 0
-      let cPerda = 0
+      let cEmAtendimento = 0
+      let cAtendimentoHumano = 0
+      let cOportunidades = 0
+      let cVisitasAgendadas = 0
+      let cVisitasRealizadas = 0
+      let cSimulacoesAprovadas = 0
+      let cPerdidos = 0
+
+      const clientCanaisMap = new Map<string, number>()
 
       if (!error && leads) {
         cTotal = leads.length
-        
-        for (const lead of leads) {
-          if (isSemIA) {
-            // Regras de KPIs para clientes sem IA (wacloud_contatos)
-            const hasVisita = lead.lead_visita_confirmada === true || Boolean(lead.data_agendamento_visita)
-            const hasSimA = lead.lead_simulacao_aprovada === true
-            const hasSimPA = lead.lead_simulacao_pre_aprovada === true
-            const hasSimR = lead.lead_simulacao_reprovada === true
-            const isPerda = lead.alerta_atrito === true || lead.lead_perda === true
 
-            if (isPerda) cPerda++
-            else if (hasVisita) cVisita++
-            else if (hasSimA) cSimA++
-            else if (hasSimPA) cSimPA++
-            else if (hasSimR) cSimR++
-            else if (lead.observacao_lead_qualificado || lead.veiculo_interessado) cQuali++
-          } else {
-            // Regras normais de etapas para clientes com IA
-            const etapa = lead.lead_perda === true ? 'ia_perda' : calcularEtapaIA(lead, 5)
-            
-            if (etapa === 'ia_qualificado') cQuali++
-            else if (etapa === 'visita_confirmada') cVisita++
-            else if (etapa === 'simulacao_aprovada') cSimA++
-            else if (etapa === 'simulacao_pre_aprovada') cSimPA++
-            else if (etapa === 'simulacao_reprovada') cSimR++
-            else if (etapa === 'ia_perda') cPerda++
+        for (const lead of leads) {
+          const rawPhone = lead.telefone || lead.phone || lead.telefone_contato || ''
+          const phoneClean = String(rawPhone).replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '')
+
+          // 👤 Atendimento Humano: Leads com telefone registrado na tabela_bloqueios
+          const isBlocked = Boolean(
+            phoneClean && (
+              blockedNumbers.has(phoneClean) ||
+              (phoneClean.startsWith('55') && blockedNumbers.has(phoneClean.slice(2)))
+            )
+          )
+
+          if (isBlocked) {
+            cAtendimentoHumano++
           }
+
+          // Resolução de Etiquetas Reais do WhatsApp
+          const leadLabels = (lead.whatsapp_labels && Array.isArray(lead.whatsapp_labels) && lead.whatsapp_labels.length > 0)
+            ? lead.whatsapp_labels
+            : (mapaWhatsappLabels.get(phoneClean) || [])
+
+          const labelNames = leadLabels.map((l: any) => {
+            const id = String(l).includes(':') ? String(l).split(':')[1] : String(l)
+            return (mapaNomes.get(id) || '').toLowerCase()
+          })
+
+          // 🟢 Visitas Realizadas: Leads com a etiqueta de visita realizada
+          const hasVisitaRealizada = Boolean(
+            labelNames.some((n: string) => n.includes('visita - realizada') || n.includes('visita realizada') || n === '54') ||
+            lead.visita_realizada === true
+          )
+
+          // 🔷 Visitas Agendadas: Leads com lead_visita_confirmada === true ou data_agendamento_visita preenchido
+          const hasVisitaAgendada = Boolean(
+            lead.lead_visita_confirmada === true ||
+            Boolean(lead.data_agendamento_visita) ||
+            labelNames.some((n: string) => n.includes('visita - agendada') || n.includes('visita agendada') || n === '53' || n === '6')
+          )
+
+          // 🏆 Simulações Aprovadas: Leads com lead_simulacao_aprovada === true ou lead_simulacao_pre_aprovada === true
+          const hasSimulacaoAprovada = Boolean(
+            lead.lead_simulacao_aprovada === true ||
+            lead.lead_simulacao_pre_aprovada === true
+          )
+
+          // 🟠 Oportunidades: Leads com etiqueta de oportunidade ou veiculo_troca
+          const hasOportunidade = Boolean(
+            labelNames.some((n: string) => n.includes('oportunidade') || n === '55') ||
+            (lead.veiculo_troca && String(lead.veiculo_troca).trim().length > 0)
+          )
+
+          // 🔴 Perdidos: Leads com etiqueta de perdido desqualificado / desistiu / sem resposta
+          const hasPerdido = Boolean(
+            labelNames.some((n: string) => n.includes('desqualificado') || n.includes('sem resposta') || n.includes('desistiu') || n === '58')
+          )
+
+          if (hasVisitaRealizada) {
+            cVisitasRealizadas++
+          } else if (hasVisitaAgendada) {
+            cVisitasAgendadas++
+          } else if (hasSimulacaoAprovada) {
+            cSimulacoesAprovadas++
+          } else if (hasOportunidade) {
+            cOportunidades++
+          } else if (hasPerdido) {
+            cPerdidos++
+          }
+
+          // 🔵 Em Atendimento: Leads ativos sendo trabalhados (NÃO pode constar como bloqueado na tabela de bloqueio)
+          if (!isBlocked && !hasVisitaRealizada && !hasPerdido) {
+            cEmAtendimento++
+          }
+
+          // Mapeamento de Canal / Origem
+          const canal = normalizarCanal(lead, labelNames)
+          clientCanaisMap.set(canal, (clientCanaisMap.get(canal) || 0) + 1)
+          globalCanaisMap.set(canal, (globalCanaisMap.get(canal) || 0) + 1)
         }
 
         globalTotalLeads += cTotal
-        globalQualifiedLeads += cQuali
-        globalVisitasAgendadas += cVisita
-        globalSimulacoesAprovadas += cSimA
-        globalSimulacoesPreAprovadas += cSimPA
-        globalSimulacoesReprovadas += cSimR
-        globalPerdas += cPerda
+        globalEmAtendimento += cEmAtendimento
+        globalAtendimentoHumano += cAtendimentoHumano
+        globalOportunidades += cOportunidades
+        globalVisitasAgendadas += cVisitasAgendadas
+        globalVisitasRealizadas += cVisitasRealizadas
+        globalSimulacoesAprovadas += cSimulacoesAprovadas
+        globalPerdidos += cPerdidos
       } else if (error) {
         console.warn(`Erro ao buscar leads do cliente ${client.nome}:`, error)
       }
+
+      // Ranking de canais do cliente
+      const clientCanaisList = Array.from(clientCanaisMap.entries())
+        .map(([nome, count]) => ({ nome, count, pct: cTotal > 0 ? Number(((count / cTotal) * 100).toFixed(1)) : 0 }))
+        .sort((a, b) => b.count - a.count)
 
       clientsKpis.push({
         id: client.id,
         nome: client.nome,
         kpis: {
           totalLeads: cTotal,
-          visitasAgendadas: cVisita,
-          emAndamento: Math.max(0, cTotal - cQuali - cVisita - cSimA - cSimPA - cSimR - cPerda),
-          simulacoesAprovadas: cSimA + cSimPA,
-          simulacoesReprovadas: cSimR,
-          perdas: cPerda,
-          qualifiedLeads: cQuali
-        }
+          emAtendimento: cEmAtendimento,
+          atendimentoHumano: cAtendimentoHumano,
+          oportunidades: cOportunidades,
+          visitasAgendadas: cVisitasAgendadas,
+          visitasRealizadas: cVisitasRealizadas,
+          simulacoesAprovadas: cSimulacoesAprovadas,
+          perdidos: cPerdidos,
+          // Compatibilidade retroativa
+          emAndamento: cEmAtendimento,
+          simulacoesReprovadas: 0,
+          perdas: cPerdidos,
+          qualifiedLeads: cOportunidades
+        },
+        canais: clientCanaisList
       })
     }))
 
-    const globalEmAndamento = Math.max(0, globalTotalLeads - globalQualifiedLeads - globalVisitasAgendadas - globalSimulacoesAprovadas - globalSimulacoesPreAprovadas - globalSimulacoesReprovadas - globalPerdas)
+    // Ranking de canais global
+    const globalCanaisList = Array.from(globalCanaisMap.entries())
+      .map(([nome, count]) => ({
+        nome,
+        count,
+        pct: globalTotalLeads > 0 ? Number(((count / globalTotalLeads) * 100).toFixed(1)) : 0
+      }))
+      .sort((a, b) => b.count - a.count)
 
     // Sort clientKpis alphabetically by nome
     clientsKpis.sort((a, b) => a.nome.localeCompare(b.nome))
@@ -194,12 +327,19 @@ export async function GET(request: Request) {
     return NextResponse.json({
       global: {
         totalLeads: globalTotalLeads,
+        emAtendimento: globalEmAtendimento,
+        atendimentoHumano: globalAtendimentoHumano,
+        oportunidades: globalOportunidades,
         visitasAgendadas: globalVisitasAgendadas,
-        emAndamento: globalEmAndamento,
-        simulacoesAprovadas: globalSimulacoesAprovadas + globalSimulacoesPreAprovadas,
-        simulacoesReprovadas: globalSimulacoesReprovadas,
-        perdas: globalPerdas,
-        qualifiedLeads: globalQualifiedLeads
+        visitasRealizadas: globalVisitasRealizadas,
+        simulacoesAprovadas: globalSimulacoesAprovadas,
+        perdidos: globalPerdidos,
+        // Compatibilidade retroativa
+        emAndamento: globalEmAtendimento,
+        simulacoesReprovadas: 0,
+        perdas: globalPerdidos,
+        qualifiedLeads: globalOportunidades,
+        canais: globalCanaisList
       },
       clients: clientsKpis
     }, { status: 200 })
