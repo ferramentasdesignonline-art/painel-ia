@@ -123,7 +123,7 @@ export async function getNocoDBLeads(
           id,
           Id: id,
           phone: row.telefone ? String(row.telefone).replace(/@.*$/, "").replace(/\D/g, "") : null,
-          created_at: row.created_at || row.CreatedAt || row.ultima_mensagem || new Date().toISOString(),
+          created_at: row.created_at || row.CreatedAt || row.update_lead || row.UpdatedAt || row.ultima_mensagem || new Date().toISOString(),
           updated_at: row.updated_at || row.UpdatedAt || row.update_lead,
         })
       }

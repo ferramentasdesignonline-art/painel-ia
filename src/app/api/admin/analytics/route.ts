@@ -54,34 +54,71 @@ export async function GET(request: Request) {
 
     // Fetch leads for each client concurrently
     await Promise.all(clients.map(async (client) => {
-      if (!client.tabela_leads) return
-
       let leads: any[] | null = null
       let error: any = null
+      const isSemIA = client.tipo_atendimento === 'sem_ia' || !client.tabela_leads
 
-      if (isNocoDBClient(client)) {
+      if (isSemIA) {
+        try {
+          const { getWacloudContatos } = await import('@/lib/nocodb/wacloud')
+          const instName = client.whatsapp_instancia || client.nome_instancia || client.nome
+          const contatos = await getWacloudContatos({ nomeInstancia: instName, limit: 10000 })
+          
+          const fromDate = from ? new Date(from) : null
+          const toDate = to ? new Date(to) : null
+
+          leads = contatos.filter((c: any) => {
+            if (c.is_group === true || c.wa_chatid?.includes('@g.us') || c.telefone_contato?.includes('@g.us')) return false
+            const dStr = c.created_at || c.CreatedAt || c.atualizado_em || c.ultimo_timestamp
+            const dt = dStr ? new Date(dStr) : null
+            if (!dt || isNaN(dt.getTime())) return true
+            if (fromDate && dt < fromDate) return false
+            if (toDate && dt > toDate) return false
+            return true
+          })
+        } catch (errSemIA) {
+          error = errSemIA
+        }
+      } else if (isNocoDBClient(client)) {
         try {
           leads = await getNocoDBLeads(client.tabela_leads, { from, to })
         } catch (errNoco) {
           error = errNoco
         }
-      } else {
-        const clientSupabaseAdmin = createClient(
-          client.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          client.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
-          { auth: { autoRefreshToken: false, persistSession: false } }
-        )
+      } else if (client.supabase_url && client.supabase_url.startsWith('http')) {
+        try {
+          const clientSupabaseAdmin = createClient(
+            client.supabase_url,
+            client.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            { auth: { autoRefreshToken: false, persistSession: false } }
+          )
 
-        let leadsQuery = clientSupabaseAdmin
-          .from(client.tabela_leads)
-          .select('*')
+          let allClientLeads: any[] = []
+          let offset = 0
+          while (true) {
+            let leadsQuery = clientSupabaseAdmin
+              .from(client.tabela_leads)
+              .select('*')
 
-        if (from) leadsQuery = leadsQuery.gte('created_at', from)
-        if (to) leadsQuery = leadsQuery.lte('created_at', to)
+            if (from) leadsQuery = leadsQuery.gte('created_at', from)
+            if (to) leadsQuery = leadsQuery.lte('created_at', to)
 
-        const res = await leadsQuery
-        leads = res.data
-        error = res.error
+            const res = await leadsQuery.range(offset, offset + 999)
+            if (res.error) {
+              error = res.error
+              break
+            }
+            if (!res.data || res.data.length === 0) break
+            allClientLeads.push(...res.data)
+            if (res.data.length < 1000) break
+            offset += 1000
+          }
+          if (!error) {
+            leads = allClientLeads
+          }
+        } catch (errSb) {
+          error = errSb
+        }
       }
 
       let cTotal = 0
@@ -96,16 +133,31 @@ export async function GET(request: Request) {
         cTotal = leads.length
         
         for (const lead of leads) {
-          // If the lead was manually marked as lost via UI, we might have lead_perda = true
-          // Wait, calcularEtapaIA doesn't check lead_perda boolean explicitly, but we can check it first
-          const etapa = lead.lead_perda === true ? 'ia_perda' : calcularEtapaIA(lead, 5)
-          
-          if (etapa === 'ia_qualificado') cQuali++
-          else if (etapa === 'visita_confirmada') cVisita++
-          else if (etapa === 'simulacao_aprovada') cSimA++
-          else if (etapa === 'simulacao_pre_aprovada') cSimPA++
-          else if (etapa === 'simulacao_reprovada') cSimR++
-          else if (etapa === 'ia_perda') cPerda++
+          if (isSemIA) {
+            // Regras de KPIs para clientes sem IA (wacloud_contatos)
+            const hasVisita = lead.lead_visita_confirmada === true || Boolean(lead.data_agendamento_visita)
+            const hasSimA = lead.lead_simulacao_aprovada === true
+            const hasSimPA = lead.lead_simulacao_pre_aprovada === true
+            const hasSimR = lead.lead_simulacao_reprovada === true
+            const isPerda = lead.alerta_atrito === true || lead.lead_perda === true
+
+            if (isPerda) cPerda++
+            else if (hasVisita) cVisita++
+            else if (hasSimA) cSimA++
+            else if (hasSimPA) cSimPA++
+            else if (hasSimR) cSimR++
+            else if (lead.observacao_lead_qualificado || lead.veiculo_interessado) cQuali++
+          } else {
+            // Regras normais de etapas para clientes com IA
+            const etapa = lead.lead_perda === true ? 'ia_perda' : calcularEtapaIA(lead, 5)
+            
+            if (etapa === 'ia_qualificado') cQuali++
+            else if (etapa === 'visita_confirmada') cVisita++
+            else if (etapa === 'simulacao_aprovada') cSimA++
+            else if (etapa === 'simulacao_pre_aprovada') cSimPA++
+            else if (etapa === 'simulacao_reprovada') cSimR++
+            else if (etapa === 'ia_perda') cPerda++
+          }
         }
 
         globalTotalLeads += cTotal
@@ -115,7 +167,7 @@ export async function GET(request: Request) {
         globalSimulacoesPreAprovadas += cSimPA
         globalSimulacoesReprovadas += cSimR
         globalPerdas += cPerda
-      } else {
+      } else if (error) {
         console.warn(`Erro ao buscar leads do cliente ${client.nome}:`, error)
       }
 
