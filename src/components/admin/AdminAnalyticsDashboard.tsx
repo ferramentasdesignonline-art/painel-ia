@@ -93,12 +93,13 @@ export function AdminAnalyticsDashboard({ clients }: { clients: any[] }) {
       try {
         let url = `/api/admin/analytics?t=${Date.now()}` // bypass cache just in case
         if (startDate) {
-          const s = new Date(startDate)
+          const [sY, sM, sD] = startDate.split('-').map(Number)
+          const s = new Date(sY, sM - 1, sD, 0, 0, 0, 0)
           url += `&from=${s.toISOString()}`
         }
         if (endDate) {
-          const e = new Date(endDate)
-          e.setHours(23, 59, 59, 999)
+          const [eY, eM, eD] = endDate.split('-').map(Number)
+          const e = new Date(eY, eM - 1, eD, 23, 59, 59, 999)
           url += `&to=${e.toISOString()}`
         }
 
