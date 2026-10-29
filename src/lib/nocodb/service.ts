@@ -341,7 +341,7 @@ export async function getNocoDBChatMessages(tableName: string, telefone: string)
         id: row.id ? row.id.toString() : `${row.session_id}-${row.Id || Math.random()}`,
         type: msgData?.type === "human" ? "human" : "ai",
         message: content,
-        created_at: row.created_at || row.CreatedAt || "",
+        created_at: row.created_at || msgData?.created_at || msgData?.additional_kwargs?.created_at || row.CreatedAt || "",
       }
     })
   } catch (err) {
