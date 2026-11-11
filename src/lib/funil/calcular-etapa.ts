@@ -51,17 +51,39 @@ export type TipoEtapaIA =
  * 7. Perdido | Desqualificado | Sem resposta (ID 58)
  * 8. Em atendimento | Recontratar (ID 56)
  */
+export function extractLabelsArray(raw: any): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(String);
+  if (typeof raw === 'object' && Array.isArray((raw as any).labels)) {
+    return (raw as any).labels.map(String);
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.map(String);
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.labels)) {
+        return parsed.labels.map(String);
+      }
+    } catch {
+      // not json
+    }
+    return raw.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 export function calcularEtapaPorLabels(
-  labelIds: string[] = [],
+  rawLabelIds: any = [],
   mapaNomes?: Map<string, string>
 ): TipoEtapaIA | null {
-  if (!labelIds || labelIds.length === 0) return null;
+  const labelIds = extractLabelsArray(rawLabelIds);
+  if (labelIds.length === 0) return null;
 
-  // Extrair apenas os IDs numéricos finais (ex: "5511977063365:55" -> "55")
+  // Extrair apenas os IDs numéricos finais (ex: "5511977063365:55" -> "55", ou 55 -> "55")
   const ids = Array.from(
     new Set(
       labelIds.map(l => {
-        const s = String(l);
+        const s = String(l).trim();
         return s.includes(':') ? s.split(':')[1] : s;
       })
     )
@@ -142,12 +164,12 @@ export function calcularEtapaPorLabels(
 }
 
 export function calcularEtapaIA(
-  lead: Lead,
+  lead: any,
   meta_followup = 5,
   mapaNomes?: Map<string, string>
 ): TipoEtapaIA {
   // 1. Prioridade máxima: Etiquetas padrão oficiais do WhatsApp do lead
-  if (lead.whatsapp_labels && lead.whatsapp_labels.length > 0) {
+  if (lead.whatsapp_labels) {
     const etapaLabel = calcularEtapaPorLabels(lead.whatsapp_labels, mapaNomes);
     if (etapaLabel) return etapaLabel;
   }

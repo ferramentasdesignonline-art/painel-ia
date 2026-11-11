@@ -1,3 +1,5 @@
+import { extractLabelsArray } from "../funil/calcular-etapa"
+
 const NOCODB_URL = (process.env.NOCODB_URL || "https://evolution-nocodb.4lap5g.easypanel.host").replace(/\/+$/, "")
 const NOCODB_TOKEN = process.env.NOCODB_API_TOKEN || "9Qz7ETxba8JnXq3B0e9ybHaSiDar6hLqYBIIkg7u"
 
@@ -137,6 +139,7 @@ export async function getNocoDBLeads(
           nome: row.nome_contato || row.nome || "Cliente",
           telefone: cleanPhone,
           phone: cleanPhone,
+          whatsapp_labels: extractLabelsArray(row.whatsapp_labels),
           created_at: row.created_at || row.ultimo_timestamp || row.CreatedAt || row.update_lead || row.UpdatedAt || row.ultima_mensagem || new Date().toISOString(),
           updated_at: row.updated_at || row.UpdatedAt || row.update_lead || row.atualizado_em,
         })

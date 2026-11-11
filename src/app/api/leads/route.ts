@@ -6,7 +6,7 @@ import { getActiveClientConfig } from "@/lib/auth/helpers"
 import { getClientLeads, getAllBlockedNumbers } from "@/lib/supabase/queries"
 import { construirDataAgendamentoIso } from "@/lib/agendamento-utils"
 import { getClientWhatsappLabelsData } from "@/lib/wacloud/labels"
-import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
+import { calcularEtapaIA, extractLabelsArray } from "@/lib/funil/calcular-etapa"
 import { isNocoDBClient, getNocoDBLeads, getNocoDBBlockedNumbers } from "@/lib/nocodb/service"
 import { getNocoDBLeadsManuais, getNocoDBTags, getNocoDBLeadTags } from "@/lib/nocodb/sistema"
 
@@ -218,8 +218,10 @@ export async function GET(request: Request) {
           mapContatosUnicos.set(phoneClean, c);
         } else {
           const exist = mapContatosUnicos.get(phoneClean)!;
-          if (Array.isArray(c.whatsapp_labels) && c.whatsapp_labels.length > 0) {
-            exist.whatsapp_labels = Array.from(new Set([...(exist.whatsapp_labels || []), ...c.whatsapp_labels]));
+          const rawCLabels = extractLabelsArray(c.whatsapp_labels);
+          if (rawCLabels.length > 0) {
+            const currentExist = extractLabelsArray(exist.whatsapp_labels);
+            exist.whatsapp_labels = Array.from(new Set([...currentExist, ...rawCLabels]));
           }
           if (!exist.lead_visita_confirmada && c.lead_visita_confirmada) {
             exist.lead_visita_confirmada = true;
@@ -264,7 +266,7 @@ export async function GET(request: Request) {
           anuncio_titulo: c.anuncio_titulo || null,
           anuncio_url: c.anuncio_url || null,
           anuncio_descricao: c.anuncio_descricao || null,
-          whatsapp_labels: Array.isArray(c.whatsapp_labels) ? c.whatsapp_labels : [],
+          whatsapp_labels: extractLabelsArray(c.whatsapp_labels),
           email: c.email || null,
           cpf_cnpj: c.cpf_cnpj || null,
           data_nascimento: c.data_nascimento || null,
@@ -480,9 +482,10 @@ export async function GET(request: Request) {
       const phoneClean = rawPhone.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
       const isBlocked = blockedNumbers.has(phoneClean);
 
-      // Correlaciona etiquetas do WhatsApp (usa do lead se já vier do wacloud_contatos)
-      const leadWaLabels = (lead.whatsapp_labels && Array.isArray(lead.whatsapp_labels) && lead.whatsapp_labels.length > 0)
-        ? lead.whatsapp_labels
+      // Correlaciona etiquetas do WhatsApp (usa do lead se já vier do wacloud_contatos ou semia_contatos)
+      const existingLabels = extractLabelsArray(lead.whatsapp_labels);
+      const leadWaLabels = existingLabels.length > 0
+        ? existingLabels
         : (mapaWhatsappLabels.get(phoneClean) || []);
 
       // Descobrir Canal de Atendimento (prioridade para etiqueta WhatsApp 'Canal | ...')
@@ -595,7 +598,7 @@ export async function GET(request: Request) {
     for (const lead of todosLeads) {
       const crmTags = tagsByLeadId.get(lead.id) || [];
       const waTags: any[] = [];
-      for (const lId of (lead.whatsapp_labels || [])) {
+      for (const lId of extractLabelsArray(lead.whatsapp_labels)) {
         const cleanId = String(lId).includes(':') ? String(lId).split(':')[1] : String(lId);
         const def = mapaUazapiLabels.get(cleanId);
         if (def) {

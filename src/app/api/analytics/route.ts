@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { createClient } from "@supabase/supabase-js"
 import { getActiveClientConfig } from "@/lib/auth/helpers"
-import { calcularEtapaIA } from "@/lib/funil/calcular-etapa"
+import { calcularEtapaIA, extractLabelsArray } from "@/lib/funil/calcular-etapa"
 import { getAllBlockedNumbers, getClientLeads } from "@/lib/supabase/queries"
 import { getClientWhatsappLabelsData } from "@/lib/wacloud/labels"
 import { isNocoDBClient, getNocoDBLeads, getNocoDBBlockedNumbers } from "@/lib/nocodb/service"
@@ -247,9 +247,10 @@ export async function GET(request: Request) {
           uniqueLeadsMap.set(cleanPhone, lead);
         } else {
           const existing = uniqueLeadsMap.get(cleanPhone)!;
-          if (Array.isArray(lead.whatsapp_labels) && lead.whatsapp_labels.length > 0) {
-            const combined = Array.from(new Set([...(existing.whatsapp_labels || []), ...lead.whatsapp_labels]));
-            existing.whatsapp_labels = combined;
+          const rawLeadLabels = extractLabelsArray(lead.whatsapp_labels);
+          if (rawLeadLabels.length > 0) {
+            const currentExist = extractLabelsArray(existing.whatsapp_labels);
+            existing.whatsapp_labels = Array.from(new Set([...currentExist, ...rawLeadLabels]));
           }
           if (!existing.lead_visita_confirmada && lead.lead_visita_confirmada) {
             existing.lead_visita_confirmada = true;
@@ -273,8 +274,9 @@ export async function GET(request: Request) {
       const rawPhone = lead.telefone || lead.phone || lead.telefone_contato || '';
       const phoneClean = String(rawPhone).replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
 
-      const leadWaLabels = (lead.whatsapp_labels && Array.isArray(lead.whatsapp_labels) && lead.whatsapp_labels.length > 0)
-        ? lead.whatsapp_labels
+      const existingLabels = extractLabelsArray(lead.whatsapp_labels);
+      const leadWaLabels = existingLabels.length > 0
+        ? existingLabels
         : (mapaWhatsappLabels.get(phoneClean) || []);
 
       lead.whatsapp_labels = leadWaLabels;

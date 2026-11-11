@@ -500,17 +500,30 @@ export default function ClientDashboardPage() {
     } else if (kpiModal.key === 'oportunidades') {
       list = list.filter(l => l.etapa === 'oportunidade' || l.etapa === 'ia_qualificado' || l.etapa === 'simulacao_pre_aprovada')
     } else if (kpiModal.key === 'visitas_agendadas') {
-      list = list.filter(l => l.etapa === 'visita_agendada' || l.etapa === 'visita_confirmada')
+      list = list.filter(l => {
+        if (l.etapa === 'visita_agendada' || l.etapa === 'visita_confirmada') return true;
+        if (l.lead_visita_confirmada === true) return true;
+        const labels = Array.isArray(l.whatsapp_labels) ? l.whatsapp_labels.map(String) : [];
+        return labels.some(id => id === '28' || id.endsWith(':28') || id === '53' || id.endsWith(':53') || id === '6' || id.endsWith(':6') || id === '25' || id.endsWith(':25'));
+      })
     } else if (kpiModal.key === 'visitas_realizadas') {
-      list = list.filter(l => l.etapa === 'visita_realizada')
+      list = list.filter(l => {
+        if (l.etapa === 'visita_realizada') return true;
+        const labels = Array.isArray(l.whatsapp_labels) ? l.whatsapp_labels.map(String) : [];
+        return labels.some(id => id === '29' || id.endsWith(':29') || id === '54' || id.endsWith(':54'));
+      })
     } else if (kpiModal.key === 'simulacoes_aprovadas') {
-      list = list.filter(l => l.etapa === 'simulacao_aprovada')
+      list = list.filter(l => l.etapa === 'simulacao_aprovada' || l.lead_simulacao_aprovada === true)
     } else if (kpiModal.key === 'perdidos_qualificados') {
       list = list.filter(l => l.etapa === 'perdido_qualificado')
     } else if (kpiModal.key === 'perdidos_desqualificados') {
       list = list.filter(l => l.etapa === 'perdido_desqualificado')
     } else if (kpiModal.key === 'clientes') {
-      list = list.filter(l => l.etapa === 'cliente')
+      list = list.filter(l => {
+        if (l.etapa === 'cliente') return true;
+        const labels = Array.isArray(l.whatsapp_labels) ? l.whatsapp_labels.map(String) : [];
+        return labels.some(id => id === '27' || id.endsWith(':27') || id === '52' || id.endsWith(':52'));
+      })
     } else if (kpiModal.key === 'aguardando_resposta') {
       list = list.filter(l => l.ultimo_remetente === 'cliente' && l.ultima_mensagem)
       list = [...list].sort((a, b) => {
