@@ -4,11 +4,14 @@ const NOCODB_TOKEN = process.env.NOCODB_API_TOKEN || "9Qz7ETxba8JnXq3B0e9ybHaSiD
 export function isNocoDBClient(clientConfig: any): boolean {
   if (!clientConfig) return false
   return Boolean(
+    clientConfig.tipo_atendimento === "sem_ia" ||
     clientConfig.supabase_url === "nocodb" ||
     clientConfig.banco_provider === "nocodb" ||
-    clientConfig.tabela_estoque?.includes("cr_motors") ||
+    clientConfig.tabela_leads?.includes("semia") ||
     clientConfig.tabela_leads?.includes("cr_motors") ||
-    clientConfig.tabela_estoque?.startsWith("m0")
+    clientConfig.tabela_estoque?.includes("cr_motors") ||
+    clientConfig.tabela_estoque?.startsWith("m0") ||
+    (!clientConfig.supabase_url && clientConfig.tabela_leads)
   )
 }
 
@@ -91,7 +94,7 @@ export async function getNocoDBLeadById(tableName: string, leadId: string | numb
 
 export async function getNocoDBLeads(
   tableName: string,
-  options?: { from?: string | null; to?: string | null; diasAtras?: number }
+  options?: { from?: string | null; to?: string | null; diasAtras?: number; nomeInstancia?: string }
 ): Promise<any[]> {
   const tableId = await getNocoDBTableId(tableName)
   if (!tableId) return []
@@ -101,10 +104,16 @@ export async function getNocoDBLeads(
   let offset = 0
   const maxRows = 25000
 
+  const isSemia = tableName.toLowerCase().includes("semia")
+  let whereQuery = ""
+  if (isSemia && options?.nomeInstancia) {
+    whereQuery = `&where=${encodeURIComponent(`(nome_instancia,eq,${options.nomeInstancia})`)}`
+  }
+
   while (offset < maxRows) {
     try {
       const res = await fetch(
-        `${NOCODB_URL}/api/v2/tables/${tableId}/records?limit=${pageSize}&offset=${offset}`,
+        `${NOCODB_URL}/api/v2/tables/${tableId}/records?limit=${pageSize}&offset=${offset}${whereQuery}`,
         {
           headers: { "xc-token": NOCODB_TOKEN },
           cache: "no-store",
@@ -118,13 +127,18 @@ export async function getNocoDBLeads(
 
       for (const row of list) {
         const id = row.Id || row.id
+        const rawPhone = row.telefone_contato || row.telefone || row.phone || ""
+        const cleanPhone = rawPhone ? String(rawPhone).replace(/@.*$/, "").replace(/\D/g, "") : null
+
         allLeads.push({
           ...row,
           id,
           Id: id,
-          phone: row.telefone ? String(row.telefone).replace(/@.*$/, "").replace(/\D/g, "") : null,
-          created_at: row.created_at || row.CreatedAt || row.update_lead || row.UpdatedAt || row.ultima_mensagem || new Date().toISOString(),
-          updated_at: row.updated_at || row.UpdatedAt || row.update_lead,
+          nome: row.nome_contato || row.nome || "Cliente",
+          telefone: cleanPhone,
+          phone: cleanPhone,
+          created_at: row.created_at || row.ultimo_timestamp || row.CreatedAt || row.update_lead || row.UpdatedAt || row.ultima_mensagem || new Date().toISOString(),
+          updated_at: row.updated_at || row.UpdatedAt || row.update_lead || row.atualizado_em,
         })
       }
 

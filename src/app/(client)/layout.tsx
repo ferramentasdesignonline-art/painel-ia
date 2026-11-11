@@ -4,6 +4,8 @@ import { AdminBar } from "@/components/layout/AdminBar"
 import { getActiveClientConfig, getUserRole } from "@/lib/auth/helpers"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
+import { GuiaProvider } from "@/components/guia/GuiaProvider"
+import { GuiaDrawer } from "@/components/guia/GuiaDrawer"
 
 export default async function ClientLayout({
   children,
@@ -27,22 +29,30 @@ export default async function ClientLayout({
   const isImpersonating = role === 'master_admin' && !!cookieStore.get("impersonating_client_id")?.value
   const clientConfig = await getActiveClientConfig(supabase)
   const hasEstoque = Boolean(clientConfig?.tabela_estoque)
+  const hasBancos = Boolean(clientConfig?.modulo_bancos_habilitado)
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
-      {isImpersonating && clientConfig && <AdminBar clientName={clientConfig.nome} />}
-      
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar tipoAtendimento={clientConfig?.tipo_atendimento} hasEstoque={hasEstoque} />
-        <div className="flex flex-col flex-1 w-full overflow-hidden">
-          <Header clientName={clientConfig?.nome} clientEmail={clientConfig?.email} tipoAtendimento={clientConfig?.tipo_atendimento} hasEstoque={hasEstoque} />
-          <main className="flex-1 relative overflow-y-auto focus:outline-none">
-            <div className="py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-              {children}
-            </div>
-          </main>
+    <GuiaProvider
+      tipoAtendimento={clientConfig?.tipo_atendimento}
+      hasEstoque={hasEstoque}
+      hasBancos={hasBancos}
+    >
+      <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
+        {isImpersonating && clientConfig && <AdminBar clientName={clientConfig.nome} />}
+        
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar tipoAtendimento={clientConfig?.tipo_atendimento} hasEstoque={hasEstoque} hasBancos={hasBancos} />
+          <div className="flex flex-col flex-1 w-full overflow-hidden">
+            <Header clientName={clientConfig?.nome} clientEmail={clientConfig?.email} tipoAtendimento={clientConfig?.tipo_atendimento} hasEstoque={hasEstoque} hasBancos={hasBancos} />
+            <main className="flex-1 relative overflow-y-auto focus:outline-none">
+              <div className="py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+                {children}
+              </div>
+            </main>
+          </div>
         </div>
       </div>
-    </div>
+      <GuiaDrawer />
+    </GuiaProvider>
   )
 }

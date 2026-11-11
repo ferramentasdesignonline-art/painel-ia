@@ -34,7 +34,11 @@ export async function GET(request: Request) {
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_leads;
+    if (clientConfig.tipo_atendimento === 'sem_ia' && !clientConfig.tabela_leads) {
+      clientConfig.tabela_leads = 'semia_contatos';
+    }
+
+    const isSemIA = clientConfig.tipo_atendimento === 'sem_ia';
     const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome;
 
     // ── 1. Mensagens ──────────────────────────────────────────────────────────
@@ -49,7 +53,7 @@ export async function GET(request: Request) {
       let cloudMsgs: any[] = [];
       try {
         const { getWacloudMensagens } = await import('@/lib/nocodb/wacloud');
-        cloudMsgs = await getWacloudMensagens("", nomeInstancia, 10000);
+        cloudMsgs = await getWacloudMensagens("", nomeInstancia, 10000, "semia_mensagens");
       } catch (nocoErr) {
         console.warn("Aviso ao buscar mensagens no NocoDB em analytics:", nocoErr);
       }
@@ -174,7 +178,13 @@ export async function GET(request: Request) {
     let simulacoesPreAprovadas = 0
     let perdas = 0
 
-    if (isSemIA) {
+    if (clientConfig.tabela_leads) {
+      if (isNocoDB) {
+        allLeads = await getNocoDBLeads(clientConfig.tabela_leads, { from, to, nomeInstancia });
+      } else {
+        allLeads = await getClientLeads(supabaseAdmin, clientConfig.tabela_leads, { from, to });
+      }
+    } else if (isSemIA) {
       let dbLeads: any[] = [];
       try {
         const { getWacloudContatos } = await import('@/lib/nocodb/wacloud');
@@ -201,18 +211,56 @@ export async function GET(request: Request) {
         }
       }
 
-      allLeads = dbLeads.filter(c => 
-        c.is_group !== true && 
-        !c.wa_chatid?.includes('@g.us') && 
-        !c.telefone_contato?.includes('@g.us') && 
-        !c.telefone?.includes('@g.us')
-      );
-    } else if (clientConfig.tabela_leads) {
-      if (isNocoDB) {
-        allLeads = await getNocoDBLeads(clientConfig.tabela_leads, { from, to });
-      } else {
-        allLeads = await getClientLeads(supabaseAdmin, clientConfig.tabela_leads, { from, to });
+      // 1. Filtra grupos e aplica filtro de período se fornecido (from e to)
+      const filteredLeads = dbLeads.filter(c => {
+        if (
+          c.is_group === true || 
+          c.wa_chatid?.includes('@g.us') || 
+          c.telefone_contato?.includes('@g.us') || 
+          c.telefone?.includes('@g.us')
+        ) {
+          return false;
+        }
+
+        if (fromDate || toDate) {
+          // A coluna created_at agora reflete a data real do primeiro contato / mensagem
+          const dStr = c.created_at || c.ultimo_timestamp || c.CreatedAt;
+          if (dStr) {
+            const d = new Date(dStr);
+            if (!isNaN(d.getTime())) {
+              if (fromDate && d < fromDate) return false;
+              if (toDate && d > toDate) return false;
+            }
+          }
+        }
+        return true;
+      });
+
+      // 2. Deduplicação defensiva por telefone limpo para evitar contatos em duplicidade
+      const uniqueLeadsMap = new Map<string, any>();
+      for (const lead of filteredLeads) {
+        const rawPhone = lead.telefone_contato || lead.telefone || lead.phone || lead.wa_chatid || '';
+        const cleanPhone = String(rawPhone).replace(/@.*$/, '').replace(/\D/g, '');
+        if (!cleanPhone) continue;
+
+        if (!uniqueLeadsMap.has(cleanPhone)) {
+          uniqueLeadsMap.set(cleanPhone, lead);
+        } else {
+          const existing = uniqueLeadsMap.get(cleanPhone)!;
+          if (Array.isArray(lead.whatsapp_labels) && lead.whatsapp_labels.length > 0) {
+            const combined = Array.from(new Set([...(existing.whatsapp_labels || []), ...lead.whatsapp_labels]));
+            existing.whatsapp_labels = combined;
+          }
+          if (!existing.lead_visita_confirmada && lead.lead_visita_confirmada) {
+            existing.lead_visita_confirmada = true;
+          }
+          if (!existing.lead_simulacao_aprovada && lead.lead_simulacao_aprovada) {
+            existing.lead_simulacao_aprovada = true;
+          }
+        }
       }
+
+      allLeads = Array.from(uniqueLeadsMap.values());
     }
 
     // Carregar todas as etiquetas da instância para enriquecer leads (com e sem IA)
@@ -390,12 +438,16 @@ export async function GET(request: Request) {
       totalVendas: stage5_cliente,
     };
 
-    // Leads por dia
+    // Leads por dia (utiliza created_at da tabela)
     for (const lead of leadsFiltrados || []) {
-      const day = new Date(lead.created_at).toLocaleDateString('pt-BR', {
+      const dateVal = lead.created_at || lead.ultimo_timestamp || lead.CreatedAt;
+      if (!dateVal) continue;
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) continue;
+      const day = d.toLocaleDateString('pt-BR', {
         timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit'
-      })
-      leadsByDay[day] = (leadsByDay[day] || 0) + 1
+      });
+      leadsByDay[day] = (leadsByDay[day] || 0) + 1;
     }
 
     // Montar séries cronológicas ordenadas

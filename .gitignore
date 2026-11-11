@@ -28,6 +28,10 @@ yarn-error.log*
 # local env files
 .env*.local
 
+# scratch scripts
+/scratch/
+scratch/
+
 # vercel
 .vercel
 

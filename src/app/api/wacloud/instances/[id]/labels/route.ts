@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getWacloudInstanciaByIdOrName, saveWacloudEtiqueta } from '@/lib/nocodb/wacloud';
+import { getWacloudInstanciaByIdOrName, saveWacloudEtiqueta, reconciliarWacloudEtiquetas } from '@/lib/nocodb/wacloud';
 import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
 import { WACLOUD_CONFIG } from '@/lib/wacloud/config';
 import { fetchUazapiLabels } from '@/lib/wacloud/uazapi';
 
 export const dynamic = 'force-dynamic';
 
-// GET: Buscar todas as etiquetas da instância
+// GET: Buscar todas as etiquetas da instância e reconciliar com o banco
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
     let instance = await getWacloudInstanciaByIdOrName(params.id);
@@ -25,6 +25,14 @@ export async function GET(request: Request, { params }: { params: { id: string }
     }
 
     const labels = await fetchUazapiLabels(instance.token);
+
+    // Reconcilia em background no NocoDB para manter o catálogo 100% atualizado
+    if (instance.nome_instancia && Array.isArray(labels)) {
+      reconciliarWacloudEtiquetas(instance.nome_instancia, labels).catch(err => {
+        console.warn("Aviso na reconciliação de etiquetas:", err);
+      });
+    }
+
     return NextResponse.json({ labels });
   } catch (err: any) {
     console.error('Get labels error:', err);

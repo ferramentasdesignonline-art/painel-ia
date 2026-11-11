@@ -50,13 +50,15 @@ export async function GET(request: Request) {
   // 1. Tenta carregar funil e etapas do NocoDB
   let funil: any = null;
   let etapas: any[] = [];
+  const clientId = cliente.id || cliente.Id;
   try {
-    funil = await getNocoDBFunil(cliente.id);
+    funil = await getNocoDBFunil(clientId);
     if (!funil) {
-      funil = await criarFunilPadrao(cliente.id);
+      funil = await criarFunilPadrao(clientId);
     }
-    if (funil?.Id) {
-      etapas = await getNocoDBEtapasFunil(funil.Id);
+    const funilId = funil?.Id || funil?.id;
+    if (funilId) {
+      etapas = await getNocoDBEtapasFunil(funilId);
     }
   } catch (nocoFunilErr) {
     console.warn("Erro ao buscar funil/etapas no NocoDB:", nocoFunilErr);
@@ -67,13 +69,13 @@ export async function GET(request: Request) {
     let { data: sbFunil } = await supabaseAdmin
       .from('sistema-dash-ia_funis')
       .select('id, meta_followup')
-      .eq('cliente_id', cliente.id)
+      .eq('cliente_id', clientId)
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle();
 
     if (!sbFunil) {
-      const criado = await criarFunilPadrao(cliente.id, supabaseAdmin);
+      const criado = await criarFunilPadrao(clientId, supabaseAdmin);
       sbFunil = criado ? { id: criado.id, meta_followup: 5 } : null;
     }
     funil = sbFunil;
@@ -95,7 +97,11 @@ export async function GET(request: Request) {
   const dataInicioStr = searchParams.get('dataInicio');
   const dataFimStr = searchParams.get('dataFim');
 
-  const isSemIA = cliente.tipo_atendimento === 'sem_ia' || !cliente.tabela_leads;
+  if (cliente.tipo_atendimento === 'sem_ia' && !cliente.tabela_leads) {
+    cliente.tabela_leads = 'semia_contatos';
+  }
+
+  const isSemIA = !cliente.tabela_leads && cliente.tipo_atendimento === 'sem_ia';
   let leads: any[] = [];
   let numerosBloqueados = new Set<string>();
 
@@ -209,12 +215,43 @@ export async function GET(request: Request) {
       return null;
     };
 
-    const contatosFiltrados = contatos.filter(c =>
-      c.is_group !== true &&
-      !c.wa_chatid?.includes('@g.us') &&
-      !c.telefone_contato?.includes('@g.us')
-    );
-    leads = contatosFiltrados.map(c => {
+    const contatosFiltrados = contatos.filter(c => {
+      if (
+        c.is_group === true ||
+        c.wa_chatid?.includes('@g.us') ||
+        c.telefone_contato?.includes('@g.us')
+      ) return false;
+
+      // Filtro de período se dataInicioStr/dataFimStr ou periodo
+      if (dataInicioStr || dataFimStr) {
+        const dStr = c.created_at || c.ultimo_timestamp || c.CreatedAt;
+        if (dStr) {
+          const d = new Date(dStr);
+          if (!isNaN(d.getTime())) {
+            if (dataInicioStr && d < new Date(dataInicioStr)) return false;
+            if (dataFimStr && d > new Date(dataFimStr)) return false;
+          }
+        }
+      }
+      return true;
+    });
+
+    // Deduplicação defensiva por telefone limpo
+    const mapContatosUnicos = new Map<string, any>();
+    for (const c of contatosFiltrados) {
+      const telLimpo = String(c.telefone_contato || c.wa_chatid || '').replace(/@.*$/, '').replace(/\D/g, '');
+      if (!telLimpo) continue;
+      if (!mapContatosUnicos.has(telLimpo)) {
+        mapContatosUnicos.set(telLimpo, c);
+      } else {
+        const exist = mapContatosUnicos.get(telLimpo)!;
+        if (Array.isArray(c.whatsapp_labels) && c.whatsapp_labels.length > 0) {
+          exist.whatsapp_labels = Array.from(new Set([...(exist.whatsapp_labels || []), ...c.whatsapp_labels]));
+        }
+      }
+    }
+
+    leads = Array.from(mapContatosUnicos.values()).map(c => {
       const telLimpo = String(c.telefone_contato || c.wa_chatid || '').replace(/@.*$/, '').replace(/\D/g, '');
       const stats = getMsgStats(telLimpo);
 
@@ -223,7 +260,7 @@ export async function GET(request: Request) {
         nome: c.nome_contato || 'Cliente',
         telefone: telLimpo,
         phone: telLimpo,
-        created_at: c.created_at,
+        created_at: c.ultimo_timestamp || c.created_at,
         updated_at: c.atualizado_em,
         ultima_mensagem: stats?.ultima_mensagem || c.ultima_mensagem || null,
         ultimo_remetente: stats?.ultimo_remetente || (c.ultimo_remetente ? (c.ultimo_remetente === 'bot' || c.ultimo_remetente === 'vendedor' ? 'vendedor' : 'cliente') : null),
@@ -264,8 +301,9 @@ export async function GET(request: Request) {
         from: dataInicioStr || undefined,
         to: dataFimStr || undefined,
         diasAtras: dataInicioStr ? undefined : diasAtras,
+        nomeInstancia: cliente.nome_instancia || cliente.nome,
       }),
-      getNocoDBBlockedNumbers(cliente.tabela_bloqueios),
+      cliente.tabela_bloqueios ? getNocoDBBlockedNumbers(cliente.tabela_bloqueios) : Promise.resolve(new Set<string>()),
     ]);
     leads = leadsData;
     numerosBloqueados = blockedSet;

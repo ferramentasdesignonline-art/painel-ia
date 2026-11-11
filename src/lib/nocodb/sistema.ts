@@ -203,7 +203,13 @@ export async function createNocoDBCliente(data: any): Promise<any> {
     supabase_service_role_key: data.supabase_service_role_key || null,
     whatsapp_token: data.whatsapp_token || null,
     tipo_atendimento: data.tipo_atendimento || "com_ia",
-    nome_instancia: data.nome_instancia || null,
+    nome_instancia: data.nome_instancia ? data.nome_instancia.trim() : null,
+    whatsapp_instancia: data.whatsapp_instancia ? data.whatsapp_instancia.trim() : (data.nome_instancia ? data.nome_instancia.trim() : null),
+    whatsapp_provider: data.whatsapp_provider || (data.nome_instancia ? 'uazapi' : null),
+    whatsapp_api_url: data.whatsapp_api_url || (data.nome_instancia ? 'https://designonline.uazapi.com' : null),
+    modulo_bancos_habilitado: Boolean(data.modulo_bancos_habilitado),
+    credere_store_id: data.credere_store_id ? String(data.credere_store_id) : null,
+    config_simulacao: data.config_simulacao ? (typeof data.config_simulacao === 'object' ? JSON.stringify(data.config_simulacao) : String(data.config_simulacao)) : null,
   };
 
   if (data.uuid_antigo) {
@@ -243,7 +249,25 @@ export async function updateNocoDBCliente(id: string | number, data: any): Promi
   if (data.supabase_service_role_key !== undefined) payload.supabase_service_role_key = data.supabase_service_role_key;
   if (data.whatsapp_token !== undefined) payload.whatsapp_token = data.whatsapp_token;
   if (data.tipo_atendimento !== undefined) payload.tipo_atendimento = data.tipo_atendimento;
-  if (data.nome_instancia !== undefined) payload.nome_instancia = data.nome_instancia;
+  if (data.nome_instancia !== undefined) {
+    const instName = data.nome_instancia ? String(data.nome_instancia).trim() : null;
+    payload.nome_instancia = instName;
+    if (data.whatsapp_instancia === undefined && instName) {
+      payload.whatsapp_instancia = instName;
+    }
+    if (data.whatsapp_provider === undefined && instName) {
+      payload.whatsapp_provider = 'uazapi';
+    }
+    if (data.whatsapp_api_url === undefined && instName) {
+      payload.whatsapp_api_url = 'https://designonline.uazapi.com';
+    }
+  }
+  if (data.whatsapp_instancia !== undefined) payload.whatsapp_instancia = data.whatsapp_instancia ? String(data.whatsapp_instancia).trim() : null;
+  if (data.whatsapp_provider !== undefined) payload.whatsapp_provider = data.whatsapp_provider || null;
+  if (data.whatsapp_api_url !== undefined) payload.whatsapp_api_url = data.whatsapp_api_url || null;
+  if (data.modulo_bancos_habilitado !== undefined) payload.modulo_bancos_habilitado = Boolean(data.modulo_bancos_habilitado);
+  if (data.credere_store_id !== undefined) payload.credere_store_id = data.credere_store_id ? String(data.credere_store_id) : null;
+  if (data.config_simulacao !== undefined) payload.config_simulacao = data.config_simulacao ? (typeof data.config_simulacao === 'object' ? JSON.stringify(data.config_simulacao) : String(data.config_simulacao)) : null;
 
   await nocoRequest(`/api/v2/tables/${SISTEMA_TABLES.CLIENTES}/records`, {
     method: "PATCH",

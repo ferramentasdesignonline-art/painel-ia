@@ -1,13 +1,40 @@
 "use client"
 
+import { useMemo } from "react"
+import { usePathname } from "next/navigation"
 import { LogOut, Menu } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { logout } from "@/app/(auth)/logout/actions"
+import { GuiaHeaderButton } from "@/components/guia/GuiaTriggerButton"
 
-export function Header({ clientName, clientEmail, tipoAtendimento, hasEstoque }: { clientName?: string, clientEmail?: string, tipoAtendimento?: string, hasEstoque?: boolean }) {
+const ROUTE_NAMES: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/leads": "Leads",
+  "/funil": "Funil de Leads",
+  "/funil/configurar": "Configurar Funil",
+  "/whatsapp-web": "WhatsApp Web",
+  "/whatsapp": "Conexão WhatsApp",
+  "/bancos": "Bancos & Financiamento",
+  "/simulacoes": "Simulações de Financiamento",
+  "/bloqueios": "Bloqueios",
+  "/analise-ia": "Análise com IA",
+  "/estoque": "Estoque de Veículos",
+}
+
+export function Header({ clientName, clientEmail, tipoAtendimento, hasEstoque, hasBancos }: { clientName?: string, clientEmail?: string, tipoAtendimento?: string, hasEstoque?: boolean, hasBancos?: boolean }) {
+  const pathname = usePathname()
+
+  const currentRouteName = useMemo(() => {
+    if (ROUTE_NAMES[pathname]) return ROUTE_NAMES[pathname]
+    for (const [route, name] of Object.entries(ROUTE_NAMES)) {
+      if (route !== "/dashboard" && pathname.startsWith(route)) return name
+    }
+    return "Dashboard"
+  }, [pathname])
+
   return (
     <header className="sticky top-0 z-40 flex h-20 shrink-0 items-center gap-x-4 border-b border-gray-100 bg-white/80 backdrop-blur-md px-4 sm:gap-x-6 sm:px-6 lg:px-8">
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
@@ -17,18 +44,21 @@ export function Header({ clientName, clientEmail, tipoAtendimento, hasEstoque }:
               <Menu className="h-6 w-6" />
             </SheetTrigger>
             <SheetContent side="left" className="p-0 w-72 border-none">
-              <Sidebar className="flex w-full" tipoAtendimento={tipoAtendimento} hasEstoque={hasEstoque} />
+              <Sidebar className="flex w-full" tipoAtendimento={tipoAtendimento} hasEstoque={hasEstoque} hasBancos={hasBancos} />
             </SheetContent>
           </Sheet>
           
           <div className="hidden sm:flex items-center gap-2 text-sm font-medium text-gray-500">
             <span>Portal</span>
             <span className="text-gray-300">/</span>
-            <span className="text-gray-900">Dashboard</span>
+            <span className="text-gray-900 font-semibold">{currentRouteName}</span>
           </div>
         </div>
         
-        <div className="flex items-center gap-x-4 lg:gap-x-5">
+        <div className="flex items-center gap-x-3 sm:gap-x-4 lg:gap-x-5">
+          {/* Botão Contextual de Guia desta Tela */}
+          <GuiaHeaderButton />
+
           {/* Dealer Name (Not Clickable) */}
           <div className="hidden md:flex flex-col items-end mr-1">
             <span className="text-sm font-semibold text-gray-900">{clientName || "Concessionária"}</span>

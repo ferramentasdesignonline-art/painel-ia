@@ -77,7 +77,20 @@ export default async function WhatsAppWebPage({ searchParams }: { searchParams?:
     return false
   })
 
-  if (!instance) {
+  // 3. Fallback inteligente: se não achou na lista mas o cliente tem nome_instancia, sincroniza direto da Uazapi
+  let finalInstance = instance
+  if (!finalInstance && (clientConfig.nome_instancia || clientConfig.whatsapp_instancia)) {
+    try {
+      const { syncOrLinkUazapiInstance } = await import('@/lib/wacloud/uazapi')
+      const targetInstName = clientConfig.nome_instancia || clientConfig.whatsapp_instancia
+      const synced = await syncOrLinkUazapiInstance(targetInstName, clientConfig.id)
+      if (synced?.token) {
+        finalInstance = synced
+      }
+    } catch (_) {}
+  }
+
+  if (!finalInstance) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4 text-center max-w-lg mx-auto bg-white rounded-2xl border border-gray-100 shadow-sm mt-6">
         <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 mb-4">
@@ -103,7 +116,7 @@ export default async function WhatsAppWebPage({ searchParams }: { searchParams?:
       </div>
 
       <div className="flex-1 min-h-0 bg-white rounded-2xl border border-gray-200/90 shadow-sm p-3 sm:p-4 overflow-hidden flex flex-col">
-        <ChatInstancia instancia={instance} initialPhone={searchParams?.tel} initialText={searchParams?.msg} initialName={searchParams?.nome} />
+        <ChatInstancia instancia={finalInstance} initialPhone={searchParams?.tel} initialText={searchParams?.msg} initialName={searchParams?.nome} />
       </div>
     </div>
   )

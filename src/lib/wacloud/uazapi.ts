@@ -2,6 +2,96 @@ import { WACLOUD_CONFIG } from './config';
 import { getWacloudSupabaseAdmin } from './supabase';
 
 /**
+ * Busca todas as instâncias existentes diretamente na Uazapi via admintoken
+ */
+export async function fetchAllUazapiInstances(): Promise<any[]> {
+  try {
+    const res = await fetch(`${WACLOUD_CONFIG.uazapiBaseUrl}/instance/all`, {
+      method: 'GET',
+      headers: {
+        admintoken: WACLOUD_CONFIG.uazapiAdminToken,
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      console.warn('Erro ao buscar instâncias da Uazapi:', res.status);
+      return [];
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.error('Erro em fetchAllUazapiInstances:', err);
+    return [];
+  }
+}
+
+/**
+ * Garante que uma instância da Uazapi seja vinculada ao cliente no NocoDB,
+ * pegando o token REAL da Uazapi SEM duplicar instância e SEM mexer no webhook!
+ */
+export async function syncOrLinkUazapiInstance(nomeInstancia: string, clienteId?: string | number | null) {
+  if (!nomeInstancia) return null;
+  const cleanName = nomeInstancia.trim();
+
+  const { 
+    getWacloudInstanciaByIdOrName, 
+    updateWacloudInstancia, 
+    createWacloudInstancia 
+  } = await import('@/lib/nocodb/wacloud');
+
+  // 1. Verifica se já está salva no NocoDB
+  let localInst = await getWacloudInstanciaByIdOrName(cleanName);
+
+  // 2. Busca lista na Uazapi para pegar dados atualizados e token real
+  const allUaz = await fetchAllUazapiInstances();
+  const foundUaz = allUaz.find((u: any) => 
+    u.name?.toLowerCase() === cleanName.toLowerCase() ||
+    u.id?.toLowerCase() === cleanName.toLowerCase()
+  );
+
+  const realToken = foundUaz?.token || localInst?.token;
+  const statusConexao = foundUaz?.status || localInst?.status || 'desconectado';
+
+  if (localInst?.Id || localInst?.id) {
+    const targetId = localInst.Id || localInst.id;
+    await updateWacloudInstancia(targetId, {
+      cliente_id: clienteId ? String(clienteId) : localInst.cliente_id,
+      token: realToken || localInst.token,
+      status: statusConexao,
+      ativo: true,
+    });
+    return { ...localInst, token: realToken, status: statusConexao };
+  }
+
+  // Se não estava no NocoDB, mas existe na Uazapi: SALVA no NocoDB com o token REAL da Uazapi
+  if (foundUaz?.token) {
+    const created = await createWacloudInstancia({
+      nome_instancia: foundUaz.name || cleanName,
+      status: statusConexao,
+      token: foundUaz.token,
+      cliente_id: clienteId ? String(clienteId) : null,
+      ativo: true,
+    });
+    return created;
+  }
+
+  // 3. Se não foi encontrada na lista da Uazapi, NÃO chama a criação no Uazapi para não duplicar instâncias
+  if (cleanName) {
+    const created = await createWacloudInstancia({
+      nome_instancia: cleanName,
+      status: statusConexao,
+      token: realToken || '',
+      cliente_id: clienteId ? String(clienteId) : null,
+      ativo: true,
+    });
+    return created;
+  }
+
+  return null;
+}
+
+/**
  * Cria a instância na Uazapi, configura o webhook e salva em wacloud_instancias.
  * Se clienteId for informado, a instância fica vinculada ao cliente do SaaS.
  */

@@ -7,6 +7,7 @@ import {
   Clock, ShieldAlert, CheckCircle2, Copy, Check, Lightbulb, Quote, User, ChevronRight,
 } from "lucide-react"
 import { LeadDrawer, LeadType } from "@/components/leads/LeadDrawer"
+import { AuditoriaExportBar } from "@/components/analise-ia/AuditoriaExportBar"
 
 function toLeadType(lead: any, fallback: any): LeadType {
   const l = lead || {}
@@ -168,6 +169,9 @@ export default function AnaliseIaPage() {
           Estamos auditando todas as conversas da loja com IA. O processamento rápido leva cerca de 30 a 45 segundos. Não feche a página.
         </div>
       )}
+
+      {/* Barra de Auditoria de Conversas & Exportação (7d, 15d, 30d, Custom) */}
+      <AuditoriaExportBar onOpenLead={(lead) => setSelectedLead(lead)} />
 
       {loading ? (
         <div className="flex flex-col items-center justify-center min-h-[300px] bg-white rounded-2xl border border-gray-100 p-8">

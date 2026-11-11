@@ -124,22 +124,8 @@ export async function GET(request: Request) {
       // ── 3. Carregar Leads do Período ──
       if (isSemIA) {
         try {
-          const { getWacloudContatos } = await import('@/lib/nocodb/wacloud')
           const instName = client.whatsapp_instancia || client.nome_instancia || client.nome
-          const contatos = await getWacloudContatos({ nomeInstancia: instName, limit: 10000 })
-          
-          const fromDate = from ? new Date(from) : null
-          const toDate = to ? new Date(to) : null
-
-          leads = contatos.filter((c: any) => {
-            if (c.is_group === true || c.wa_chatid?.includes('@g.us') || c.telefone_contato?.includes('@g.us')) return false
-            const dStr = c.created_at || c.CreatedAt || c.atualizado_em || c.ultimo_timestamp
-            const dt = dStr ? new Date(dStr) : null
-            if (!dt || isNaN(dt.getTime())) return true
-            if (fromDate && dt < fromDate) return false
-            if (toDate && dt > toDate) return false
-            return true
-          })
+          leads = await getNocoDBLeads('semia_contatos', { from, to, nomeInstancia: instName })
         } catch (errSemIA) {
           error = errSemIA
         }

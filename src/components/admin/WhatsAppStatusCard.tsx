@@ -120,9 +120,9 @@ export function WhatsAppStatusCard({ clientId, clientName, clientSlug, active, r
       </div>
       
       {!loading && !error && status && (
-        <div className="mt-3 bg-gray-50 rounded-lg p-2 text-[10px] text-gray-500 font-mono break-all line-clamp-1" title={status?.instance?.instanceName || '-'}>
+        <div className="mt-3 bg-gray-50 rounded-lg p-2 text-[10px] text-gray-500 font-mono break-all line-clamp-1" title={status?.instance?.name || status?.instance?.instanceName || '-'}>
           <Smartphone className="w-3 h-3 inline mr-1" />
-          {status?.instance?.instanceName || 'Instância desconhecida'}
+          {status?.instance?.name || status?.instance?.instanceName || 'Instância ativa'}
         </div>
       )}
     </div>

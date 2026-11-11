@@ -20,10 +20,23 @@ export async function POST(request: Request) {
       supabase_service_role_key,
       whatsapp_token,
       tipo_atendimento = 'com_ia',
-      nome_instancia
+      nome_instancia,
+      modulo_bancos_habilitado = false,
+      credere_store_id,
+      config_simulacao,
     } = body
 
     const isSemIA = tipo_atendimento === 'sem_ia'
+
+    let finalConfigJson: string | null = null;
+    if (config_simulacao) {
+      if (typeof config_simulacao === 'string' && config_simulacao.includes('"simulation"')) {
+        finalConfigJson = config_simulacao;
+      } else {
+        const { generateN8nSimulationJson } = await import('@/lib/credere/simulation-template');
+        finalConfigJson = generateN8nSimulationJson(config_simulacao);
+      }
+    }
 
     // 1. Criar no NocoDB (Sistema Dash IA)
     let nocoClient: any = null
@@ -34,7 +47,7 @@ export async function POST(request: Request) {
         email,
         senha: password,
         active: true,
-        tabela_leads: isSemIA ? null : tabela_leads,
+        tabela_leads: isSemIA ? 'semia_contatos' : tabela_leads,
         tabela_bloqueios: isSemIA ? null : tabela_bloqueios,
         tabela_memoria: isSemIA ? null : tabela_memoria,
         tabela_estoque: tabela_estoque || null,
@@ -44,6 +57,12 @@ export async function POST(request: Request) {
         whatsapp_token: whatsapp_token || null,
         tipo_atendimento: isSemIA ? 'sem_ia' : 'com_ia',
         nome_instancia: nome_instancia || null,
+        whatsapp_instancia: body.whatsapp_instancia || (nome_instancia ? String(nome_instancia).trim() : null),
+        whatsapp_provider: body.whatsapp_provider || (nome_instancia ? 'uazapi' : null),
+        whatsapp_api_url: body.whatsapp_api_url || (nome_instancia ? 'https://designonline.uazapi.com' : null),
+        modulo_bancos_habilitado: Boolean(modulo_bancos_habilitado),
+        credere_store_id: credere_store_id ? String(credere_store_id) : null,
+        config_simulacao: finalConfigJson,
       })
 
       if (nocoClient?.Id) {
@@ -84,7 +103,7 @@ export async function POST(request: Request) {
               nome,
               slug,
               email,
-              tabela_leads: isSemIA ? null : tabela_leads,
+              tabela_leads: isSemIA ? 'semia_contatos' : tabela_leads,
               tabela_bloqueios: isSemIA ? null : tabela_bloqueios,
               tabela_memoria: isSemIA ? null : tabela_memoria,
               tabela_estoque: tabela_estoque || null,
@@ -116,18 +135,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Falha ao criar cliente no sistema" }, { status: 400 })
     }
 
-    // 4. Se houver nome_instancia, vincular ou criar na tabela wacloud_instancias / Uazapi
+    // 4. Se houver nome_instancia, vincular com o token real da Uazapi (SEM duplicar na Uazapi)
     const clientIdRef = nocoClient?.Id || dbData?.id
     if (nome_instancia && clientIdRef) {
       try {
-        const { getWacloudInstanciaByIdOrName, updateWacloudInstancia } = await import('@/lib/nocodb/wacloud')
-        const nocoInst = await getWacloudInstanciaByIdOrName(nome_instancia)
-        if (nocoInst?.id) {
-          await updateWacloudInstancia(nocoInst.id, { cliente_id: clientIdRef, ativo: true })
-        } else {
-          const { createWacloudInstance } = await import('@/lib/wacloud/uazapi')
-          await createWacloudInstance(nome_instancia, clientIdRef)
-        }
+        const { syncOrLinkUazapiInstance } = await import('@/lib/wacloud/uazapi')
+        await syncOrLinkUazapiInstance(nome_instancia, clientIdRef)
 
         // Supabase sync fallback
         try {
@@ -147,7 +160,7 @@ export async function POST(request: Request) {
           }
         } catch (_) {}
       } catch (linkErr) {
-        console.warn("Aviso ao vincular/criar wacloud_instancias:", linkErr)
+        console.warn("Aviso ao vincular wacloud_instancias:", linkErr)
       }
     }
 

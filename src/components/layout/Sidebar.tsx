@@ -2,9 +2,10 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Sparkles, LayoutDashboard, Users, Calendar, Car, ShieldBan, LogOut, Trophy, MessageCircle, MessageSquare } from "lucide-react"
+import { Sparkles, LayoutDashboard, Users, Calendar, Car, ShieldBan, LogOut, Trophy, MessageCircle, MessageSquare, Landmark, Calculator } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { logout } from "@/app/(auth)/logout/actions"
+import { GuiaSidebarButton } from "@/components/guia/GuiaTriggerButton"
 
 const navigation = [
   { name: "Análise com IA", href: "/analise-ia", icon: Sparkles, badge: "Novo" },
@@ -13,11 +14,13 @@ const navigation = [
   { name: "Funil de Leads", href: "/funil", icon: Trophy },
   { name: "Estoque", href: "/estoque", icon: Car },
   { name: "WhatsApp Web", href: "/whatsapp-web", icon: MessageSquare },
+  { name: "Bancos", href: "/bancos", icon: Landmark },
+  { name: "Simulações", href: "/simulacoes", icon: Calculator },
   { name: "Bloqueios", href: "/bloqueios", icon: ShieldBan },
   { name: "Conexão WhatsApp", href: "/whatsapp", icon: MessageCircle },
 ]
 
-export function Sidebar({ className, tipoAtendimento, hasEstoque }: { className?: string; tipoAtendimento?: string; hasEstoque?: boolean }) {
+export function Sidebar({ className, tipoAtendimento, hasEstoque, hasBancos }: { className?: string; tipoAtendimento?: string; hasEstoque?: boolean; hasBancos?: boolean }) {
   const pathname = usePathname()
 
   const navItems = navigation.filter(item => {
@@ -25,6 +28,9 @@ export function Sidebar({ className, tipoAtendimento, hasEstoque }: { className?
       return false
     }
     if (item.href === '/estoque' && !hasEstoque) {
+      return false
+    }
+    if ((item.href === '/bancos' || item.href === '/simulacoes') && !hasBancos) {
       return false
     }
     return true
@@ -75,7 +81,11 @@ export function Sidebar({ className, tipoAtendimento, hasEstoque }: { className?
         </nav>
       </div>
 
-      <div className="px-4 py-8 border-t border-[#1e1e20]">
+      <div className="px-4 pt-2 pb-4">
+        <GuiaSidebarButton />
+      </div>
+
+      <div className="px-4 py-6 border-t border-[#1e1e20]">
         <button
           onClick={() => logout()}
           className="w-full group flex items-center px-4 py-3 text-sm font-medium rounded-xl text-red-500/80 hover:bg-red-500/10 hover:text-red-500 transition-all duration-200"

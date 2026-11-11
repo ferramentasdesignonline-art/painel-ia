@@ -81,6 +81,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
     return NextResponse.json({
       success: true,
       labels,
+      whatsapp_labels: labels,
+      chat: data,
       data,
     });
   } catch (err: any) {

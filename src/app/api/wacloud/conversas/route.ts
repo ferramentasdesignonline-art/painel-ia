@@ -1,140 +1,198 @@
 import { NextResponse } from 'next/server';
-import { getWacloudInstanciaByIdOrName, getWacloudContatos, getWacloudMensagens } from '@/lib/nocodb/wacloud';
-import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
+import { 
+  getWacloudInstanciaByIdOrName, 
+  getWacloudContatos, 
+  upsertWacloudContato,
+  batchUpsertWacloudContatos,
+  getWacloudEtiquetas
+} from '@/lib/nocodb/wacloud';
 import { fetchUazapiChats, fetchUazapiLabels } from '@/lib/wacloud/uazapi';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 export const revalidate = 0;
 
-// GET /api/wacloud/conversas - lista contatos sob demanda via UAZAPI (ou fallback no banco)
+// Trava em memória para evitar que requisições concorrentes disparem sync duplicado na mesma instância
+const syncInProgress = new Set<string>();
+
+function deduplicateContatos(list: any[]): any[] {
+  const map = new Map<string, any>();
+  for (const item of list) {
+    if (!item?.telefone_contato) continue;
+    const cleanPhone = String(item.telefone_contato).replace(/\D/g, '');
+    const existing = map.get(cleanPhone);
+    if (!existing) {
+      map.set(cleanPhone, { ...item, telefone_contato: cleanPhone });
+    } else {
+      const existingTs = new Date(existing.ultimo_timestamp || 0).getTime();
+      const currentTs = new Date(item.ultimo_timestamp || 0).getTime();
+      if (currentTs >= existingTs) {
+        map.set(cleanPhone, {
+          ...item,
+          telefone_contato: cleanPhone,
+          nome_contato: item.nome_contato || existing.nome_contato,
+          whatsapp_labels: (Array.isArray(item.whatsapp_labels) && item.whatsapp_labels.length > 0) 
+            ? item.whatsapp_labels 
+            : (existing.whatsapp_labels || []),
+        });
+      }
+    }
+  }
+  const result = Array.from(map.values());
+  result.sort((a, b) => new Date(b.ultimo_timestamp || 0).getTime() - new Date(a.ultimo_timestamp || 0).getTime());
+  return result;
+}
+
+// GET /api/wacloud/conversas - lista contatos com Cache-First no NocoDB e sincronização contínua
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const instancia = searchParams.get('instancia');
   const offset = Number(searchParams.get('offset')) || 0;
   const limit = Number(searchParams.get('limit')) || 60;
+  const sync = searchParams.get('sync') === 'true';
 
   try {
-    // 1. Se tem instância informada, busca direto na UAZAPI sob demanda
+    let instData: any = null;
+    let labels: any[] = [];
+
     if (instancia) {
-      let instData = await getWacloudInstanciaByIdOrName(instancia);
-      if (!instData?.token) {
-        const supabase = getWacloudSupabaseAdmin();
-        const { data: sbInst } = await supabase
-          .from('wacloud_instancias')
-          .select('id, token, nome_instancia, cliente_id')
-          .eq('nome_instancia', instancia)
-          .single();
-        instData = sbInst;
-      }
-
-      if (instData?.token) {
-        try {
-          const [chatResult, labels] = await Promise.all([
-            fetchUazapiChats(instData.token, offset, limit),
-            fetchUazapiLabels(instData.token).catch(() => []),
-          ]);
-
-          const rawChats = chatResult.chats || [];
-          const contatos = rawChats
-            .filter((c: any) => c?.wa_chatid && !c?.wa_isGroup)
-            .map((c: any) => {
-              const cleanPhone = String(c.wa_chatid).split('@')[0].replace(/\D/g, '');
-              const ts = c.wa_lastMsgTimestamp ? new Date(Number(c.wa_lastMsgTimestamp)).toISOString() : new Date().toISOString();
-              return {
-                telefone_contato: cleanPhone,
-                nome_contato: c.wa_contactName || c.lead_fullName || c.lead_name || c.name || c.wa_name || cleanPhone,
-                nome_instancia: instancia,
-                ultima_mensagem: c.wa_lastMessageTextVote || null,
-                ultimo_tipo: c.wa_lastMessageType || 'text',
-                ultimo_timestamp: ts,
-                imagem_preview: c.imagePreview || null,
-                nao_lidas: c.wa_unreadCount || 0,
-                whatsapp_labels: Array.isArray(c.wa_label) ? c.wa_label : [],
-              };
-            });
-
-          return NextResponse.json({
-            contatos,
-            total: chatResult.pagination?.totalRecords || contatos.length,
-            hasMore: chatResult.hasMore ?? false,
-            source: 'uazapi_live',
-            labels: labels || [],
-          });
-        } catch (uazErr) {
-          console.warn('Erro ao buscar contatos direto da UAZAPI, usando fallback do banco:', uazErr);
+      try {
+        instData = await getWacloudInstanciaByIdOrName(instancia);
+        if (instData?.token) {
+          labels = await fetchUazapiLabels(instData.token).catch(() => []);
         }
+      } catch (instErr) {
+        console.warn("Aviso ao buscar dados da instância/labels:", instErr);
       }
     }
 
-    // 2. Fallback caso a Uazapi falhe ou não tenha token: NocoDB
-    const contatosMap = new Map<string, any>();
-
+    // 1. Busca contatos salvos no NocoDB
+    let nocoContatos: any[] = [];
     try {
-      const nocoContatos = await getWacloudContatos({
+      nocoContatos = await getWacloudContatos({
         nomeInstancia: instancia || undefined,
         limit: 1000,
       });
-
-      for (const c of nocoContatos) {
-        const key = `${c.nome_instancia}:${c.telefone_contato}`;
-        contatosMap.set(key, {
-          telefone_contato: c.telefone_contato,
-          nome_contato: c.nome_contato,
-          nome_instancia: c.nome_instancia,
-          ultima_mensagem: c.ultima_mensagem || null,
-          ultimo_tipo: c.ultimo_tipo || 'text',
-          ultimo_timestamp: c.ultimo_timestamp || c.created_at,
-          imagem_preview: c.imagem_preview || null,
-          nao_lidas: c.nao_lidas || 0,
-          whatsapp_labels: Array.isArray(c.whatsapp_labels) ? c.whatsapp_labels : [],
-        });
-      }
     } catch (nocoErr) {
-      console.warn("Aviso fallback NocoDB conversas:", nocoErr);
+      console.warn("Aviso ao buscar contatos no NocoDB:", nocoErr);
     }
 
-    // Se NocoDB ainda não tiver registros (ou vazio), consulta Supabase
-    if (contatosMap.size === 0) {
-      const supabase = getWacloudSupabaseAdmin();
-      const { data: importados } = instancia
-        ? await supabase
-            .from('wacloud_contatos')
-            .select('telefone_contato, nome_contato, nome_instancia, ultima_mensagem, ultimo_tipo, ultimo_timestamp, imagem_preview, nao_lidas, is_group, created_at, whatsapp_labels')
-            .eq('nome_instancia', instancia)
-            .eq('is_group', false)
-            .order('ultimo_timestamp', { ascending: false, nullsFirst: false })
-            .limit(5000)
-        : await supabase
-            .from('wacloud_contatos')
-            .select('telefone_contato, nome_contato, nome_instancia, ultima_mensagem, ultimo_tipo, ultimo_timestamp, imagem_preview, nao_lidas, is_group, created_at, whatsapp_labels')
-            .eq('is_group', false)
-            .order('ultimo_timestamp', { ascending: false, nullsFirst: false })
-            .limit(5000);
+    const uniqueNocoContatos = deduplicateContatos(nocoContatos);
 
-      for (const c of importados || []) {
-        const key = `${c.nome_instancia}:${c.telefone_contato}`;
-        contatosMap.set(key, {
-          telefone_contato: c.telefone_contato,
-          nome_contato: c.nome_contato,
-          nome_instancia: c.nome_instancia,
-          ultima_mensagem: c.ultima_mensagem || null,
-          ultimo_tipo: c.ultimo_tipo || 'text',
-          ultimo_timestamp: c.ultimo_timestamp || c.created_at,
-          imagem_preview: c.imagem_preview || null,
-          nao_lidas: c.nao_lidas || 0,
-          whatsapp_labels: Array.isArray(c.whatsapp_labels) ? c.whatsapp_labels : [],
+    // Se temos contatos no NocoDB e não é sync forçado, retorna IMEDIATAMENTE (super ágil!)
+    if (uniqueNocoContatos && uniqueNocoContatos.length > 0 && !sync && offset === 0) {
+      // Dispara sincronização em segundo plano na Uazapi (se não houver sync em andamento)
+      if (instData?.token && instancia && !syncInProgress.has(instancia)) {
+        syncInProgress.add(instancia);
+        (async () => {
+          try {
+            const chatResult = await fetchUazapiChats(instData.token, 0, 40);
+            const rawChats = chatResult.chats || [];
+            const toUpsert = rawChats
+              .filter((c: any) => c?.wa_chatid && !c?.wa_isGroup)
+              .map((c: any) => {
+                const cleanPhone = String(c.wa_chatid).split('@')[0].replace(/\D/g, '');
+                const ts = c.wa_lastMsgTimestamp ? new Date(Number(c.wa_lastMsgTimestamp)).toISOString() : new Date().toISOString();
+                return {
+                  telefone_contato: cleanPhone,
+                  nome_contato: c.wa_contactName || c.lead_fullName || c.lead_name || c.name || c.wa_name || cleanPhone,
+                  nome_instancia: instancia,
+                  ultima_mensagem: c.wa_lastMessageTextVote || null,
+                  ultimo_tipo: c.wa_lastMessageType || 'text',
+                  ultimo_timestamp: ts,
+                  imagem_preview: c.imagePreview || null,
+                  nao_lidas: c.wa_unreadCount || 0,
+                  whatsapp_labels: Array.isArray(c.wa_label) ? c.wa_label : [],
+                };
+              });
+
+            await batchUpsertWacloudContatos(instancia, toUpsert);
+          } catch (bgErr) {
+            console.warn("Aviso na sincronização background de contatos:", bgErr);
+          } finally {
+            syncInProgress.delete(instancia);
+          }
+        })();
+      }
+
+      return NextResponse.json({
+        contatos: uniqueNocoContatos,
+        total: uniqueNocoContatos.length,
+        hasMore: true,
+        source: 'nocodb_fast',
+        labels: labels || [],
+      });
+    }
+
+    // 2. Se o NocoDB está vazio OU sync=true OU offset > 0, consulta Uazapi e salva em lote no NocoDB
+    if (instData?.token && instancia) {
+      // Evita concorrência se já houver sync em curso
+      if (syncInProgress.has(instancia)) {
+        return NextResponse.json({
+          contatos: uniqueNocoContatos,
+          total: uniqueNocoContatos.length,
+          hasMore: true,
+          source: 'nocodb_waiting_sync',
+          labels: labels || [],
         });
+      }
+
+      syncInProgress.add(instancia);
+      try {
+        const [chatResult, uazLabels] = await Promise.all([
+          fetchUazapiChats(instData.token, offset, limit),
+          labels.length > 0 ? labels : fetchUazapiLabels(instData.token).catch(() => []),
+        ]);
+
+        const rawChats = chatResult.chats || [];
+        const contatosFormatados = rawChats
+          .filter((c: any) => c?.wa_chatid && !c?.wa_isGroup)
+          .map((c: any) => {
+            const cleanPhone = String(c.wa_chatid).split('@')[0].replace(/\D/g, '');
+            const ts = c.wa_lastMsgTimestamp ? new Date(Number(c.wa_lastMsgTimestamp)).toISOString() : new Date().toISOString();
+            return {
+              telefone_contato: cleanPhone,
+              nome_contato: c.wa_contactName || c.lead_fullName || c.lead_name || c.name || c.wa_name || cleanPhone,
+              nome_instancia: instancia,
+              ultima_mensagem: c.wa_lastMessageTextVote || null,
+              ultimo_tipo: c.wa_lastMessageType || 'text',
+              ultimo_timestamp: ts,
+              imagem_preview: c.imagePreview || null,
+              nao_lidas: c.wa_unreadCount || 0,
+              whatsapp_labels: Array.isArray(c.wa_label) ? c.wa_label : [],
+            };
+          });
+
+        const uniqueFormatados = deduplicateContatos(contatosFormatados);
+
+        // Salva com proteção contra duplicatas e atomicidade
+        await batchUpsertWacloudContatos(instancia, uniqueFormatados);
+
+        const totalRecords = chatResult.pagination?.totalRecords || 0;
+        const hasMore = chatResult.hasMore !== undefined
+          ? Boolean(chatResult.hasMore)
+          : (totalRecords > 0 ? (offset + limit < totalRecords) : rawChats.length >= limit);
+
+        return NextResponse.json({
+          contatos: uniqueFormatados,
+          total: totalRecords || uniqueFormatados.length,
+          hasMore,
+          source: 'uazapi_synced',
+          labels: uazLabels || [],
+        });
+      } catch (uazErr) {
+        console.warn('Erro ao buscar contatos na Uazapi:', uazErr);
+      } finally {
+        syncInProgress.delete(instancia);
       }
     }
 
-    const contatos = Array.from(contatosMap.values()).sort((a, b) => {
-      const dateA = a.ultimo_timestamp ? new Date(a.ultimo_timestamp).getTime() : 0;
-      const dateB = b.ultimo_timestamp ? new Date(b.ultimo_timestamp).getTime() : 0;
-      return dateB - dateA;
+    return NextResponse.json({ 
+      contatos: uniqueNocoContatos, 
+      total: uniqueNocoContatos.length, 
+      source: 'nocodb',
+      labels: labels || [],
     });
-
-    return NextResponse.json({ contatos, total: contatos.length, source: 'db' });
   } catch (error) {
     console.error('API conversas GET error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

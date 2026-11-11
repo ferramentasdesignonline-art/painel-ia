@@ -97,6 +97,12 @@ export async function getClientWhatsappLabelsData(clientConfig: any): Promise<{
           mapaUazapiLabels.set(cleanKey, item);
           mapaUazapiLabels.set(rawKey, item);
         }
+        // Reconcilia etiquetas no NocoDB se estiver na janela de sync
+        if (nomeInstancia && Array.isArray(labelsList) && labelsList.length > 0) {
+          import('@/lib/nocodb/wacloud').then(({ reconciliarWacloudEtiquetas }) => {
+            reconciliarWacloudEtiquetas(nomeInstancia, labelsList).catch(() => {});
+          }).catch(() => {});
+        }
       } catch (uazErr) {
         console.warn('Erro ao carregar etiquetas da UAZAPI:', uazErr);
       }

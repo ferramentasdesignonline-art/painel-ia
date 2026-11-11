@@ -6,6 +6,34 @@ import { getActiveClientConfig } from "@/lib/auth/helpers"
 import { getClientBloqueios } from "@/lib/supabase/queries"
 import { isNocoDBClient, getClientBloqueiosNocoDB, addNocoDBBloqueio, removeNocoDBBloqueio } from "@/lib/nocodb/service"
 
+function extrairTelefoneLimpo(numeroStr?: string | null): string {
+  if (!numeroStr) return ''
+  let clean = String(numeroStr).replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '')
+  if (clean.startsWith('55') && clean.length >= 12) clean = clean.slice(2)
+  return clean
+}
+
+function deduplicarBloqueios(lista: any[]): any[] {
+  const vistos = new Set<string>()
+  const unicos: any[] = []
+
+  for (const b of lista) {
+    if (b.bloqueio_existe === false) continue
+    const limpo = extrairTelefoneLimpo(b.numero_cliente)
+    if (!limpo) {
+      unicos.push(b)
+      continue
+    }
+    const key = limpo.slice(-8)
+    if (!vistos.has(key)) {
+      vistos.add(key)
+      unicos.push(b)
+    }
+  }
+
+  return unicos
+}
+
 export async function GET(request: Request) {
   try {
     const cookieStore = cookies()
@@ -33,7 +61,7 @@ export async function GET(request: Request) {
 
     if (isNocoDBClient(clientConfig)) {
       const bloqueios = await getClientBloqueiosNocoDB(clientConfig.tabela_bloqueios)
-      return NextResponse.json({ data: bloqueios }, { status: 200 })
+      return NextResponse.json({ data: deduplicarBloqueios(bloqueios) }, { status: 200 })
     }
 
     const supabaseAdmin = createClient(clientConfig.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL!, clientConfig.supabase_service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -42,7 +70,7 @@ export async function GET(request: Request) {
 
     const bloqueios = await getClientBloqueios(supabaseAdmin, clientConfig.tabela_bloqueios)
 
-    return NextResponse.json({ data: bloqueios }, { status: 200 })
+    return NextResponse.json({ data: deduplicarBloqueios(bloqueios) }, { status: 200 })
   } catch (error) {
     console.error("Bloqueios API Error:", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
@@ -175,11 +203,24 @@ export async function DELETE(request: Request) {
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    // Tenta excluir pelo numero_cliente exato
-    const { error } = await supabaseAdmin
-      .from(clientConfig.tabela_bloqueios)
-      .delete()
-      .eq('numero_cliente', numero_cliente)
+    const limpo = extrairTelefoneLimpo(numero_cliente)
+    const tail8 = limpo ? limpo.slice(-8) : ''
+
+    // Exclui todas as ocorrências do número (evita duplicatas órfãs continuarem bloqueando)
+    let error: any = null
+    if (tail8) {
+      const res = await supabaseAdmin
+        .from(clientConfig.tabela_bloqueios)
+        .delete()
+        .or(`numero_cliente.ilike.%${limpo}%,numero_cliente.ilike.%${tail8}%`)
+      error = res.error
+    } else {
+      const res = await supabaseAdmin
+        .from(clientConfig.tabela_bloqueios)
+        .delete()
+        .eq('numero_cliente', numero_cliente)
+      error = res.error
+    }
 
     if (error) {
       console.error("Erro ao excluir bloqueio:", error)

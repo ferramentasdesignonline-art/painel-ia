@@ -12,6 +12,7 @@ import { Users, Bot, MessageSquare, Trophy, RefreshCw, Calendar, TrendingUp, Shi
 import { LeadDrawer, LeadType } from "@/components/leads/LeadDrawer"
 import { formatarVisitaDashboard, matchesVisitasDate } from "@/lib/agendamento-utils"
 import { VisualFunnel, FunnelData } from "@/components/dashboard/VisualFunnel"
+import { VisitasCalendar } from "@/components/dashboard/VisitasCalendar"
 import { ChannelIcon } from "@/components/common/ChannelIcon"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -1058,11 +1059,15 @@ export default function ClientDashboardPage() {
                   </div>
                   <div className="my-2">
                     <span className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">
-                      {formatarTempoResposta(metricasAtendimento.tempoMedioGeralSeg) || '4m 30s'}
+                      {metricasAtendimento.tempoMedioGeralSeg !== null 
+                        ? (formatarTempoResposta(metricasAtendimento.tempoMedioGeralSeg) || '--') 
+                        : '--'}
                     </span>
                   </div>
                   <p className="text-[11px] text-gray-500 font-medium">
-                    Tempo médio até o atendente responder a mensagem do cliente
+                    {metricasAtendimento.totalAvaliados > 0 
+                      ? 'Tempo médio até o atendente responder a mensagem do cliente'
+                      : 'Nenhuma conversa com tempo registrado'}
                   </p>
                 </div>
 
@@ -1076,11 +1081,13 @@ export default function ClientDashboardPage() {
                   </div>
                   <div className="my-2">
                     <span className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">
-                      {metricasAtendimento.taxaRapida !== null ? `${metricasAtendimento.taxaRapida}%` : '85%'}
+                      {metricasAtendimento.taxaRapida !== null ? `${metricasAtendimento.taxaRapida}%` : '--'}
                     </span>
                   </div>
                   <p className="text-[11px] text-gray-500 font-medium">
-                    Leads atendidos nos primeiros 15 minutos (meta ideal: &gt;80%)
+                    {metricasAtendimento.totalAvaliados > 0
+                      ? 'Leads atendidos nos primeiros 15 minutos (meta ideal: >80%)'
+                      : 'Aguardando novas conversas'}
                   </p>
                 </div>
 
@@ -1474,92 +1481,12 @@ export default function ClientDashboardPage() {
         </div>
       )}
 
-      {/* Seção Visitas / Leads Qualificados */}
-      {!loading && qualifiedLeadsList && qualifiedLeadsList.length > 0 && (
-        <div className="space-y-6 mt-12 animate-in fade-in zoom-in-95 duration-500">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h2 className="text-2xl font-bold tracking-tight text-gray-900 font-poppins">Visitas / Leads Qualificados</h2>
-              <p className="text-gray-500 mt-1">Gerencie os agendamentos e leads prontos para negociação.</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-gray-500 uppercase">Filtrar Visitas:</span>
-                <input
-                  type="date"
-                  value={visitasDate}
-                  onChange={e => setVisitasDate(e.target.value)}
-                  className="h-9 px-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 max-w-[140px]"
-                />
-                {visitasDate && (
-                  <button onClick={() => setVisitasDate('')} className="text-xs text-gray-400 hover:text-red-500 transition-colors">✕</button>
-                )}
-              </div>
-              <div className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-bold border border-indigo-100 whitespace-nowrap">
-                {qualifiedLeadsList.filter(l => matchesVisitasDate(l, visitasDate)).length} Qualificado{qualifiedLeadsList.length > 1 ? 's' : ''}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {qualifiedLeadsList
-              .filter(l => matchesVisitasDate(l, visitasDate))
-              .sort((a, b) => {
-                const aTime = a.data_agendamento ? new Date(a.data_agendamento).getTime() : 0;
-                const bTime = b.data_agendamento ? new Date(b.data_agendamento).getTime() : 0;
-                return bTime - aTime;
-              })
-              .map((lead: any) => {
-                const visitaInfo = formatarVisitaDashboard(lead);
-                return (
-                  <Card 
-                    key={lead.id} 
-                    onClick={() => handleCardClick(lead)}
-                    className="relative overflow-hidden border-none premium-shadow bg-white hover:-translate-y-1 transition-all duration-300 cursor-pointer"
-                  >
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
-                    <CardContent className="p-6 space-y-4">
-                      <div className="flex justify-between items-start">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold text-gray-900 line-clamp-1">{lead.nome || 'Cliente não informado'}</span>
-                          <span className="text-xs font-semibold text-gray-400 mt-0.5 whitespace-nowrap">{formatarTelefone(lead.telefone)}</span>
-                        </div>
-                        {visitaInfo.hasAgendamento ? (
-                          <div className="bg-amber-50 text-amber-700 px-2.5 py-1 rounded-lg text-xs font-bold border border-amber-100 whitespace-nowrap flex items-center gap-1.5">
-                            <Calendar className="w-3 h-3" />
-                            {visitaInfo.badgeText}
-                          </div>
-                        ) : (
-                          <div className="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg text-xs font-bold border border-emerald-100 whitespace-nowrap">
-                            Qualificado
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-2 border border-gray-100">
-                        <div className="flex gap-2">
-                          <span className="text-gray-400 font-medium whitespace-nowrap w-20 text-xs text-right">Interesse:</span>
-                          <span className="text-gray-900 font-semibold line-clamp-1 flex-1">{lead.veiculo_interessado || '-'}</span>
-                        </div>
-                        {lead.observacao_lead_qualificado && (
-                          <div className="flex gap-2">
-                             <span className="text-gray-400 font-medium whitespace-nowrap w-20 text-xs text-right">Obs:</span>
-                             <span className="text-gray-600 font-medium line-clamp-2 text-xs flex-1">{lead.observacao_lead_qualificado}</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {visitaInfo.hasAgendamento && (
-                        <div className="pt-2 flex items-center gap-2 text-xs font-bold text-gray-500">
-                           {visitaInfo.dataTexto}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-          </div>
-        </div>
+      {/* Seção Visitas Agendadas em Formato de Calendário */}
+      {!loading && allLeads && allLeads.length > 0 && (
+        <VisitasCalendar
+          leads={allLeads}
+          onOpenLead={(lead) => handleCardClick(lead)}
+        />
       )}
 
       {/* Modal Interativo ao Clicar em Qualquer Card de KPI */}
@@ -1775,7 +1702,6 @@ export default function ClientDashboardPage() {
         isOpen={isDrawerOpen}
         onClose={() => {
           setIsDrawerOpen(false)
-          fetchData()
         }}
         isSemIA={isSemIA}
         onLeadUpdated={(leadId, updates) => {

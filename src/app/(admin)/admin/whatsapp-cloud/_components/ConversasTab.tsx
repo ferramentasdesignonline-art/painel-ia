@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Loader2, RefreshCcw, MessageSquare, FileText, Mic, Image, Video, Phone, Search, ChevronLeft, Smartphone, Tag, X, Paperclip, Send, Edit2, Trash2, Plus, Settings, Square } from "lucide-react"
+import { Loader2, RefreshCcw, MessageSquare, FileText, Mic, Image, Video, Phone, Search, ChevronLeft, Smartphone, Tag, X, Paperclip, Send, Edit2, Trash2, Plus, Settings, Square, ArrowDown } from "lucide-react"
 
 interface Instancia {
   id: string
@@ -213,6 +213,8 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
   const chatRef = useRef<HTMLDivElement>(null)
 
   const [syncProgress, setSyncProgress] = useState<{ imported: number; total: number; label: string } | null>(null)
+  const [hasMoreContatos, setHasMoreContatos] = useState(true)
+  const [loadingMaisContatos, setLoadingMaisContatos] = useState(false)
 
   const fetchContatosDB = async () => {
     try {
@@ -221,16 +223,81 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
         { cache: 'no-store' }
       )
       const data = await res.json()
-      const lista: Contato[] = data.contatos || []
+      const rawLista: Contato[] = data.contatos || []
+
+      // Desduplicação por telefone única garantida
+      const map = new Map<string, Contato>()
+      for (const item of rawLista) {
+        if (!item?.telefone_contato) continue
+        const tel = String(item.telefone_contato).replace(/\D/g, '')
+        if (!map.has(tel)) {
+          map.set(tel, { ...item, telefone_contato: tel })
+        }
+      }
+      const lista = Array.from(map.values())
       setContatos(lista)
       setContatosFiltrados(lista)
-      if (data.labels) {
+
+      if (data.hasMore !== undefined) {
+        setHasMoreContatos(data.hasMore)
+      } else if (lista.length < 50) {
+        setHasMoreContatos(false)
+      }
+
+      if (Array.isArray(data.labels) && data.labels.length > 0) {
         setUazapiLabels(data.labels)
       }
       return lista
     } catch (err) {
       console.error('Erro ao buscar contatos', err)
       return []
+    }
+  }
+
+  const carregarMaisContatos = async () => {
+    if (loadingMaisContatos) return
+    try {
+      setLoadingMaisContatos(true)
+      const currentOffset = contatos.length
+      const res = await fetch(
+        `/api/wacloud/conversas?instancia=${encodeURIComponent(instancia.nome_instancia)}&offset=${currentOffset}&limit=50&sync=true&_t=${Date.now()}`,
+        { cache: 'no-store' }
+      )
+      const data = await res.json()
+      const novosContatos: Contato[] = data.contatos || []
+      if (novosContatos.length === 0) {
+        setHasMoreContatos(false)
+        return
+      }
+
+      setContatos(prev => {
+        const map = new Map<string, Contato>()
+        for (const item of prev) {
+          if (!item?.telefone_contato) continue
+          const tel = String(item.telefone_contato).replace(/\D/g, '')
+          map.set(tel, item)
+        }
+        for (const item of novosContatos) {
+          if (!item?.telefone_contato) continue
+          const tel = String(item.telefone_contato).replace(/\D/g, '')
+          if (!map.has(tel)) {
+            map.set(tel, { ...item, telefone_contato: tel })
+          }
+        }
+        const updated = Array.from(map.values())
+        updated.sort((a, b) => new Date(b.ultimo_timestamp || 0).getTime() - new Date(a.ultimo_timestamp || 0).getTime())
+        return updated
+      })
+
+      if (data.hasMore !== undefined) {
+        setHasMoreContatos(data.hasMore)
+      } else if (novosContatos.length < 50) {
+        setHasMoreContatos(false)
+      }
+    } catch (err) {
+      console.error('Erro ao carregar mais contatos:', err)
+    } finally {
+      setLoadingMaisContatos(false)
     }
   }
 
@@ -246,6 +313,19 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
     const loadInitial = async () => {
       setLoading(true)
       await fetchContatosDB()
+
+      // Garante carregamento das etiquetas da instância
+      try {
+        const idOrName = instancia.id || instancia.nome_instancia
+        const resLabels = await fetch(`/api/wacloud/instances/${encodeURIComponent(idOrName)}/labels`)
+        const jsonLabels = await resLabels.json()
+        if (Array.isArray(jsonLabels.labels) && jsonLabels.labels.length > 0) {
+          setUazapiLabels(jsonLabels.labels)
+        }
+      } catch (lblErr) {
+        console.warn("Aviso ao carregar etiquetas da instância:", lblErr)
+      }
+
       setLoading(false)
     }
     loadInitial()
@@ -275,6 +355,7 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
       }).catch(err => console.error('Erro ao acionar bloqueio da IA:', err));
 
       // Optimistic add
+      const nowIso = new Date().toISOString();
       const novaMsg: Mensagem = {
         id: `temp-${Date.now()}`,
         nome_instancia: instancia.nome_instancia,
@@ -285,10 +366,22 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
         tipo_mensagem: 'ExtendedTextMessage',
         url_midia: null,
         mimetype: null,
-        timestamp_whatsapp: new Date().toISOString(),
-        created_at: new Date().toISOString(),
+        timestamp_whatsapp: nowIso,
+        created_at: nowIso,
       };
-      setMensagens([...mensagens, novaMsg]);
+      setMensagens(prev => [...prev, novaMsg]);
+
+      // Atualiza contato na lista lateral e sobe pro topo imediatamente
+      const updatedContato: Contato = {
+        ...selectedContato,
+        ultima_mensagem: msgText.trim(),
+        ultimo_tipo: 'text',
+        ultimo_timestamp: nowIso,
+      };
+      setSelectedContato(updatedContato);
+      setContatos(prev => [updatedContato, ...prev.filter(c => c.telefone_contato !== selectedContato.telefone_contato)]);
+      setContatosFiltrados(prev => [updatedContato, ...prev.filter(c => c.telefone_contato !== selectedContato.telefone_contato)]);
+
       setMsgText('');
     } catch (err: any) {
       alert("Erro ao enviar: " + err.message);
@@ -349,20 +442,32 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
       }).catch(err => console.error('Erro ao acionar bloqueio da IA:', err));
 
       // Optimistic add
+      const nowMediaIso = new Date().toISOString();
       const novaMsg: Mensagem = {
         id: `temp-${Date.now()}`,
         nome_instancia: instancia.nome_instancia,
         telefone_contato: selectedContato.telefone_contato,
         nome_contato: 'Eu',
-        mensagem: null,
+        mensagem: file.name || null,
         enviado_por_mim: true,
         tipo_mensagem: type,
         url_midia: publicUrl,
         mimetype: file.type,
-        timestamp_whatsapp: new Date().toISOString(),
-        created_at: new Date().toISOString(),
+        timestamp_whatsapp: nowMediaIso,
+        created_at: nowMediaIso,
       };
-      setMensagens([...mensagens, novaMsg]);
+      setMensagens(prev => [...prev, novaMsg]);
+
+      // Atualiza contato na lista lateral e sobe pro topo
+      const updatedContatoMedia: Contato = {
+        ...selectedContato,
+        ultima_mensagem: file.name ? `[${type}] ${file.name}` : `[${type}]`,
+        ultimo_tipo: type,
+        ultimo_timestamp: nowMediaIso,
+      };
+      setSelectedContato(updatedContatoMedia);
+      setContatos(prev => [updatedContatoMedia, ...prev.filter(c => c.telefone_contato !== selectedContato.telefone_contato)]);
+      setContatosFiltrados(prev => [updatedContatoMedia, ...prev.filter(c => c.telefone_contato !== selectedContato.telefone_contato)]);
       
     } catch (err: any) {
       alert("Erro ao enviar arquivo: " + err.message);
@@ -612,15 +717,16 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
     }
   };
 
-  const fetchMensagens = async (contato: Contato, isInitial = true) => {
+  const fetchMensagens = async (contato: Contato, isInitial = true, forceSync = false) => {
     if (isInitial) {
       setLoadingMsgs(true)
       setMsgOffset(0)
       setHasMoreMsgs(false)
     }
     try {
+      const syncParam = forceSync ? '&sync=true' : '';
       const res = await fetch(
-        `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}&offset=0&limit=30&_t=${Date.now()}`,
+        `/api/wacloud/conversas/${encodeURIComponent(contato.telefone_contato)}?instancia=${encodeURIComponent(instancia.nome_instancia)}&offset=0&limit=30${syncParam}&_t=${Date.now()}`,
         { cache: 'no-store' }
       )
       const data = await res.json()
@@ -637,11 +743,12 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
       })
         .then(r => r.json())
         .then(d => {
-          if (d.success && Array.isArray(d.whatsapp_labels)) {
+          const labelList = d.whatsapp_labels || d.labels;
+          if (d.success && Array.isArray(labelList)) {
             const updatedContato = {
               ...contato,
-              whatsapp_labels: d.whatsapp_labels,
-              nome_contato: d.chat?.name || d.chat?.wa_name || contato.nome_contato,
+              whatsapp_labels: labelList,
+              nome_contato: d.chat?.name || d.chat?.wa_name || d.chat?.wa_contactName || d.data?.wa_contactName || contato.nome_contato,
             };
             setSelectedContato(prev => prev && prev.telefone_contato === contato.telefone_contato ? updatedContato : prev);
             setContatos(prev => prev.map(c => c.telefone_contato === contato.telefone_contato ? updatedContato : c));
@@ -695,7 +802,7 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
   };
 
   const syncMensagens = async (contato: Contato) => {
-    await fetchMensagens(contato, false);
+    await fetchMensagens(contato, false, true);
   };
 
 
@@ -934,6 +1041,33 @@ export function ChatInstancia({ instancia, onVoltar, initialPhone, initialText, 
                   </button>
                 )
               })
+            )}
+
+            {/* Botão de carregar mais conversas no final da lista */}
+            {!loading && !busca && (
+              <div className="p-3 text-center border-t border-gray-100 bg-gray-50/60 sticky bottom-0 z-10">
+                {hasMoreContatos ? (
+                  <button
+                    onClick={carregarMaisContatos}
+                    disabled={loadingMaisContatos}
+                    className="w-full py-2 px-3 text-xs font-semibold text-indigo-600 bg-white hover:bg-indigo-50 active:scale-[0.99] border border-indigo-200 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {loadingMaisContatos ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                        <span>Buscando mais conversas...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowDown className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>Carregar mais conversas</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <p className="text-[11px] text-gray-400">Todas as conversas carregadas</p>
+                )}
+              </div>
             )}
           </div>
         </div>

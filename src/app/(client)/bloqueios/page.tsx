@@ -29,8 +29,18 @@ export default function BloqueiosPage() {
       const res = await fetch('/api/bloqueios')
       const json = await res.json()
       if (json.data) {
-        const ativos = json.data.filter((b: any) => b.bloqueio_existe !== false)
-        setBloqueios(ativos)
+        const vistos = new Set<string>()
+        const unicos: any[] = []
+        for (const b of json.data) {
+          if (b.bloqueio_existe === false) continue
+          const raw = String(b.numero_cliente || '').replace(/@s\.whatsapp\.net/gi, '').replace(/\D/g, '')
+          const key = raw ? raw.slice(-8) : String(b.id)
+          if (!vistos.has(key)) {
+            vistos.add(key)
+            unicos.push(b)
+          }
+        }
+        setBloqueios(unicos)
       }
     } catch (e) {
       console.error(e)
@@ -52,8 +62,13 @@ export default function BloqueiosPage() {
         body: JSON.stringify({ numero_cliente })
       })
       if (res.ok) {
-        // Remove da lista localmente para feedback imediato
-        setBloqueios(prev => prev.filter(b => b.numero_cliente !== numero_cliente))
+        // Remove da lista localmente todos os registros correspondentes ao número
+        const limpo = String(numero_cliente).replace(/@s\.whatsapp\.net/gi, '').replace(/\D/g, '')
+        const tail = limpo ? limpo.slice(-8) : ''
+        setBloqueios(prev => prev.filter(b => {
+          const bLimpo = String(b.numero_cliente || '').replace(/@s\.whatsapp\.net/gi, '').replace(/\D/g, '')
+          return b.numero_cliente !== numero_cliente && (!tail || !bLimpo.includes(tail))
+        }))
         setSuccessMsg('IA reativada com sucesso!')
         setTimeout(() => setSuccessMsg(null), 3000)
       }
@@ -132,7 +147,7 @@ export default function BloqueiosPage() {
             </div>
           </div>
           <div className="text-3xl font-black text-gray-900">{bloqueios.length}</div>
-          <p className="text-xs text-gray-400 mt-1 font-medium">IAs pausadas agora</p>
+          <p className="text-xs text-gray-400 mt-1 font-medium">Clientes únicos pausados</p>
         </div>
 
         <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm relative overflow-hidden">
@@ -144,7 +159,7 @@ export default function BloqueiosPage() {
             </div>
           </div>
           <div className="text-3xl font-black text-gray-900">{bloqueios.length}</div>
-          <p className="text-xs text-gray-400 mt-1 font-medium">Sua equipe está atendendo</p>
+          <p className="text-xs text-gray-400 mt-1 font-medium">Clientes únicos em atendimento</p>
         </div>
 
         <div className="bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl p-5 shadow-lg shadow-indigo-100 flex flex-col justify-between">
@@ -166,8 +181,8 @@ export default function BloqueiosPage() {
             <h2 className="text-sm font-bold text-gray-800">Listagem de Bloqueios</h2>
             <p className="text-xs text-gray-400 mt-0.5">
               {search.trim()
-                ? `Encontrado(s) ${filteredBloqueios.length} de ${bloqueios.length} bloqueios`
-                : `${bloqueios.length} números que não recebem mensagens automáticas`}
+                ? `Encontrado(s) ${filteredBloqueios.length} de ${bloqueios.length} bloqueios únicos`
+                : `${bloqueios.length} clientes únicos que não recebem mensagens automáticas`}
             </p>
           </div>
 

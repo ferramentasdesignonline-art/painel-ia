@@ -15,6 +15,8 @@ export const WACLOUD_TABLES = {
   ETIQUETAS: "mqqlrkk95w7bvzr",
   MENSAGENS: "m7anpj8xtcer722",
   CONTATOS: "m7tbyvo3kzsajzs",
+  SEMIA_CONTATOS: "mkl3zt6yi1t3t7s",
+  SEMIA_MENSAGENS: "m3a9kycoynmp6dv",
 };
 
 /**
@@ -129,6 +131,30 @@ export async function getWacloudInstanciaByIdOrName(idOrName: string | number): 
     );
     if (dataUuid.list?.[0]) {
       return normalizeWacloudRecord(dataUuid.list[0]);
+    }
+
+    // 4. Fallback: Se não encontrou ou não tem token, busca na tabela de clientes do Sistema Dash IA
+    try {
+      const { getNocoDBClientes } = await import('@/lib/nocodb/sistema');
+      const allClients = await getNocoDBClientes();
+      const matchedClient = allClients.find(
+        (c) =>
+          (c.nome_instancia && c.nome_instancia.trim().toLowerCase() === str.toLowerCase()) ||
+          String(c.id) === str ||
+          String(c.Id) === str
+      );
+      if (matchedClient?.whatsapp_token) {
+        return {
+          id: matchedClient.id || matchedClient.Id,
+          nome_instancia: matchedClient.nome_instancia || str,
+          token: matchedClient.whatsapp_token,
+          status: 'connected',
+          ativo: true,
+          cliente_id: matchedClient.id || matchedClient.Id,
+        };
+      }
+    } catch {
+      // ignore
     }
   } catch (err) {
     console.error(`Erro ao buscar instância ${idOrName} no NocoDB:`, err);
@@ -257,6 +283,96 @@ export async function saveWacloudEtiqueta(
   }
 }
 
+/**
+ * Reconcilia e sincroniza as etiquetas de uma instância no NocoDB com o WhatsApp/Uazapi:
+ * - Insere novas etiquetas criadas no WhatsApp
+ * - Atualiza nomes e cores alterados
+ * - Remove etiquetas que foram excluídas no WhatsApp
+ */
+export async function reconciliarWacloudEtiquetas(
+  nomeInstancia: string,
+  uazapiLabels: any[]
+): Promise<any[]> {
+  if (!nomeInstancia || !Array.isArray(uazapiLabels)) return [];
+  try {
+    const existing = await getWacloudEtiquetas(nomeInstancia);
+    const existingMap = new Map<string, any>();
+    for (const row of existing) {
+      if (row.uazapi_label_id) existingMap.set(String(row.uazapi_label_id), row);
+    }
+
+    const uazMap = new Map<string, any>();
+    for (const u of uazapiLabels) {
+      const id = String(u.labelid || u.id || "");
+      if (id) uazMap.set(id, u);
+    }
+
+    // 1. Identificar excluídas
+    const toDelete: any[] = [];
+    for (const [id, row] of existingMap.entries()) {
+      if (!uazMap.has(id)) {
+        toDelete.push({ Id: row.Id || row.id });
+      }
+    }
+    if (toDelete.length > 0) {
+      await nocoRequest(`/api/v2/tables/${WACLOUD_TABLES.ETIQUETAS}/records`, {
+        method: "DELETE",
+        body: JSON.stringify(toDelete),
+      }).catch(err => console.warn("Erro ao deletar etiquetas obsoletas:", err));
+    }
+
+    // 2. Identificar novas e a atualizar
+    const toInsert: any[] = [];
+    const toUpdate: any[] = [];
+
+    for (const [id, u] of uazMap.entries()) {
+      const nome = u.name || "Sem Nome";
+      const cor = u.colorHex || "#6366f1";
+      if (!existingMap.has(id)) {
+        toInsert.push({
+          nome_instancia: nomeInstancia,
+          uazapi_label_id: id,
+          nome,
+          cor_hex: cor,
+          created_at: new Date().toISOString(),
+        });
+      } else {
+        const row = existingMap.get(id);
+        if (row.nome !== nome || row.cor_hex !== cor) {
+          toUpdate.push({
+            Id: row.Id || row.id,
+            nome,
+            cor_hex: cor,
+          });
+        }
+      }
+    }
+
+    if (toInsert.length > 0) {
+      for (let i = 0; i < toInsert.length; i += 50) {
+        await nocoRequest(`/api/v2/tables/${WACLOUD_TABLES.ETIQUETAS}/records`, {
+          method: "POST",
+          body: JSON.stringify(toInsert.slice(i, i + 50)),
+        }).catch(err => console.warn("Erro ao inserir novas etiquetas:", err));
+      }
+    }
+
+    if (toUpdate.length > 0) {
+      for (let i = 0; i < toUpdate.length; i += 50) {
+        await nocoRequest(`/api/v2/tables/${WACLOUD_TABLES.ETIQUETAS}/records`, {
+          method: "PATCH",
+          body: JSON.stringify(toUpdate.slice(i, i + 50)),
+        }).catch(err => console.warn("Erro ao atualizar etiquetas:", err));
+      }
+    }
+
+    return await getWacloudEtiquetas(nomeInstancia);
+  } catch (err) {
+    console.error("Erro em reconciliarWacloudEtiquetas:", err);
+    return [];
+  }
+}
+
 // ==========================================
 // CONTATOS / CONVERSAS (wacloud_contatos)
 // ==========================================
@@ -295,19 +411,123 @@ export async function getWacloudContatos(options?: string | {
  * Busca um contato específico pelo telefone e nome de instância
  */
 export async function getWacloudContato(nomeInstancia: string, telefone: string): Promise<any | null> {
-  const cleanPhone = telefone.replace(/\D/g, "");
+  const cleanPhone = String(telefone).replace(/@.*$/, '').replace(/\D/g, "");
   try {
     const where = encodeURIComponent(
       `(nome_instancia,eq,${nomeInstancia})~and(telefone_contato,eq,${cleanPhone})`
     );
     const data = await nocoRequest(
-      `/api/v2/tables/${WACLOUD_TABLES.CONTATOS}/records?where=${where}&limit=1`
+      `/api/v2/tables/${WACLOUD_TABLES.CONTATOS}/records?where=${where}&limit=5`
     );
-    const item = data.list?.[0];
-    return item ? normalizeWacloudRecord(item) : null;
+    const list = data.list || [];
+    if (list.length > 1) {
+      // Se tiver mais de um, mantém o primeiro e remove os duplicados
+      const [first, ...rest] = list;
+      const idsToDelete = rest.map((r: any) => ({ Id: r.Id || r.id }));
+      nocoRequest(`/api/v2/tables/${WACLOUD_TABLES.CONTATOS}/records`, {
+        method: "DELETE",
+        body: JSON.stringify(idsToDelete),
+      }).catch(() => {});
+      return normalizeWacloudRecord(first);
+    }
+    return list[0] ? normalizeWacloudRecord(list[0]) : null;
   } catch (err) {
     console.error("Erro em getWacloudContato:", err);
     return null;
+  }
+}
+
+/**
+ * Insere ou atualiza múltiplos contatos no NocoDB em lote (batch), com proteção absoluta contra duplicação:
+ * 1. Mapeia todos os contatos existentes por telefone limpo
+ * 2. Remove qualquer duplicata existente
+ * 3. Divide em toPatch (já existem) e toInsert (novos)
+ * 4. Executa em lote (batch) de forma rápida e segura
+ */
+export async function batchUpsertWacloudContatos(
+  nomeInstancia: string,
+  contatos: any[]
+): Promise<void> {
+  if (!nomeInstancia || !Array.isArray(contatos) || contatos.length === 0) return;
+
+  // Deduplicação em memória da lista de entrada
+  const uniqueInputMap = new Map<string, any>();
+  for (const c of contatos) {
+    const rawTel = c.telefone_contato || c.telefone || c.wa_chatid || "";
+    const clean = String(rawTel).replace(/@.*$/, "").replace(/\D/g, "");
+    if (!clean) continue;
+    uniqueInputMap.set(clean, { ...c, telefone_contato: clean });
+  }
+
+  // Busca contatos existentes dessa instância no NocoDB
+  const existing = await getWacloudContatos({ nomeInstancia, limit: 2000 });
+  const existingByPhone = new Map<string, any>();
+  const duplicatesToDelete: any[] = [];
+
+  for (const row of existing) {
+    const rawTel = row.telefone_contato || "";
+    const clean = String(rawTel).replace(/@.*$/, "").replace(/\D/g, "");
+    if (!clean) continue;
+
+    if (!existingByPhone.has(clean)) {
+      existingByPhone.set(clean, row);
+    } else {
+      duplicatesToDelete.push({ Id: row.Id || row.id });
+    }
+  }
+
+  // Deleta duplicatas encontradas no banco
+  if (duplicatesToDelete.length > 0) {
+    await nocoRequest(`/api/v2/tables/${WACLOUD_TABLES.CONTATOS}/records`, {
+      method: "DELETE",
+      body: JSON.stringify(duplicatesToDelete),
+    }).catch(err => console.warn("Erro ao deletar contatos duplicados:", err));
+  }
+
+  const toPatch: any[] = [];
+  const toInsert: any[] = [];
+
+  for (const [phone, data] of uniqueInputMap.entries()) {
+    const nowIso = new Date().toISOString();
+    const payload = {
+      ...data,
+      nome_instancia: nomeInstancia,
+      telefone_contato: phone,
+      atualizado_em: nowIso,
+    };
+
+    if (existingByPhone.has(phone)) {
+      const existingRow = existingByPhone.get(phone);
+      toPatch.push({
+        ...payload,
+        Id: existingRow.Id || existingRow.id,
+      });
+    } else {
+      toInsert.push({
+        ...payload,
+        created_at: payload.created_at || nowIso,
+      });
+    }
+  }
+
+  // Executa PATCH em lote
+  if (toPatch.length > 0) {
+    for (let i = 0; i < toPatch.length; i += 50) {
+      await nocoRequest(`/api/v2/tables/${WACLOUD_TABLES.CONTATOS}/records`, {
+        method: "PATCH",
+        body: JSON.stringify(toPatch.slice(i, i + 50)),
+      }).catch(err => console.warn("Erro em batch PATCH contatos:", err));
+    }
+  }
+
+  // Executa POST em lote
+  if (toInsert.length > 0) {
+    for (let i = 0; i < toInsert.length; i += 50) {
+      await nocoRequest(`/api/v2/tables/${WACLOUD_TABLES.CONTATOS}/records`, {
+        method: "POST",
+        body: JSON.stringify(toInsert.slice(i, i + 50)),
+      }).catch(err => console.warn("Erro em batch POST contatos:", err));
+    }
   }
 }
 
@@ -319,7 +539,7 @@ export async function upsertWacloudContato(
   telefone: string,
   data: any
 ): Promise<any> {
-  const cleanPhone = telefone.replace(/\D/g, "");
+  const cleanPhone = String(telefone).replace(/@.*$/, '').replace(/\D/g, "");
   const existing = await getWacloudContato(nomeInstancia, cleanPhone);
 
   const payload: any = {
@@ -395,19 +615,39 @@ export async function updateWacloudContato(
 export async function getWacloudMensagens(
   telefone: string,
   nomeInstancia?: string,
-  limit = 300
+  limit = 300,
+  tableName?: string
 ): Promise<any[]> {
-  const cleanPhone = telefone.replace(/\D/g, "");
+  const cleanPhone = telefone ? telefone.replace(/\D/g, "") : "";
+  const tableId = tableName === 'semia_mensagens' || tableName === WACLOUD_TABLES.SEMIA_MENSAGENS
+    ? (WACLOUD_TABLES.SEMIA_MENSAGENS || "m3a9kycoynmp6dv")
+    : (tableName === 'wacloud_mensagens' ? WACLOUD_TABLES.MENSAGENS : (tableName || WACLOUD_TABLES.MENSAGENS));
+
   try {
-    let where = `(telefone_contato,eq,${cleanPhone})`;
+    const filters: string[] = [];
     if (nomeInstancia) {
-      where = `(nome_instancia,eq,${nomeInstancia})~and${where}`;
+      const cleanInstancia = nomeInstancia.replace(/\s+/g, "");
+      filters.push(`(nome_instancia,like,%${cleanInstancia}%)`);
+    }
+    if (cleanPhone) {
+      const phoneDigits = cleanPhone.length >= 8 ? cleanPhone.slice(-8) : cleanPhone;
+      filters.push(`(telefone_contato,like,%${phoneDigits}%)`);
     }
 
+    const where = filters.length > 0 ? `where=${encodeURIComponent(filters.join("~and"))}&` : "";
+    const sortField = tableId === (WACLOUD_TABLES.SEMIA_MENSAGENS || "m3a9kycoynmp6dv") ? "Id" : "timestamp_whatsapp";
+
     const data = await nocoRequest(
-      `/api/v2/tables/${WACLOUD_TABLES.MENSAGENS}/records?where=${encodeURIComponent(where)}&sort=timestamp_whatsapp&limit=${limit}`
+      `/api/v2/tables/${tableId}/records?${where}sort=${sortField}&limit=${limit}`
     );
-    const list = data.list || [];
+    let list = data.list || [];
+    if (list.length === 0 && tableId !== WACLOUD_TABLES.MENSAGENS) {
+      // Fallback para tabela de mensagens geral caso não encontre
+      const dataFallback = await nocoRequest(
+        `/api/v2/tables/${WACLOUD_TABLES.MENSAGENS}/records?${where}sort=timestamp_whatsapp&limit=${limit}`
+      );
+      list = dataFallback.list || [];
+    }
     return list.map(normalizeWacloudRecord);
   } catch (err) {
     console.error("Erro em getWacloudMensagens:", err);
@@ -430,8 +670,24 @@ export async function saveWacloudMensagem(data: {
   message_id?: string | null;
   timestamp_whatsapp?: string;
   dados_anuncio?: any;
-}): Promise<any> {
-  const cleanPhone = data.telefone_contato.replace(/\D/g, "");
+}, targetTable?: string): Promise<any> {
+  const cleanPhone = String(data.telefone_contato).replace(/@.*$/, "").replace(/\D/g, "");
+  const tableId = targetTable === 'semia_mensagens' || targetTable === WACLOUD_TABLES.SEMIA_MENSAGENS
+    ? (WACLOUD_TABLES.SEMIA_MENSAGENS || "m3a9kycoynmp6dv")
+    : WACLOUD_TABLES.MENSAGENS;
+
+  // Previne duplicações de mensagens pelo message_id
+  if (data.message_id) {
+    try {
+      const cleanInstancia = data.nome_instancia ? data.nome_instancia.replace(/\s+/g, "") : "";
+      const whereCheck = encodeURIComponent(`(nome_instancia,like,%${cleanInstancia}%)~and(message_id,eq,${data.message_id})`);
+      const existing = await nocoRequest(`/api/v2/tables/${tableId}/records?where=${whereCheck}&limit=1`);
+      if (existing?.list?.length > 0) {
+        return normalizeWacloudRecord(existing.list[0]);
+      }
+    } catch {}
+  }
+
   const payload: any = {
     nome_instancia: data.nome_instancia,
     telefone_contato: cleanPhone,
@@ -447,7 +703,7 @@ export async function saveWacloudMensagem(data: {
     created_at: new Date().toISOString(),
   };
 
-  const result = await nocoRequest(`/api/v2/tables/${WACLOUD_TABLES.MENSAGENS}/records`, {
+  const result = await nocoRequest(`/api/v2/tables/${tableId}/records`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

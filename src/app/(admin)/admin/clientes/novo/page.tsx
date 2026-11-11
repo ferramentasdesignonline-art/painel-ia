@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronDown, RefreshCw, AlertCircle, Bot, UserCheck, Sparkles, MessageCircle, Info, Car } from "lucide-react"
+import { ChevronDown, RefreshCw, AlertCircle, Bot, UserCheck, Sparkles, MessageCircle, Info, Car, Landmark } from "lucide-react"
+import { SimulacaoConfigCard } from "@/components/admin/SimulacaoConfigCard"
 
 function TableSelect({
   label,
@@ -85,11 +86,51 @@ export default function NovoClientePage() {
   const [error, setError] = useState("")
   const [tables, setTables] = useState<string[]>([])
   const [loadingTables, setLoadingTables] = useState(true)
-  const [instancias, setInstancias] = useState<Array<{ id: string; nome_instancia: string; cliente_id: string | null }>>([])
+  const [instancias, setInstancias] = useState<any[]>([])
   const [loadingInstancias, setLoadingInstancias] = useState(true)
+  const [isManualInstancia, setIsManualInstancia] = useState(false)
 
   const [tipoAtendimento, setTipoAtendimento] = useState<'com_ia' | 'sem_ia'>('sem_ia')
   const [moduloEstoqueAtivo, setModuloEstoqueAtivo] = useState(false)
+  const [moduloBancosAtivo, setModuloBancosAtivo] = useState(false)
+  const [credereStoreId, setCredereStoreId] = useState("")
+  const [credereStores, setCredereStores] = useState<any[]>([])
+  const [loadingCredereStores, setLoadingCredereStores] = useState(false)
+  const [isManualCredereStore, setIsManualCredereStore] = useState(false)
+
+  // Configuração da Simulação n8n
+  const [simWebhookUrl, setSimWebhookUrl] = useState("")
+  const [simUf, setSimUf] = useState("MG")
+  const [simCidade, setSimCidade] = useState("")
+  const [simZeroKm, setSimZeroKm] = useState(false)
+  const [simMinReturn, setSimMinReturn] = useState(3)
+  const [simMaxReturn, setSimMaxReturn] = useState(6)
+  const [simBankCodes, setSimBankCodes] = useState<string[]>(['394', '655', '336', '341', '623', '033', 'daycoval'])
+  const [loadingSimBanks, setLoadingSimBanks] = useState(false)
+
+  const fetchStoreBanksAndAutoFill = async (storeId: string) => {
+    if (!storeId) return
+    setLoadingSimBanks(true)
+    try {
+      const res = await fetch(`/api/admin/credere/stores?storeId=${storeId}`)
+      const json = await res.json()
+      if (json.configured_febraban_codes && Array.isArray(json.configured_febraban_codes) && json.configured_febraban_codes.length > 0) {
+        setSimBankCodes(json.configured_febraban_codes)
+      }
+      if (json.store) {
+        if (!simUf || simUf === "MG") {
+          if (json.store.uf) setSimUf(json.store.uf)
+        }
+        if (!simCidade && json.store.city) {
+          setSimCidade(json.store.city)
+        }
+      }
+    } catch (e) {
+      console.error("Erro ao carregar bancos da loja Credere:", e)
+    } finally {
+      setLoadingSimBanks(false)
+    }
+  }
   const [bancoProvider, setBancoProvider] = useState<'nocodb' | 'supabase'>('nocodb')
 
   const [formData, setFormData] = useState({
@@ -138,6 +179,21 @@ export default function NovoClientePage() {
     }
   }
 
+  const fetchCredereStores = async () => {
+    setLoadingCredereStores(true)
+    try {
+      const res = await fetch("/api/admin/credere/stores")
+      const json = await res.json()
+      if (json.stores && Array.isArray(json.stores)) {
+        setCredereStores(json.stores)
+      }
+    } catch (e) {
+      console.error("Erro ao carregar lojas da Credere:", e)
+    } finally {
+      setLoadingCredereStores(false)
+    }
+  }
+
   useEffect(() => {
     fetchTables()
     fetchInstancias()
@@ -158,7 +214,21 @@ export default function NovoClientePage() {
       const payload = {
         ...formData,
         tipo_atendimento: tipoAtendimento,
+        tabela_leads: tipoAtendimento === 'sem_ia' ? 'semia_contatos' : (formData.tabela_leads || ''),
+        tabela_bloqueios: tipoAtendimento === 'sem_ia' ? null : (formData.tabela_bloqueios || ''),
+        tabela_memoria: tipoAtendimento === 'sem_ia' ? null : (formData.tabela_memoria || ''),
         supabase_url: bancoProvider === 'nocodb' ? 'nocodb' : (formData.supabase_url || ''),
+        modulo_bancos_habilitado: moduloBancosAtivo,
+        credere_store_id: moduloBancosAtivo ? credereStoreId : null,
+        config_simulacao: moduloBancosAtivo ? {
+          webhook_url: simWebhookUrl,
+          licensing_uf: simUf,
+          licensing_city: simCidade,
+          zero_km: simZeroKm,
+          min_return: simMinReturn,
+          max_return: simMaxReturn,
+          bank_febraban_codes: simBankCodes,
+        } : null,
       }
 
       const res = await fetch("/api/admin/clientes", {
@@ -279,25 +349,76 @@ export default function NovoClientePage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Instância Uazapi</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">Instância WhatsApp Uazapi</label>
+                <button
+                  type="button"
+                  onClick={() => setIsManualInstancia(!isManualInstancia)}
+                  className="text-[10px] text-indigo-600 hover:underline font-medium"
+                >
+                  {isManualInstancia ? "Selecionar da Uazapi" : "Digitar manualmente"}
+                </button>
+              </div>
+
+              {isManualInstancia ? (
+                <input
+                  type="text"
+                  required
+                  value={formData.nome_instancia}
+                  onChange={(e) => setFormData({ ...formData, nome_instancia: e.target.value })}
+                  className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono"
+                  placeholder="Ex: Finez"
+                />
+              ) : (
+                <div className="relative">
+                  <select
+                    value={formData.nome_instancia}
+                    onChange={(e) => {
+                      const selectedName = e.target.value
+                      const found = instancias.find((i) => i.nome_instancia === selectedName)
+                      setFormData((prev) => ({
+                        ...prev,
+                        nome_instancia: selectedName,
+                        whatsapp_token: found?.token || prev.whatsapp_token,
+                      }))
+                    }}
+                    className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 pr-8 bg-white border font-mono text-xs appearance-none"
+                  >
+                    <option value="">
+                      {loadingInstancias ? "Carregando instâncias da Uazapi..." : "-- Selecione a instância da Uazapi --"}
+                    </option>
+                    {instancias.map((inst) => {
+                      const statusIcon = inst.is_connected ? "🟢 Conectada" : "⚪ Desconectada";
+                      const ownerText = inst.owner ? ` • ${inst.owner}` : "";
+                      const vinculoText = inst.cliente_nome ? ` (Vinculada a ${inst.cliente_nome})` : (inst.cliente_id ? " (Vinculada)" : " (Disponível)");
+                      return (
+                        <option key={inst.id || inst.nome_instancia} value={inst.nome_instancia}>
+                          {inst.nome_instancia} — {statusIcon}{ownerText}{vinculoText}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-gray-500">
+                    <ChevronDown className="h-4 w-4" />
+                  </div>
+                </div>
+              )}
+              <p className="text-[11px] text-gray-400 mt-1">
+                Instância conectada na Uazapi usada para WhatsApp Web e conversas.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Token WhatsApp (UAZAPI)</label>
               <input
                 type="text"
-                required
-                list="instancias-list"
-                value={formData.nome_instancia}
-                onChange={(e) => setFormData({ ...formData, nome_instancia: e.target.value })}
-                className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono"
-                placeholder="Ex: CarShop"
+                value={formData.whatsapp_token}
+                onChange={(e) => setFormData({ ...formData, whatsapp_token: e.target.value })}
+                className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono text-xs"
+                placeholder="Token gerado na UAZAPI"
               />
-              <datalist id="instancias-list">
-                {instancias.map((inst) => (
-                  <option key={inst.id} value={inst.nome_instancia}>
-                    {inst.nome_instancia} {inst.cliente_id ? "(Já vinculada)" : "(Disponível)"}
-                  </option>
-                ))}
-              </datalist>
               <p className="text-[11px] text-gray-400 mt-1">
-                Digite o nome da nova instância (será criada na Uazapi) ou selecione da lista.
+                Token da UAZAPI para responder mensagens e sincronizar o WhatsApp Web.
               </p>
             </div>
 
@@ -408,56 +529,198 @@ export default function NovoClientePage() {
               </div>
             </div>
 
-            {/* Módulo de Estoque (Opcional) */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-xs">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
-                    <Car className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-semibold text-gray-900">Módulo de Estoque</h3>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
-                        Opcional
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Habilita o gerenciamento de estoque, upload de fotos no Cloudflare R2 e botões de ativar/desativar veículos.
-                    </p>
-                  </div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={moduloEstoqueAtivo}
-                    onChange={(e) => {
-                      const ativo = e.target.checked
-                      setModuloEstoqueAtivo(ativo)
-                      if (!ativo) {
-                        setFormData((prev) => ({ ...prev, tabela_estoque: "" }))
-                      }
-                    }}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                </label>
+            {/* MÓDULOS E FUNCIONALIDADES */}
+            <div>
+              <div className="pb-3 border-b border-gray-100 mb-4">
+                <h3 className="text-base font-semibold text-gray-900">Módulos e Funcionalidades</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Recursos opcionais habilitados para este cliente no painel.</p>
               </div>
 
-              {moduloEstoqueAtivo && (
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <TableSelect
-                    label="Tabela de Estoque (NocoDB ou Supabase)"
-                    value={formData.tabela_estoque}
-                    onChange={(v) => setFormData({ ...formData, tabela_estoque: v })}
-                    tables={tables}
-                    loadingTables={loadingTables}
-                  />
-                  <p className="text-[11px] text-gray-500 mt-1.5">
-                    Ex: <code className="text-indigo-600 font-mono font-semibold">cr_motors_estoque</code> ou o ID da tabela no NocoDB.
-                  </p>
+              <div className="space-y-4">
+                {/* 1. MÓDULO BANCOS (CREDERE) */}
+                <div className="p-4 sm:p-5 rounded-xl border border-gray-200 bg-white shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl shrink-0 mt-0.5">
+                        <Landmark className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-semibold text-gray-900">Integração Bancária — Credere</h4>
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Novo
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Permite ao lojista visualizar, cadastrar e reconectar credenciais bancárias (Pan, BV, Santander, Itaú, etc.).
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer ml-4">
+                      <input
+                        type="checkbox"
+                        checked={moduloBancosAtivo}
+                        onChange={(e) => {
+                          const ativo = e.target.checked
+                          setModuloBancosAtivo(ativo)
+                          if (ativo && credereStores.length === 0) {
+                            fetchCredereStores()
+                          }
+                          if (!ativo) {
+                            setCredereStoreId("")
+                          }
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                  </div>
+
+                  {moduloBancosAtivo && (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <label className="block text-xs font-semibold text-gray-700">
+                            Loja na Credere (store_id)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={fetchCredereStores}
+                            disabled={loadingCredereStores}
+                            className="text-[10px] text-gray-400 hover:text-indigo-600 flex items-center gap-1 font-medium cursor-pointer"
+                            title="Atualizar lista de lojas da Credere"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${loadingCredereStores ? "animate-spin" : ""}`} />
+                            Atualizar
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsManualCredereStore(!isManualCredereStore)}
+                          className="text-[10px] text-indigo-600 hover:underline font-medium cursor-pointer"
+                        >
+                          {isManualCredereStore ? "Selecionar da lista Credere" : "Digitar ID manualmente"}
+                        </button>
+                      </div>
+
+                      {isManualCredereStore ? (
+                        <input
+                          type="text"
+                          required={moduloBancosAtivo}
+                          value={credereStoreId}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '')
+                            setCredereStoreId(val)
+                            if (val.length >= 4) fetchStoreBanksAndAutoFill(val)
+                          }}
+                          className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-xs p-2.5 border font-mono"
+                          placeholder="Ex: 24491"
+                        />
+                      ) : (
+                        <div className="relative">
+                          <select
+                            required={moduloBancosAtivo}
+                            value={credereStoreId}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setCredereStoreId(val)
+                              if (val) fetchStoreBanksAndAutoFill(val)
+                            }}
+                            className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-xs p-2.5 pr-8 bg-white border font-mono appearance-none"
+                          >
+                            <option value="">
+                              {loadingCredereStores ? "Carregando lojas da Credere..." : "-- Selecione a loja correspondente na Credere --"}
+                            </option>
+                            {credereStores.map((st) => (
+                              <option key={st.id} value={st.id}>
+                                {st.name} (ID: {st.id}{st.cnpj ? ` • ${st.cnpj}` : ''}{st.city ? ` • ${st.city}-${st.uf}` : ''})
+                              </option>
+                            ))}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-gray-500">
+                            {loadingCredereStores ? (
+                              <RefreshCw className="h-4 w-4 animate-spin text-gray-400" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4" />
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <p className="text-[11px] text-gray-400 mt-1.5">
+                        Identificador da loja na Credere usado para consultar e gerenciar as credenciais bancárias.
+                      </p>
+
+                      {/* Configuração da Simulação salva automaticamente no banco para o n8n */}
+                      <SimulacaoConfigCard
+                        webhookUrl={simWebhookUrl}
+                        onChangeWebhookUrl={setSimWebhookUrl}
+                        uf={simUf}
+                        onChangeUf={setSimUf}
+                        cidade={simCidade}
+                        onChangeCidade={setSimCidade}
+                        zeroKm={simZeroKm}
+                        onChangeZeroKm={setSimZeroKm}
+                        minReturn={simMinReturn}
+                        onChangeMinReturn={setSimMinReturn}
+                        maxReturn={simMaxReturn}
+                        onChangeMaxReturn={setSimMaxReturn}
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {/* 2. MÓDULO DE ESTOQUE */}
+                <div className="p-4 sm:p-5 rounded-xl border border-gray-200 bg-white shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl shrink-0 mt-0.5">
+                        <Car className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-semibold text-gray-900">Módulo de Estoque</h4>
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200">
+                            Opcional
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Habilita o gerenciamento de estoque, upload de fotos no Cloudflare R2 e botões de ativar/desativar veículos.
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer ml-4">
+                      <input
+                        type="checkbox"
+                        checked={moduloEstoqueAtivo}
+                        onChange={(e) => {
+                          const ativo = e.target.checked
+                          setModuloEstoqueAtivo(ativo)
+                          if (!ativo) {
+                            setFormData((prev) => ({ ...prev, tabela_estoque: "" }))
+                          }
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                  </div>
+
+                  {moduloEstoqueAtivo && (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <TableSelect
+                        label="Tabela de Estoque (NocoDB ou Supabase)"
+                        value={formData.tabela_estoque}
+                        onChange={(v) => setFormData({ ...formData, tabela_estoque: v })}
+                        tables={tables}
+                        loadingTables={loadingTables}
+                      />
+                      <p className="text-[11px] text-gray-500 mt-1.5">
+                        Ex: <code className="text-indigo-600 font-mono font-semibold">cr_motors_estoque</code> ou o ID da tabela no NocoDB.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div>
@@ -496,16 +759,6 @@ export default function NovoClientePage() {
                     onChange={(e) => setFormData({ ...formData, supabase_service_role_key: e.target.value })}
                     className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono text-xs"
                     placeholder="eyJh..."
-                  />
-                </div>
-                
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp Token (UAZAPI)</label>
-                  <input
-                    type="text" value={formData.whatsapp_token}
-                    onChange={(e) => setFormData({ ...formData, whatsapp_token: e.target.value })}
-                    className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono text-xs"
-                    placeholder="Token gerado na UAZAPI"
                   />
                 </div>
               </div>

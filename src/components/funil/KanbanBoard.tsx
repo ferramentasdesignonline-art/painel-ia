@@ -45,6 +45,24 @@ type Coluna = {
   leads: Lead[];
 };
 
+function formatarTelefoneBusca(tel?: string | null): string {
+  if (!tel) return '';
+  const limpo = tel.replace(/\D/g, '');
+  if (limpo.length === 13 && limpo.startsWith('55')) {
+    return `+55 (${limpo.slice(2, 4)}) ${limpo.slice(4, 9)}-${limpo.slice(9)}`;
+  }
+  if (limpo.length === 12 && limpo.startsWith('55')) {
+    return `+55 (${limpo.slice(2, 4)}) ${limpo.slice(4, 8)}-${limpo.slice(8)}`;
+  }
+  if (limpo.length === 11) {
+    return `(${limpo.slice(0, 2)}) ${limpo.slice(2, 7)}-${limpo.slice(7)}`;
+  }
+  if (limpo.length === 10) {
+    return `(${limpo.slice(0, 2)}) ${limpo.slice(2, 6)}-${limpo.slice(6)}`;
+  }
+  return limpo;
+}
+
 export function KanbanBoard() {
   const [colunas, setColunas] = useState<Coluna[]>([]);
   const [nomeFunil, setNomeFunil] = useState('Funil de Leads');
@@ -450,12 +468,39 @@ export function KanbanBoard() {
   }, [colunas]);
 
   const colunasFiltradas = useMemo(() => {
+    const query = busca.trim().toLowerCase();
+    const queryDigits = query.replace(/\D/g, '');
+
     return colunas.map(col => ({
       ...col,
       leads: col.leads.filter(lead => {
-        const matchesBusca = (lead.nome?.toLowerCase().includes(busca.toLowerCase()) || 
-                             lead.veiculo_interessado?.toLowerCase().includes(busca.toLowerCase()));
-        if (!matchesBusca) return false;
+        if (query) {
+          const nomeStr = String(lead.nome || '').toLowerCase();
+          const telStr = String(lead.telefone || '').toLowerCase();
+          const telFormatado = formatarTelefoneBusca(lead.telefone).toLowerCase();
+          const telDigits = telStr.replace(/\D/g, '');
+          const telSem55 = telDigits.startsWith('55') ? telDigits.slice(2) : telDigits;
+
+          const cpfRaw = String(lead.cpf_cnpj || '').toLowerCase();
+          const cpfDigits = cpfRaw.replace(/\D/g, '');
+
+          const veiculoStr = String(lead.veiculo_interessado || '').toLowerCase();
+          const obsStr = String(lead.observacao_lead_qualificado || '').toLowerCase();
+
+          const matchesBusca = (
+            nomeStr.includes(query) ||
+            telStr.includes(query) ||
+            telFormatado.includes(query) ||
+            (queryDigits.length >= 2 && telDigits.includes(queryDigits)) ||
+            (queryDigits.length >= 2 && telSem55.includes(queryDigits)) ||
+            (cpfRaw && cpfRaw.includes(query)) ||
+            (queryDigits.length >= 3 && cpfDigits && cpfDigits.includes(queryDigits)) ||
+            veiculoStr.includes(query) ||
+            obsStr.includes(query)
+          );
+
+          if (!matchesBusca) return false;
+        }
 
         // Filtro por Canais de Atendimento (se houver algum marcado, deve pertencer a um deles)
         if (canaisFiltro.length > 0) {

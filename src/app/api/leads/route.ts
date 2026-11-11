@@ -58,7 +58,11 @@ export async function GET(request: Request) {
     const from = searchParams.get('from');
     const to = searchParams.get('to');
 
-    const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_leads;
+    if (clientConfig.tipo_atendimento === 'sem_ia' && !clientConfig.tabela_leads) {
+      clientConfig.tabela_leads = 'semia_contatos';
+    }
+
+    const isSemIA = !clientConfig.tabela_leads && (clientConfig.tipo_atendimento === 'sem_ia');
     let leadsIA: any[] = [];
     let blockedNumbers = new Set<string>();
 
@@ -182,14 +186,51 @@ export async function GET(request: Request) {
         return null;
       };
 
-      const contatosFiltrados = contatos.filter(c =>
-        c.is_group !== true &&
-        !c.wa_chatid?.includes('@g.us') &&
-        !c.telefone_contato?.includes('@g.us') &&
-        !c.telefone?.includes('@g.us')
-      );
+      const contatosFiltrados = contatos.filter(c => {
+        if (
+          c.is_group === true ||
+          c.wa_chatid?.includes('@g.us') ||
+          c.telefone_contato?.includes('@g.us') ||
+          c.telefone?.includes('@g.us')
+        ) return false;
 
-      leadsIA = contatosFiltrados.map(c => {
+        // Aplica filtro de período se fornecido (from e to)
+        if (from || to) {
+          const dStr = c.created_at || c.ultimo_timestamp || c.CreatedAt;
+          if (dStr) {
+            const d = new Date(dStr);
+            if (!isNaN(d.getTime())) {
+              if (from && d < new Date(from)) return false;
+              if (to && d > new Date(to)) return false;
+            }
+          }
+        }
+        return true;
+      });
+
+      // Deduplicação defensiva por telefone limpo
+      const mapContatosUnicos = new Map<string, any>();
+      for (const c of contatosFiltrados) {
+        const rawTel = String(c.telefone_contato || c.wa_chatid || '');
+        const phoneClean = rawTel.replace(/@.*$/, '').replace(/\D/g, '');
+        if (!phoneClean) continue;
+        if (!mapContatosUnicos.has(phoneClean)) {
+          mapContatosUnicos.set(phoneClean, c);
+        } else {
+          const exist = mapContatosUnicos.get(phoneClean)!;
+          if (Array.isArray(c.whatsapp_labels) && c.whatsapp_labels.length > 0) {
+            exist.whatsapp_labels = Array.from(new Set([...(exist.whatsapp_labels || []), ...c.whatsapp_labels]));
+          }
+          if (!exist.lead_visita_confirmada && c.lead_visita_confirmada) {
+            exist.lead_visita_confirmada = true;
+          }
+          if (!exist.lead_simulacao_aprovada && c.lead_simulacao_aprovada) {
+            exist.lead_simulacao_aprovada = true;
+          }
+        }
+      }
+
+      leadsIA = Array.from(mapContatosUnicos.values()).map(c => {
         const rawTel = String(c.telefone_contato || c.wa_chatid || '');
         const phoneClean = rawTel.replace(/@s\.whatsapp\.net/gi, '').replace(/@c\.us/gi, '').replace(/\D/g, '');
         const stats = getMsgStats(phoneClean);
@@ -199,7 +240,7 @@ export async function GET(request: Request) {
           nome: c.nome_contato || 'Cliente',
           telefone: phoneClean,
           phone: phoneClean,
-          created_at: c.created_at,
+          created_at: c.ultimo_timestamp || c.created_at,
           updated_at: c.atualizado_em,
           ultima_mensagem: stats?.ultima_mensagem || c.ultima_mensagem || null,
           ultimo_remetente: stats?.ultimo_remetente || (c.ultimo_remetente ? (c.ultimo_remetente === 'bot' || c.ultimo_remetente === 'vendedor' ? 'vendedor' : 'cliente') : null),
@@ -237,10 +278,14 @@ export async function GET(request: Request) {
     } else {
       const [leadsRes, blockedRes] = await Promise.all([
         isNocoDB
-          ? getNocoDBLeads(clientConfig.tabela_leads, { from, to })
+          ? getNocoDBLeads(clientConfig.tabela_leads, {
+              from,
+              to,
+              nomeInstancia: clientConfig.nome_instancia || clientConfig.nome,
+            })
           : getClientLeads(supabaseAdmin, clientConfig.tabela_leads, { from, to }),
         isNocoDB
-          ? getNocoDBBlockedNumbers(clientConfig.tabela_bloqueios)
+          ? (clientConfig.tabela_bloqueios ? getNocoDBBlockedNumbers(clientConfig.tabela_bloqueios) : Promise.resolve(new Set<string>()))
           : getAllBlockedNumbers(supabaseAdmin, clientConfig.tabela_bloqueios)
       ]);
       leadsIA = leadsRes;
@@ -335,6 +380,46 @@ export async function GET(request: Request) {
           }
         } catch (err) {
           console.error("Erro ao buscar mensagens da tabela_memoria da IA:", err);
+        }
+      }
+
+      // Se cliente sem IA com tabela_leads, enriquece com as mensagens reais de semia_mensagens
+      if (clientConfig.tipo_atendimento === 'sem_ia') {
+        try {
+          const { getWacloudMensagens } = await import('@/lib/nocodb/wacloud');
+          const rawCloudMsgs = await getWacloudMensagens(
+            "",
+            clientConfig.nome_instancia || clientConfig.nome,
+            10000,
+            "semia_mensagens"
+          );
+          const msgsPorTelefone = new Map<string, any[]>();
+          for (const m of rawCloudMsgs) {
+            const clean = String(m.telefone_contato || '').replace(/@.*$/, '').replace(/\D/g, '');
+            if (!clean) continue;
+            if (!msgsPorTelefone.has(clean)) msgsPorTelefone.set(clean, []);
+            msgsPorTelefone.get(clean)!.push(m);
+          }
+
+          for (const [tel, msgs] of msgsPorTelefone.entries()) {
+            if (msgs.length === 0) continue;
+            const lastMsg = msgs[msgs.length - 1];
+            let ultimoTimestamp = lastMsg.created_at || null;
+            if (lastMsg.message_id && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(lastMsg.message_id)) {
+              ultimoTimestamp = lastMsg.message_id;
+            } else if (typeof ultimoTimestamp === 'string' && (ultimoTimestamp.includes('+00:00') || ultimoTimestamp.includes('+00'))) {
+              ultimoTimestamp = ultimoTimestamp.replace(' ', 'T').replace(/\+00:?00$/, '-03:00');
+            }
+
+            statsMapIA.set(tel, {
+              ultima_mensagem: lastMsg.mensagem || null,
+              ultimo_remetente: lastMsg.enviado_por_mim ? 'vendedor' : 'cliente',
+              ultimo_timestamp: ultimoTimestamp,
+              tempo_medio_resposta_segundos: null,
+            });
+          }
+        } catch (cloudErr) {
+          console.warn("Aviso ao enriquecer mensagens semia:", cloudErr);
         }
       }
     }

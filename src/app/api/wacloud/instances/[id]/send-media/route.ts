@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getWacloudInstanciaByIdOrName, saveWacloudMensagem } from '@/lib/nocodb/wacloud';
-import { getWacloudSupabaseAdmin } from '@/lib/wacloud/supabase';
+import { getWacloudInstanciaByIdOrName, saveWacloudMensagem, upsertWacloudContato } from '@/lib/nocodb/wacloud';
 import { WACLOUD_CONFIG } from '@/lib/wacloud/config';
 
 export const dynamic = 'force-dynamic';
@@ -14,17 +13,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Faltam parâmetros' }, { status: 400 });
     }
 
-    let instance = await getWacloudInstanciaByIdOrName(params.id);
-    if (!instance?.token) {
-      const supabase = getWacloudSupabaseAdmin();
-      const { data: sbInst } = await supabase
-        .from('wacloud_instancias')
-        .select('id, token, nome_instancia')
-        .eq('id', params.id)
-        .single();
-      instance = sbInst;
-    }
-
+    const instance = await getWacloudInstanciaByIdOrName(params.id);
     if (!instance?.token) {
       return NextResponse.json({ error: 'Instância não encontrada' }, { status: 404 });
     }
@@ -45,7 +34,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Erro Uazapi: ' + JSON.stringify(data) }, { status: res.status });
     }
 
-    // Salvar mídia enviada no NocoDB
+    // Salvar mídia enviada e atualizar último snippet do contato no NocoDB
+    const nowIso = new Date().toISOString();
     try {
       await saveWacloudMensagem({
         nome_instancia: instance.nome_instancia,
@@ -54,7 +44,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
         enviado_por_mim: true,
         tipo_mensagem: type || 'media',
         url_midia: file,
-        timestamp_whatsapp: new Date().toISOString(),
+        timestamp_whatsapp: nowIso,
+      });
+
+      await upsertWacloudContato(instance.nome_instancia, number, {
+        ultima_mensagem: text || `[${type || 'mídia'}]`,
+        ultimo_tipo: type || 'media',
+        ultimo_timestamp: nowIso,
       });
     } catch (msgErr) {
       console.warn("Aviso ao salvar mídia enviada no NocoDB:", msgErr);

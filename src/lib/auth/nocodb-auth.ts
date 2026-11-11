@@ -153,7 +153,11 @@ export async function getNocoDBClientById(clientId: string | number): Promise<an
 
     if (res.ok) {
       const data = await res.json();
-      return isNum ? data : (data.list?.[0] || null);
+      const raw = isNum ? data : (data.list?.[0] || null);
+      if (raw && typeof raw === "object") {
+        if (raw.Id !== undefined && raw.id === undefined) raw.id = raw.Id;
+      }
+      return raw;
     }
   } catch (err) {
     console.error("Erro getNocoDBClientById:", err);
@@ -175,7 +179,11 @@ export async function getNocoDBClientByEmail(email: string): Promise<any | null>
 
     if (res.ok) {
       const data = await res.json();
-      return data.list?.[0] || null;
+      const raw = data.list?.[0] || null;
+      if (raw && typeof raw === "object") {
+        if (raw.Id !== undefined && raw.id === undefined) raw.id = raw.Id;
+      }
+      return raw;
     }
   } catch (err) {
     console.error("Erro getNocoDBClientByEmail:", err);

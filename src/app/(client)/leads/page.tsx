@@ -261,12 +261,50 @@ export default function LeadsPage() {
 
   const filtered = useMemo(() => {
     let result = leads.filter(l => {
-      const nomeStr = String(l.nome || '');
-      const telStr = String(l.telefone || l.phone || '');
-      const searchLower = search.toLowerCase();
-      const matchSearch =
-        nomeStr.toLowerCase().includes(searchLower) ||
-        telStr.includes(search);
+      // Busca flexível e universal (Nome, Telefone com/sem máscara, CPF com/sem pontuação, Veículo, Email)
+      const matchSearch = (() => {
+        if (!search || !search.trim()) return true;
+        const query = search.trim().toLowerCase();
+        const queryDigits = query.replace(/\D/g, '');
+
+        // 1. Nome
+        const nomeStr = String(l.nome || '').toLowerCase();
+        if (nomeStr.includes(query)) return true;
+
+        // 2. Telefone de qualquer forma: (11, (11) 9..., 99818-..., com/sem 55, pedaços
+        const telStr = String(l.telefone || l.phone || '').toLowerCase();
+        if (telStr.includes(query)) return true;
+
+        const telFormatado = formatarTelefone(l.telefone || l.phone).toLowerCase();
+        if (telFormatado.includes(query)) return true;
+
+        const telDigits = telStr.replace(/\D/g, '');
+        if (queryDigits.length >= 2 && telDigits.includes(queryDigits)) return true;
+
+        const telSem55 = telDigits.startsWith('55') ? telDigits.slice(2) : telDigits;
+        if (queryDigits.length >= 2 && telSem55.includes(queryDigits)) return true;
+
+        // 3. CPF / CNPJ de qualquer forma (com pontos/traço, só números ou pedaços)
+        const cpfRaw = String(l.cpf_cnpj || l.cpfCnpj || l.cpf || '').toLowerCase();
+        if (cpfRaw && cpfRaw.includes(query)) return true;
+
+        const cpfDigits = cpfRaw.replace(/\D/g, '');
+        if (queryDigits.length >= 3 && cpfDigits && cpfDigits.includes(queryDigits)) return true;
+
+        // 4. Veículo de interesse
+        const veiculoStr = String(l.veiculo_interessado || l.veiculo || l.carro || '').toLowerCase();
+        if (veiculoStr.includes(query)) return true;
+
+        // 5. Email
+        const emailStr = String(l.email || '').toLowerCase();
+        if (emailStr.includes(query)) return true;
+
+        // 6. Observação
+        const obsStr = String(l.observacao_lead_qualificado || '').toLowerCase();
+        if (obsStr.includes(query)) return true;
+
+        return false;
+      })();
 
       const matchStatus = !filterStatus || getStageKey(l) === filterStatus;
 

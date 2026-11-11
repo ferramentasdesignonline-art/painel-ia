@@ -21,6 +21,64 @@ export async function GET(request: Request) {
     }
 
     const pureNumbers = telefone.replace(/\D/g, '')
+    const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_memoria;
+
+    if (isSemIA) {
+      const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome;
+      let mensagens: any[] = [];
+
+      try {
+        const { getWacloudMensagens } = await import('@/lib/nocodb/wacloud');
+        mensagens = await getWacloudMensagens(pureNumbers, nomeInstancia, 500, "semia_mensagens");
+      } catch (nocoErr) {
+        console.warn("Aviso ao buscar mensagens no NocoDB em chat:", nocoErr);
+      }
+
+      if (!mensagens || mensagens.length === 0) {
+        const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
+        const wacloudAdmin = getWacloudSupabaseAdmin();
+        const { data: sbMsgs } = await wacloudAdmin
+          .from('wacloud_mensagens')
+          .select('*')
+          .eq('nome_instancia', nomeInstancia)
+          .or(`telefone_contato.ilike.%${pureNumbers}%,telefone_contato.ilike.%${pureNumbers.slice(-8)}%`)
+          .order('created_at', { ascending: true });
+        mensagens = sbMsgs || [];
+      }
+
+      const normalizeTimestamp = (row: any) => {
+        // 1. Se message_id é uma data ISO válida (ex: "2026-11-09T13:38:05.000Z"), é o timestamp UTC exato enviado pelo WhatsApp
+        if (row.message_id && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(row.message_id)) {
+          return row.message_id;
+        }
+        // 2. Se timestamp_whatsapp existir e for válido
+        if (row.timestamp_whatsapp && /^\d{4}-\d{2}-\d{2}/.test(row.timestamp_whatsapp)) {
+          return row.timestamp_whatsapp;
+        }
+        const raw = row.created_at || row.CreatedAt;
+        if (!raw) return new Date().toISOString();
+        if (typeof raw === 'string') {
+          // 3. No NocoDB, se foi gravado como horário de Brasília com "+00:00" ao final (ex: "2026-11-09 10:38:08+00:00"),
+          // convertemos para "-03:00" para evitar a dupla subtração de fuso no navegador
+          if (raw.includes('+00:00') || raw.includes('+00')) {
+            return raw.replace(' ', 'T').replace(/\+00:?00$/, '-03:00');
+          }
+        }
+        return raw;
+      };
+
+      const formattedMessages = mensagens.map((row) => ({
+        id: row.id ? row.id.toString() : (row.Id ? row.Id.toString() : `${row.telefone_contato}-${row.created_at || row.CreatedAt || Date.now()}`),
+        type: row.enviado_por_mim ? 'ai' : 'human',
+        message: row.mensagem ? (row.url_midia && !row.mensagem.includes(row.url_midia) ? `${row.mensagem}\n${row.url_midia}` : row.mensagem) : (row.url_midia || ''),
+        created_at: normalizeTimestamp(row),
+        tipo_mensagem: row.tipo_mensagem,
+        url_midia: row.url_midia,
+      }));
+
+      return NextResponse.json({ data: formattedMessages || [] }, { status: 200 });
+    }
+
     const isNocoDB = isNocoDBClient(clientConfig)
 
     if (isNocoDB) {
@@ -41,43 +99,6 @@ export async function GET(request: Request) {
     const supabaseAdmin = createClient(clientSupabaseUrl, clientSupabaseKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
-
-    const isSemIA = clientConfig.tipo_atendimento === 'sem_ia' || !clientConfig.tabela_memoria;
-
-    if (isSemIA) {
-      const nomeInstancia = clientConfig.nome_instancia || clientConfig.nome;
-      let mensagens: any[] = [];
-
-      try {
-        const { getWacloudMensagens } = await import('@/lib/nocodb/wacloud');
-        mensagens = await getWacloudMensagens(pureNumbers, nomeInstancia, 500);
-      } catch (nocoErr) {
-        console.warn("Aviso ao buscar mensagens no NocoDB em chat:", nocoErr);
-      }
-
-      if (!mensagens || mensagens.length === 0) {
-        const { getWacloudSupabaseAdmin } = await import('@/lib/wacloud/supabase');
-        const wacloudAdmin = getWacloudSupabaseAdmin();
-        const { data: sbMsgs } = await wacloudAdmin
-          .from('wacloud_mensagens')
-          .select('*')
-          .eq('nome_instancia', nomeInstancia)
-          .or(`telefone_contato.ilike.%${pureNumbers}%,telefone_contato.ilike.%${pureNumbers.slice(-8)}%`)
-          .order('created_at', { ascending: true });
-        mensagens = sbMsgs || [];
-      }
-
-      const formattedMessages = mensagens.map((row) => ({
-        id: row.id ? row.id.toString() : `${row.telefone_contato}-${row.created_at}`,
-        type: row.enviado_por_mim ? 'ai' : 'human',
-        message: row.mensagem || '',
-        created_at: row.created_at,
-        tipo_mensagem: row.tipo_mensagem,
-        url_midia: row.url_midia,
-      }));
-
-      return NextResponse.json({ data: formattedMessages || [] }, { status: 200 });
-    }
 
     const { data: mensagens, error } = await supabaseAdmin
       .from(clientConfig.tabela_memoria)
@@ -227,9 +248,10 @@ export async function POST(request: Request) {
     if (isSemIAClient) {
       const nomeInstancia = instance?.nome_instancia || clientConfig.nome_instancia || clientConfig.nome;
 
-      // 1. Salva no NocoDB (WaCloud)
+      // 1. Salva no NocoDB (semia_mensagens e wacloud_mensagens)
       try {
         const { saveWacloudMensagem } = await import('@/lib/nocodb/wacloud');
+        const sentMessageId = new Date().toISOString();
         await saveWacloudMensagem({
           nome_instancia: nomeInstancia,
           telefone_contato: pureNumbers,
@@ -238,7 +260,19 @@ export async function POST(request: Request) {
           enviado_por_mim: true,
           tipo_mensagem: type || 'text',
           url_midia: mediaUrl || null,
-        });
+          message_id: sentMessageId,
+        }, 'semia_mensagens');
+
+        await saveWacloudMensagem({
+          nome_instancia: nomeInstancia,
+          telefone_contato: pureNumbers,
+          nome_contato: 'Atendente',
+          mensagem: text || fileName || '',
+          enviado_por_mim: true,
+          tipo_mensagem: type || 'text',
+          url_midia: mediaUrl || null,
+          message_id: sentMessageId,
+        }, 'wacloud_mensagens').catch(() => {});
       } catch (nocoMsgErr) {
         console.warn("Aviso ao salvar mensagem no NocoDB:", nocoMsgErr);
       }
