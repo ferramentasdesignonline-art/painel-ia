@@ -5,5 +5,5 @@ export const WACLOUD_CONFIG = {
   
   uazapiBaseUrl: 'https://designonline.uazapi.com',
   uazapiAdminToken: 'fX96H82QViNa9QNDYxYtmDxIubCBlh1MTMgVy5Eb1EoedURXD3',
-  webhookUrl: 'https://n8n-webhook.vpsdesignonline.com.br/webhook/controle-conversas'
+  webhookUrl: 'https://n8n-webhook.vpsdesignonline.com.br/webhook/conversas-listas'
 };
