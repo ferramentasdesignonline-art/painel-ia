@@ -20,6 +20,7 @@ export const SISTEMA_TABLES = {
   TAGS: "mrkmdcmmhmjsob6",
   LEAD_TAGS: "mwmil2suropx22w",
   ANALISES: "mhpfeq6riok04jb",
+  ONBOARDINGS: "m5b8egpou3vhuas",
 };
 
 // Cache de mapeamento de UUID antigo -> NocoDB Id para evitar chamadas redundantes
@@ -989,5 +990,57 @@ export async function saveNocoDBAnalise(data: any): Promise<any> {
     body: JSON.stringify(payload),
   });
 
+  return normalizeRecord(result);
+}
+
+// ==========================================
+// ONBOARDINGS
+// ==========================================
+
+export async function getNocoDBOnboardings(): Promise<any[]> {
+  try {
+    const data = await nocoRequest(`/api/v2/tables/${SISTEMA_TABLES.ONBOARDINGS}/records?sort=-CreatedAt`);
+    return (data.list || []).map(normalizeRecord);
+  } catch (err) {
+    console.error("Erro em getNocoDBOnboardings:", err);
+    return [];
+  }
+}
+
+export async function getNocoDBOnboardingByToken(token: string): Promise<any | null> {
+  try {
+    const where = encodeURIComponent(`(token,eq,${token})`);
+    const data = await nocoRequest(`/api/v2/tables/${SISTEMA_TABLES.ONBOARDINGS}/records?where=${where}&limit=1`);
+    const item = data.list?.[0];
+    return item ? normalizeRecord(item) : null;
+  } catch (err) {
+    console.error("Erro em getNocoDBOnboardingByToken:", err);
+    return null;
+  }
+}
+
+export async function createNocoDBOnboarding(data: { nome_cliente: string; token: string }): Promise<any> {
+  const payload = {
+    nome_cliente: data.nome_cliente,
+    token: data.token,
+    status: "pendente",
+    whatsapp_conectado: false,
+  };
+  const result = await nocoRequest(`/api/v2/tables/${SISTEMA_TABLES.ONBOARDINGS}/records`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return normalizeRecord(result);
+}
+
+export async function updateNocoDBOnboarding(id: number | string, data: any): Promise<any> {
+  const payload = {
+    Id: Number(id),
+    ...data,
+  };
+  const result = await nocoRequest(`/api/v2/tables/${SISTEMA_TABLES.ONBOARDINGS}/records`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
   return normalizeRecord(result);
 }

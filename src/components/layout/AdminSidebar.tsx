@@ -2,13 +2,14 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Store, Building2, Settings, LogOut, Smartphone, Cloud, Landmark, Calculator } from "lucide-react"
+import { LayoutDashboard, Store, Building2, Settings, LogOut, Smartphone, Cloud, Landmark, Calculator, ClipboardCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { logout } from "@/app/(auth)/logout/actions"
 
 const navigation = [
   { name: "Overview", href: "/admin/dashboard", icon: LayoutDashboard },
   { name: "Clientes (SaaS)", href: "/admin/clientes", icon: Store },
+  { name: "Onboarding", href: "/admin/onboarding", icon: ClipboardCheck },
   { name: "Bancos", href: "/admin/bancos", icon: Landmark },
   { name: "Simulações", href: "/admin/simulacoes", icon: Calculator },
   { name: "Monitor WhatsApp", href: "/admin/whatsapp", icon: Smartphone },
