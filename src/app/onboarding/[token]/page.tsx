@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useParams } from "next/navigation"
 import { 
   Building2, 
@@ -21,17 +21,11 @@ import {
   PackageCheck,
   Info,
   Plus,
-  Search,
-  Check,
-  X,
+  Trash2,
   UploadCloud,
   Image as ImageIcon,
-  Fuel,
-  Gauge,
-  Calendar,
-  Layers,
-  SlidersHorizontal,
-  XCircle,
+  Check,
+  X,
   Eye
 } from "lucide-react"
 
@@ -197,8 +191,7 @@ const BANCOS_CONFIG: Record<string, { label: string; fields: BancoField[] }> = {
   },
 }
 
-// Veículos de Demonstração Interativa para a opção "Não possui CRM"
-interface DemoVehicle {
+export interface VeiculoInicial {
   id: string
   marca: string
   modelo: string
@@ -209,57 +202,25 @@ interface DemoVehicle {
   combustivel: string
   cambio: string
   valor: string
-  foto: string
-  ativo: boolean
+  fotos: string[]
   opcionais: string[]
 }
 
-const DEMO_VEICULOS_INICIAIS: DemoVehicle[] = [
-  {
-    id: "demo-1",
-    marca: "Toyota",
-    modelo: "Corolla",
-    versao: "Altis Hybrid 1.8 16V",
-    ano: "2023/2024",
-    cor: "Branco Pérola",
-    km: "28.500 km",
-    combustivel: "Híbrido",
-    cambio: "Automático CVT",
-    valor: "R$ 164.900",
-    foto: "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&w=600&q=80",
-    ativo: true,
-    opcionais: ["Teto Solar", "Bancos de Couro", "Sensor de Ré", "Piloto Automático", "Faróis Full LED"],
-  },
-  {
-    id: "demo-2",
-    marca: "Jeep",
-    modelo: "Compass",
-    versao: "Longitude 1.3 Turbo T270",
-    ano: "2022/2023",
-    cor: "Cinza Granite",
-    km: "41.200 km",
-    combustivel: "Flex",
-    cambio: "Automático",
-    valor: "R$ 139.900",
-    foto: "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=600&q=80",
-    ativo: true,
-    opcionais: ["Multimídia 10.1\"", "Câmera de Ré", "Ar Digital Dual Zone", "Rodas Aro 18"],
-  },
-  {
-    id: "demo-3",
-    marca: "Honda",
-    modelo: "Civic",
-    versao: "Touring 1.5 Turbo",
-    ano: "2021/2021",
-    cor: "Preto Cristal",
-    km: "54.000 km",
-    combustivel: "Gasolina",
-    cambio: "Automático CVT",
-    valor: "R$ 129.900",
-    foto: "https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=600&q=80",
-    ativo: false,
-    opcionais: ["Sistema LaneWatch", "Painel Digital TFT", "Teto Solar Elétrico", "Bancos em Couro"],
-  },
+const OPCIONAIS_SUGESTOES = [
+  "Ar-condicionado",
+  "Direção Elétrica / Hidráulica",
+  "Vidros Elétricos",
+  "Travas Elétricas",
+  "Bancos de Couro",
+  "Teto Solar",
+  "Central Multimídia",
+  "Câmera de Ré",
+  "Sensor de Estacionamento",
+  "Rodas de Liga Leve",
+  "Faróis Full LED",
+  "Piloto Automático",
+  "Chave Presencial",
+  "Airbags / Freios ABS",
 ]
 
 export default function OnboardingPublicPage() {
@@ -277,7 +238,7 @@ export default function OnboardingPublicPage() {
 
   // Formulário - Etapa 1
   const [nomeEmpresa, setNomeEmpresa] = useState("")
-  const [nomeIa, setNomeIa] = useState("") // Sem padrão
+  const [nomeIa, setNomeIa] = useState("")
   const [instagram, setInstagram] = useState("")
   const [cep, setCep] = useState("")
   const [buscandoCep, setBuscandoCep] = useState(false)
@@ -290,19 +251,30 @@ export default function OnboardingPublicPage() {
   const [tipoHorario, setTipoHorario] = useState<"seg_sex" | "seg_sab" | "personalizado">("seg_sab")
   const [horarioTexto, setHorarioTexto] = useState("Segunda a Sexta: 08:00 às 18:00 | Sábado: 08:00 às 13:00")
 
-  // Formulário - Etapa 2: CRM
+  // Formulário - Etapa 2: CRM & Veículos Iniciais
   const [sistemaEstoque, setSistemaEstoque] = useState("BNDV")
   const [sistemaOutro, setSistemaOutro] = useState("")
   const [crmEmail, setCrmEmail] = useState("")
   const [crmSenha, setCrmSenha] = useState("")
 
-  // Estado do Módulo de Estoque Interativo (Demonstração)
-  const [demoVeiculos, setDemoVeiculos] = useState<DemoVehicle[]>(DEMO_VEICULOS_INICIAIS)
-  const [demoTab, setDemoTab] = useState<"ativos" | "inativos">("ativos")
-  const [demoSearch, setDemoSearch] = useState("")
-  const [demoModalOpen, setDemoModalOpen] = useState(false)
-  const [demoSelectedVehicle, setDemoSelectedVehicle] = useState<DemoVehicle | null>(null)
-  const [demoToast, setDemoToast] = useState<string | null>(null)
+  // Veículos Iniciais para quem NÃO possui CRM
+  const [veiculosIniciais, setVeiculosIniciais] = useState<VeiculoInicial[]>([])
+  const [novoCarro, setNovoCarro] = useState<Partial<VeiculoInicial>>({
+    marca: "",
+    modelo: "",
+    versao: "",
+    ano: "",
+    cor: "",
+    km: "",
+    combustivel: "Flex",
+    cambio: "Automático",
+    valor: "",
+    fotos: [],
+    opcionais: [],
+  })
+  const [uploadingCarPhotos, setUploadingCarPhotos] = useState(false)
+  const [showAddCarForm, setShowAddCarForm] = useState(true)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Formulário - Etapa 3: Bancos
   const [vaiTerSimulacao, setVaiTerSimulacao] = useState(false)
@@ -411,21 +383,114 @@ export default function OnboardingPublicPage() {
     }))
   }
 
-  // Ações da Demonstração de Estoque
-  const handleToggleDemoAtivo = (id: string) => {
-    setDemoVeiculos(prev => prev.map(v => {
-      if (v.id === id) {
-        const novoStatus = !v.ativo
-        showDemoToast(`Veículo ${v.marca} ${v.modelo} ${novoStatus ? "reativado na IA" : "pausado temporariamente"}!`)
-        return { ...v, ativo: novoStatus }
+  // Upload de Fotos do Veículo
+  const handleUploadPhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    setUploadingCarPhotos(true)
+    setStepError(null)
+    try {
+      const fd = new FormData()
+      for (let i = 0; i < files.length; i++) {
+        fd.append("files", files[i])
       }
-      return v
+      const res = await fetch(`/api/onboarding/${token}/upload`, {
+        method: "POST",
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Erro ao subir imagens")
+      if (Array.isArray(data.urls)) {
+        setNovoCarro(prev => ({
+          ...prev,
+          fotos: [...(prev.fotos || []), ...data.urls]
+        }))
+      }
+    } catch (err: any) {
+      setStepError(err.message || "Erro no upload das fotos")
+    } finally {
+      setUploadingCarPhotos(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
+  const handleRemovePhoto = (photoUrl: string) => {
+    setNovoCarro(prev => ({
+      ...prev,
+      fotos: (prev.fotos || []).filter(u => u !== photoUrl)
     }))
   }
 
-  const showDemoToast = (msg: string) => {
-    setDemoToast(msg)
-    setTimeout(() => setDemoToast(null), 3500)
+  const toggleOpcionalCarro = (op: string) => {
+    const current = novoCarro.opcionais || []
+    if (current.includes(op)) {
+      setNovoCarro(prev => ({ ...prev, opcionais: current.filter(o => o !== op) }))
+    } else {
+      setNovoCarro(prev => ({ ...prev, opcionais: [...current, op] }))
+    }
+  }
+
+  const handleSalvarCarroNaLista = () => {
+    if (!novoCarro.marca?.trim()) {
+      setStepError("Por favor, informe a Marca do veículo (ex: Toyota).")
+      return
+    }
+    if (!novoCarro.modelo?.trim()) {
+      setStepError("Por favor, informe o Modelo do veículo (ex: Corolla).")
+      return
+    }
+    if (!novoCarro.ano?.trim()) {
+      setStepError("Por favor, informe o Ano / Modelo do veículo (ex: 2023/2024).")
+      return
+    }
+    if (!novoCarro.valor?.trim()) {
+      setStepError("Por favor, informe o Valor de Venda do veículo (ex: R$ 145.000).")
+      return
+    }
+    if (!novoCarro.fotos || novoCarro.fotos.length === 0) {
+      setStepError("Por favor, envie pelo menos 1 foto do veículo para a IA poder apresentar.")
+      return
+    }
+
+    const veic: VeiculoInicial = {
+      id: `veic_${Date.now()}`,
+      marca: novoCarro.marca.trim(),
+      modelo: novoCarro.modelo.trim(),
+      versao: (novoCarro.versao || "").trim(),
+      ano: novoCarro.ano.trim(),
+      cor: (novoCarro.cor || "").trim(),
+      km: (novoCarro.km || "").trim(),
+      combustivel: novoCarro.combustivel || "Flex",
+      cambio: novoCarro.cambio || "Automático",
+      valor: novoCarro.valor.trim(),
+      fotos: novoCarro.fotos,
+      opcionais: novoCarro.opcionais || [],
+    }
+
+    setVeiculosIniciais(prev => [...prev, veic])
+    setNovoCarro({
+      marca: "",
+      modelo: "",
+      versao: "",
+      ano: "",
+      cor: "",
+      km: "",
+      combustivel: "Flex",
+      cambio: "Automático",
+      valor: "",
+      fotos: [],
+      opcionais: [],
+    })
+    setShowAddCarForm(false)
+    setStepError(null)
+  }
+
+  const handleRemoverVeiculoLista = (id: string) => {
+    setVeiculosIniciais(prev => {
+      const rest = prev.filter(v => v.id !== id)
+      if (rest.length === 0) setShowAddCarForm(true)
+      return rest
+    })
   }
 
   // Validador por Etapa
@@ -488,7 +553,34 @@ export default function OnboardingPublicPage() {
         setStepError("Por favor, especifique o nome do sistema de estoque.")
         return false
       }
-      if (sistemaEstoque !== "Não possui") {
+      if (sistemaEstoque === "Não possui") {
+        // Se o lojista preencheu o formulário mas não clicou em "+ Salvar Veículo",
+        // tentamos salvar automaticamente para facilitar a vida dele
+        let veics = [...veiculosIniciais]
+        if (veics.length === 0 && novoCarro.marca && novoCarro.modelo && novoCarro.valor && novoCarro.fotos && novoCarro.fotos.length > 0) {
+          const autoVeic: VeiculoInicial = {
+            id: `veic_${Date.now()}`,
+            marca: novoCarro.marca.trim(),
+            modelo: novoCarro.modelo.trim(),
+            versao: (novoCarro.versao || "").trim(),
+            ano: (novoCarro.ano || "").trim(),
+            cor: (novoCarro.cor || "").trim(),
+            km: (novoCarro.km || "").trim(),
+            combustivel: novoCarro.combustivel || "Flex",
+            cambio: novoCarro.cambio || "Automático",
+            valor: novoCarro.valor.trim(),
+            fotos: novoCarro.fotos,
+            opcionais: novoCarro.opcionais || [],
+          }
+          veics.push(autoVeic)
+          setVeiculosIniciais(veics)
+        }
+
+        if (veics.length === 0) {
+          setStepError("Como sua loja não tem CRM externo, é obrigatório cadastrar pelo menos 1 veículo (com Marca, Modelo, Ano, Valor e Fotos) para a IA começar a operar.")
+          return false
+        }
+      } else {
         if (!crmEmail.trim()) {
           setStepError("Por favor, informe o e-mail ou usuário de acesso ao CRM.")
           return false
@@ -648,6 +740,7 @@ export default function OnboardingPublicPage() {
         },
         horarios: horarioTexto,
         sistema_estoque: sistemaEstoque === "Outro" ? sistemaOutro : sistemaEstoque,
+        veiculos_iniciais: sistemaEstoque === "Não possui" ? veiculosIniciais : [],
         acesso_crm: sistemaEstoque === "Não possui" ? { email: "Nao se aplica", senha: "Nao se aplica" } : {
           email: crmEmail,
           senha: crmSenha,
@@ -731,14 +824,6 @@ export default function OnboardingPublicPage() {
       </div>
     )
   }
-
-  // Filtra veículos de demonstração
-  const demoExibidos = demoVeiculos.filter(v => {
-    const statusMatch = demoTab === "ativos" ? v.ativo : !v.ativo
-    const searchMatch = !demoSearch.trim() || 
-      `${v.marca} ${v.modelo} ${v.versao} ${v.ano}`.toLowerCase().includes(demoSearch.toLowerCase())
-    return statusMatch && searchMatch
-  })
 
   return (
     <div className="min-h-screen bg-slate-50/80 font-poppins py-8 px-4 sm:px-6 lg:px-8">
@@ -1102,11 +1187,11 @@ export default function OnboardingPublicPage() {
                   </div>
                 )}
 
-                {/* DEMONSTRAÇÃO REPLICANDO O MÓDULO DE ESTOQUE QUANDO "NÃO POSSUI" */}
+                {/* CADASTRO REAL DE VEÍCULOS QUANDO "NÃO POSSUI" CRM */}
                 {sistemaEstoque === "Não possui" ? (
-                  <div className="space-y-4 pt-2">
+                  <div className="space-y-5 pt-2">
                     
-                    {/* Banner de Explicação */}
+                    {/* Banner explicativo */}
                     <div className="p-5 bg-linear-to-br from-indigo-50/90 via-purple-50/50 to-slate-50 border border-indigo-200/80 rounded-3xl space-y-3 text-slate-800">
                       <div className="flex items-start gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -1115,220 +1200,301 @@ export default function OnboardingPublicPage() {
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="text-sm font-bold text-indigo-950">
-                              Como funcionará o seu estoque de veículos:
+                              Cadastre o seu Primeiro Veículo (Obrigatório)
                             </h3>
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
-                              Módulo Próprio no Painel
+                              Estoque no Painel
                             </span>
                           </div>
                           <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                            Como sua concessionária não usa integradores externos (CRM), você gerenciará seus carros <strong>diretamente no nosso módulo de Estoque</strong>. Veja abaixo uma demonstração de como o painel funciona:
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
-                        <div className="bg-white/90 p-3 rounded-2xl border border-indigo-100 space-y-1">
-                          <span className="font-bold text-indigo-700 flex items-center gap-1.5 text-[11px]">
-                            <PackageCheck className="w-3.5 h-3.5" />
-                            1. Cadastro Prático
-                          </span>
-                          <p className="text-[11px] text-slate-600 leading-snug">
-                            Insira fotos, marca, modelo, ano, opcionais e valor em segundos.
-                          </p>
-                        </div>
-                        <div className="bg-white/90 p-3 rounded-2xl border border-indigo-100 space-y-1">
-                          <span className="font-bold text-indigo-700 flex items-center gap-1.5 text-[11px]">
-                            <Sparkles className="w-3.5 h-3.5" />
-                            2. Sincronia em Tempo Real
-                          </span>
-                          <p className="text-[11px] text-slate-600 leading-snug">
-                            A IA é atualizada no mesmo segundo em que você cadastra ou vende.
-                          </p>
-                        </div>
-                        <div className="bg-white/90 p-3 rounded-2xl border border-indigo-100 space-y-1">
-                          <span className="font-bold text-indigo-700 flex items-center gap-1.5 text-[11px]">
-                            <Smartphone className="w-3.5 h-3.5" />
-                            3. WhatsApp Automático
-                          </span>
-                          <p className="text-[11px] text-slate-600 leading-snug">
-                            A IA envia fotos, especificações e propostas exatas aos leads.
+                            Como sua concessionária não utiliza integrador externo, seu estoque será gerido no nosso módulo próprio. 
+                            <strong> Cadastre pelo menos 1 veículo abaixo</strong> com fotos para que a IA já comece a atender e enviar propostas!
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    {/* MOCKUP INTERATIVO DO MÓDULO DE ESTOQUE */}
-                    <div className="p-4 sm:p-5 bg-slate-900 rounded-3xl border border-slate-800 text-white space-y-4 shadow-xl">
-                      
-                      {/* Top Bar da Demonstração */}
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                              Demonstração do Módulo de Estoque
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5">
-                            Assim será a tela onde você e sua equipe gerenciarão os veículos.
-                          </p>
+                    {/* Lista de Carros Já Cadastrados */}
+                    {veiculosIniciais.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            Veículos Adicionados ({veiculosIniciais.length})
+                          </h4>
+
+                          {!showAddCarForm && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAddCarForm(true)}
+                              className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl text-xs font-bold border border-indigo-200 transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Cadastrar Outro Veículo
+                            </button>
+                          )}
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDemoSelectedVehicle(null)
-                            setDemoModalOpen(true)
-                          }}
-                          className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Simular Cadastro de Veículo
-                        </button>
-                      </div>
-
-                      {/* Notificação Toast da Demo */}
-                      {demoToast && (
-                        <div className="p-2.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs flex items-center gap-2 animate-fadeIn">
-                          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                          <span>{demoToast}</span>
-                        </div>
-                      )}
-
-                      {/* Controles de Filtros e Abas da Demo */}
-                      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
-                        {/* Abas */}
-                        <div className="flex bg-slate-800/80 p-1 rounded-xl">
-                          <button
-                            type="button"
-                            onClick={() => setDemoTab("ativos")}
-                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                              demoTab === "ativos" ? "bg-indigo-600 text-white shadow-xs" : "text-slate-400 hover:text-slate-200"
-                            }`}
-                          >
-                            Ativos ({demoVeiculos.filter(v => v.ativo).length})
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDemoTab("inativos")}
-                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                              demoTab === "inativos" ? "bg-indigo-600 text-white shadow-xs" : "text-slate-400 hover:text-slate-200"
-                            }`}
-                          >
-                            Pausados / Vendidos ({demoVeiculos.filter(v => !v.ativo).length})
-                          </button>
-                        </div>
-
-                        {/* Barra de Busca da Demo */}
-                        <div className="relative">
-                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            value={demoSearch}
-                            onChange={(e) => setDemoSearch(e.target.value)}
-                            placeholder="Buscar modelo na demo..."
-                            className="w-full sm:w-48 pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Grid de Cards de Veículos da Demonstração */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                        {demoExibidos.map((carro) => (
-                          <div 
-                            key={carro.id}
-                            className="bg-slate-800/90 border border-slate-700/80 rounded-2xl overflow-hidden shadow-xs hover:border-indigo-500/60 transition-all flex flex-col"
-                          >
-                            {/* Imagem do Carro */}
-                            <div className="relative aspect-16/9 bg-slate-950 overflow-hidden">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {veiculosIniciais.map((veic, idx) => (
+                            <div key={veic.id} className="p-3 bg-white border border-slate-200 rounded-2xl shadow-xs flex items-center gap-3">
                               <img 
-                                src={carro.foto} 
-                                alt={`${carro.marca} ${carro.modelo}`}
-                                className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                                src={veic.fotos[0] || "/placeholder-car.png"} 
+                                alt={veic.modelo}
+                                className="w-16 h-16 rounded-xl object-cover border border-slate-100 shrink-0"
                               />
-                              <div className="absolute top-2 left-2 flex gap-1">
-                                {carro.ativo ? (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/90 text-white backdrop-blur-xs flex items-center gap-1 shadow-xs">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                                    Sincronizado na IA
-                                  </span>
-                                ) : (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-600/90 text-slate-200 backdrop-blur-xs">
-                                    Pausado
+                              <div className="flex-1 min-w-0">
+                                <h5 className="text-xs font-bold text-slate-900 truncate">
+                                  {veic.marca} {veic.modelo}
+                                </h5>
+                                <p className="text-[11px] text-slate-500 truncate">{veic.versao || veic.ano}</p>
+                                <span className="text-xs font-bold text-emerald-600">{veic.valor}</span>
+                                <span className="text-[10px] text-slate-400 block">{veic.fotos.length} fotos</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoverVeiculoLista(veic.id)}
+                                className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                                title="Remover veículo"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Formulário de Cadastro do Veículo */}
+                    {showAddCarForm && (
+                      <div className="p-5 bg-slate-50 border border-slate-200 rounded-3xl space-y-4">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-900 flex items-center gap-1.5">
+                            <Plus className="w-4 h-4 text-indigo-600" />
+                            {veiculosIniciais.length === 0 ? "1. Dados do Primeiro Veículo" : "Cadastrar Mais Um Veículo"}
+                          </h4>
+
+                          {veiculosIniciais.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAddCarForm(false)}
+                              className="text-xs text-slate-400 hover:text-slate-600 font-semibold cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                          )}
+                        </div>
+
+                        {/* UPLOAD DE FOTOS REAL */}
+                        <div className="space-y-2">
+                          <label className="block text-xs font-bold text-slate-700">
+                            Fotos do Veículo (Mínimo 1 foto) *
+                          </label>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                            {novoCarro.fotos?.map((fUrl, fIdx) => (
+                              <div key={fIdx} className="relative aspect-4/3 rounded-xl overflow-hidden border border-slate-200 bg-black group">
+                                <img src={fUrl} alt="Foto veículo" className="w-full h-full object-cover" />
+                                {fIdx === 0 && (
+                                  <span className="absolute top-1 left-1 bg-indigo-600 text-white text-[9px] px-1.5 py-0.5 rounded font-bold shadow-xs">
+                                    Capa
                                   </span>
                                 )}
-                              </div>
-                              <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[11px] font-bold bg-black/75 text-white backdrop-blur-xs font-mono">
-                                {carro.valor}
-                              </span>
-                            </div>
-
-                            {/* Informações */}
-                            <div className="p-3 space-y-2 flex-1 flex flex-col justify-between">
-                              <div>
-                                <h4 className="text-xs font-bold text-white">
-                                  {carro.marca} {carro.modelo}
-                                </h4>
-                                <p className="text-[11px] text-slate-400 truncate">
-                                  {carro.versao}
-                                </p>
-
-                                <div className="flex flex-wrap gap-1.5 mt-2 text-[10px] text-slate-300">
-                                  <span className="bg-slate-700/60 px-1.5 py-0.5 rounded">{carro.ano}</span>
-                                  <span className="bg-slate-700/60 px-1.5 py-0.5 rounded">{carro.km}</span>
-                                  <span className="bg-slate-700/60 px-1.5 py-0.5 rounded">{carro.combustivel}</span>
-                                  <span className="bg-slate-700/60 px-1.5 py-0.5 rounded">{carro.cambio}</span>
-                                </div>
-                              </div>
-
-                              {/* Ações Demo */}
-                              <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setDemoSelectedVehicle(carro)
-                                    setDemoModalOpen(true)
-                                  }}
-                                  className="text-[11px] font-semibold text-indigo-300 hover:text-indigo-200 flex items-center gap-1 cursor-pointer"
+                                  onClick={() => handleRemovePhoto(fUrl)}
+                                  className="absolute top-1 right-1 bg-black/70 hover:bg-rose-600 text-white p-1 rounded-md transition-colors cursor-pointer"
+                                  title="Remover foto"
                                 >
-                                  <Eye className="w-3.5 h-3.5" />
-                                  Ver Detalhes
+                                  <X className="w-3.5 h-3.5" />
                                 </button>
+                              </div>
+                            ))}
 
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={uploadingCarPhotos}
+                              className="aspect-4/3 rounded-xl border-2 border-dashed border-indigo-200 hover:border-indigo-500 bg-white hover:bg-indigo-50/50 flex flex-col items-center justify-center p-3 text-center transition-all cursor-pointer disabled:opacity-50"
+                            >
+                              {uploadingCarPhotos ? (
+                                <>
+                                  <RefreshCw className="w-5 h-5 text-indigo-600 animate-spin mb-1" />
+                                  <span className="text-[10px] text-indigo-600 font-bold">Enviando...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <UploadCloud className="w-6 h-6 text-indigo-600 mb-1" />
+                                  <span className="text-[11px] font-bold text-indigo-900">+ Adicionar Fotos</span>
+                                  <span className="text-[9px] text-slate-400">Do celular ou PC</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          <input 
+                            ref={fileInputRef}
+                            type="file" 
+                            accept="image/*" 
+                            multiple 
+                            onChange={handleUploadPhotos}
+                            className="hidden" 
+                          />
+                        </div>
+
+                        {/* Campos de Texto do Carro */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Marca *</label>
+                            <input
+                              type="text"
+                              value={novoCarro.marca}
+                              onChange={(e) => setNovoCarro(prev => ({ ...prev, marca: e.target.value }))}
+                              placeholder="Ex: Toyota, Jeep, Honda..."
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 font-medium"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Modelo *</label>
+                            <input
+                              type="text"
+                              value={novoCarro.modelo}
+                              onChange={(e) => setNovoCarro(prev => ({ ...prev, modelo: e.target.value }))}
+                              placeholder="Ex: Corolla, Compass, Civic..."
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 font-medium"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Versão Completa</label>
+                            <input
+                              type="text"
+                              value={novoCarro.versao}
+                              onChange={(e) => setNovoCarro(prev => ({ ...prev, versao: e.target.value }))}
+                              placeholder="Ex: Altis Hybrid 1.8 16V, Longitude T270..."
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Ano / Modelo *</label>
+                            <input
+                              type="text"
+                              value={novoCarro.ano}
+                              onChange={(e) => setNovoCarro(prev => ({ ...prev, ano: e.target.value }))}
+                              placeholder="Ex: 2023/2024"
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Preço de Venda (R$) *</label>
+                            <input
+                              type="text"
+                              value={novoCarro.valor}
+                              onChange={(e) => setNovoCarro(prev => ({ ...prev, valor: e.target.value }))}
+                              placeholder="Ex: R$ 145.000"
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 font-bold text-emerald-700"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Quilometragem</label>
+                            <input
+                              type="text"
+                              value={novoCarro.km}
+                              onChange={(e) => setNovoCarro(prev => ({ ...prev, km: e.target.value }))}
+                              placeholder="Ex: 28.500 km"
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Câmbio</label>
+                            <select
+                              value={novoCarro.cambio}
+                              onChange={(e) => setNovoCarro(prev => ({ ...prev, cambio: e.target.value }))}
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500"
+                            >
+                              <option value="Automático">Automático</option>
+                              <option value="Manual">Manual</option>
+                              <option value="CVT">CVT</option>
+                              <option value="Automatizado">Automatizado</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Combustível</label>
+                            <select
+                              value={novoCarro.combustivel}
+                              onChange={(e) => setNovoCarro(prev => ({ ...prev, combustivel: e.target.value }))}
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500"
+                            >
+                              <option value="Flex">Flex</option>
+                              <option value="Gasolina">Gasolina</option>
+                              <option value="Híbrido">Híbrido</option>
+                              <option value="Elétrico">Elétrico</option>
+                              <option value="Diesel">Diesel</option>
+                            </select>
+                          </div>
+
+                          <div className="sm:col-span-2">
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Cor</label>
+                            <input
+                              type="text"
+                              value={novoCarro.cor}
+                              onChange={(e) => setNovoCarro(prev => ({ ...prev, cor: e.target.value }))}
+                              placeholder="Ex: Branco Pérola, Preto, Cinza..."
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Opcionais */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-2">
+                            Opcionais e Itens do Veículo:
+                          </label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {OPCIONAIS_SUGESTOES.map((op) => {
+                              const isSelected = novoCarro.opcionais?.includes(op)
+                              return (
                                 <button
+                                  key={op}
                                   type="button"
-                                  onClick={() => handleToggleDemoAtivo(carro.id)}
-                                  className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                                    carro.ativo 
-                                      ? "bg-rose-500/20 text-rose-300 hover:bg-rose-500/30" 
-                                      : "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                                  onClick={() => toggleOpcionalCarro(op)}
+                                  className={`px-2.5 py-1 rounded-xl text-[11px] font-medium border transition-all cursor-pointer ${
+                                    isSelected 
+                                      ? "bg-indigo-600 text-white border-indigo-600 font-bold" 
+                                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
                                   }`}
                                 >
-                                  {carro.ativo ? "Pausar no WhatsApp" : "Reativar no WhatsApp"}
+                                  {isSelected ? "✓ " : "+ "} {op}
                                 </button>
-                              </div>
-                            </div>
+                              )
+                            })}
                           </div>
-                        ))}
-                      </div>
+                        </div>
 
-                      {/* Rodapé explicativo da Demonstração */}
-                      <div className="p-3 bg-slate-800/60 rounded-2xl border border-slate-700/60 flex items-center justify-between text-xs text-slate-300">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <span>
-                            Prático e intuitivo: sua equipe poderá subir ou pausar carros a qualquer momento.
-                          </span>
+                        {/* Botão de Salvar Veículo */}
+                        <div className="pt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={handleSalvarCarroNaLista}
+                            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Check className="w-4 h-4" />
+                            Salvar Veículo na Lista
+                          </button>
                         </div>
                       </div>
-                    </div>
+                    )}
 
-                    {/* Aviso de liberação de senha */}
-                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 flex items-center gap-2.5">
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 flex items-center gap-2">
                       <Info className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span>
-                        <strong>Nenhuma senha ou sistema externo é necessário!</strong> O acesso ao painel do estoque será liberado para sua equipe assim que o onboarding for concluído.
+                        <strong>Tudo pronto!</strong> Assim que o onboarding for concluído, esses veículos estarão disponíveis para a sua IA ofertar no WhatsApp.
                       </span>
                     </div>
 
@@ -1718,190 +1884,6 @@ export default function OnboardingPublicPage() {
         </div>
 
       </div>
-
-      {/* ========================================================================= */}
-      {/* MODAL DE DEMONSTRAÇÃO (SIMULAÇÃO DE CADASTRO DE VEÍCULO) */}
-      {/* ========================================================================= */}
-      {demoModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto font-poppins">
-          <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-scaleUp">
-            
-            {/* Header Modal Demo */}
-            <div className="p-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">
-                    Modo Demonstração
-                  </span>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    {demoSelectedVehicle ? `Detalhes: ${demoSelectedVehicle.marca} ${demoSelectedVehicle.modelo}` : "Simulação: Cadastrar Novo Veículo"}
-                  </h3>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Exemplo de formulário que sua equipe usará no painel para cadastrar os carros.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setDemoModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Conteúdo com Scroll do Modal Demo */}
-            <div className="p-6 overflow-y-auto space-y-4 text-xs text-slate-700">
-              
-              {/* Fotos Mockup */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
-                  Fotos do Veículo (Demonstração)
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  <div className="aspect-square rounded-xl overflow-hidden border border-slate-200 relative group">
-                    <img 
-                      src={demoSelectedVehicle?.foto || "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&w=400&q=80"} 
-                      alt="Capa"
-                      className="w-full h-full object-cover" 
-                    />
-                    <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1 rounded font-bold">Capa</span>
-                  </div>
-                  <div className="aspect-square rounded-xl bg-slate-50 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-center p-1">
-                    <ImageIcon className="w-4 h-4 mb-1 text-slate-400" />
-                    <span className="text-[9px] leading-tight">Foto 2</span>
-                  </div>
-                  <div className="aspect-square rounded-xl bg-slate-50 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-center p-1">
-                    <ImageIcon className="w-4 h-4 mb-1 text-slate-400" />
-                    <span className="text-[9px] leading-tight">Foto 3</span>
-                  </div>
-                  <div className="aspect-square rounded-xl bg-indigo-50/60 border border-dashed border-indigo-300 flex flex-col items-center justify-center text-indigo-600 text-center p-1">
-                    <UploadCloud className="w-4 h-4 mb-1" />
-                    <span className="text-[9px] font-bold">+ Adicionar</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Campos do Veículo Mockup */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Marca</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={demoSelectedVehicle?.marca || "Toyota"}
-                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-not-allowed font-medium"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Modelo</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={demoSelectedVehicle?.modelo || "Corolla"}
-                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-not-allowed font-medium"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Versão Completa</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={demoSelectedVehicle?.versao || "Altis Hybrid 1.8 16V"}
-                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-not-allowed"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Ano / Modelo</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={demoSelectedVehicle?.ano || "2023/2024"}
-                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-not-allowed"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Valor de Venda</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={demoSelectedVehicle?.valor || "R$ 164.900"}
-                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-emerald-700 font-bold cursor-not-allowed"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Quilometragem</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={demoSelectedVehicle?.km || "28.500 km"}
-                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-not-allowed font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Câmbio</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={demoSelectedVehicle?.cambio || "Automático CVT"}
-                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-not-allowed"
-                  />
-                </div>
-              </div>
-
-              {/* Opcionais Tags Mockup */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
-                  Opcionais e Itens de Série
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {(demoSelectedVehicle?.opcionais || ["Teto Solar", "Bancos de Couro", "Sensor de Ré", "Piloto Automático"]).map((op, idx) => (
-                    <span key={idx} className="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-semibold">
-                      ✓ {op}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Aviso da Demonstração */}
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] text-amber-900 leading-relaxed space-y-1">
-                <span className="font-bold flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                  Pronto para a sua loja!
-                </span>
-                <p>
-                  Não é necessário preencher nada agora. Assim que concluir o onboarding e conectar o WhatsApp, você receberá acesso a essa mesma tela para cadastrar seus veículos reais!
-                </p>
-              </div>
-            </div>
-
-            {/* Footer Modal Demo */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setDemoModalOpen(false)}
-                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-100 cursor-pointer"
-              >
-                Voltar ao Formulário
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setDemoModalOpen(false)
-                  showDemoToast("Simulação concluída! No painel real, a IA já começaria a ofertar o carro pelo WhatsApp.")
-                }}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
-              >
-                Entendi, Fechar Exemplo
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
     </div>
   )
 }

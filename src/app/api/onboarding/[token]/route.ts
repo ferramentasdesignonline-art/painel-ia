@@ -133,6 +133,13 @@ export async function POST(request: Request, { params }: { params: { token: stri
         return NextResponse.json({ error: "É obrigatório conectar o WhatsApp para concluir o onboarding." }, { status: 400 })
       }
 
+      if (sistema_estoque === "Não possui") {
+        const veics = body.veiculos_iniciais
+        if (!Array.isArray(veics) || veics.length === 0) {
+          return NextResponse.json({ error: "É obrigatório cadastrar pelo menos 1 veículo quando não possui CRM de estoque." }, { status: 400 })
+        }
+      }
+
       const respostas = {
         nome_empresa,
         nome_ia,
@@ -140,6 +147,7 @@ export async function POST(request: Request, { params }: { params: { token: stri
         endereco,
         horarios,
         sistema_estoque,
+        veiculos_iniciais: body.veiculos_iniciais || [],
         acesso_crm,
         simulacao_bancos,
         bancos,

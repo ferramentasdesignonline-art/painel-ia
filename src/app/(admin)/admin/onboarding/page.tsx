@@ -22,7 +22,10 @@ import {
   Lock,
   Landmark,
   ShieldCheck,
-  Send
+  Send,
+  Car,
+  Download,
+  Image as ImageIcon
 } from "lucide-react"
 
 export default function AdminOnboardingPage() {
@@ -38,6 +41,59 @@ export default function AdminOnboardingPage() {
   // Modal Ver Respostas
   const [selectedOnboarding, setSelectedOnboarding] = useState<any | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  // Modal Importar Estoque NocoDB
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importTabela, setImportTabela] = useState("")
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<string | null>(null)
+  const [tablesList, setTablesList] = useState<string[]>([])
+  const [loadingTables, setLoadingTables] = useState(false)
+
+  const handleOpenImport = () => {
+    if (!selectedOnboarding) return
+    const defaultTab = `${(selectedOnboarding.nome_cliente || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "_")}_estoque`
+    setImportTabela(defaultTab)
+    setImportResult(null)
+    setShowImportModal(true)
+
+    if (tablesList.length === 0) {
+      setLoadingTables(true)
+      fetch("/api/admin/tables?provider=nocodb")
+        .then(res => res.json())
+        .then(data => {
+          if (data.tables) setTablesList(data.tables)
+        })
+        .catch(console.error)
+        .finally(() => setLoadingTables(false))
+    }
+  }
+
+  const handleConfirmImport = async () => {
+    if (!importTabela.trim()) {
+      alert("Por favor, informe o nome da tabela de estoque do NocoDB.")
+      return
+    }
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const res = await fetch("/api/admin/onboarding/importar-estoque", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          onboarding_id: selectedOnboarding.Id || selectedOnboarding.id,
+          tabela_estoque: importTabela.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Erro ao importar")
+      setImportResult(data.message)
+    } catch (e: any) {
+      alert(e.message || "Erro ao importar estoque")
+    } finally {
+      setImporting(false)
+    }
+  }
 
   const fetchOnboardings = async () => {
     setLoading(true)
@@ -467,9 +523,75 @@ export default function AdminOnboardingPage() {
                       </h4>
 
                       {r.sistema_estoque === "Não possui" ? (
-                        <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between">
-                          <span>📦 <strong>Não possui integrador externo:</strong> Os veículos serão gerenciados diretamente no módulo de Estoque do nosso painel.</span>
-                          <span className="font-bold text-[10px] bg-amber-200/80 px-2.5 py-1 rounded-full text-amber-900">Estoque Próprio</span>
+                        <div className="space-y-4">
+                          <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between">
+                            <span>📦 <strong>Não possui integrador externo:</strong> Os veículos foram cadastrados diretamente pelo cliente no Onboarding.</span>
+                            <span className="font-bold text-[10px] bg-amber-200/80 px-2.5 py-1 rounded-full text-amber-900">Estoque Próprio</span>
+                          </div>
+
+                          {/* Veículos Iniciais Cadastrados pelo Cliente */}
+                          {r.veiculos_iniciais && r.veiculos_iniciais.length > 0 ? (
+                            <div className="space-y-3 pt-1">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                                  <Car className="w-4 h-4 text-indigo-600" />
+                                  Veículos Cadastrados no Onboarding ({r.veiculos_iniciais.length})
+                                </span>
+
+                                <button
+                                  type="button"
+                                  onClick={handleOpenImport}
+                                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  Importar para Tabela de Estoque
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {r.veiculos_iniciais.map((v: any, vIdx: number) => (
+                                  <div key={v.id || vIdx} className="p-3 bg-gray-50 border border-gray-200 rounded-2xl flex gap-3 text-xs">
+                                    <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-gray-200 shrink-0 border border-gray-300">
+                                      {v.fotos && v.fotos.length > 0 ? (
+                                        <img src={v.fotos[0]} alt={v.modelo} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-gray-400">
+                                          <ImageIcon className="w-6 h-6" />
+                                        </div>
+                                      )}
+                                      {v.fotos && v.fotos.length > 1 && (
+                                        <span className="absolute bottom-1 right-1 bg-black/75 text-white text-[9px] px-1 rounded font-bold font-mono">
+                                          +{v.fotos.length - 1}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="flex-1 min-w-0 space-y-1">
+                                      <div className="flex items-start justify-between gap-1">
+                                        <h5 className="font-bold text-gray-900 truncate">
+                                          {v.marca} {v.modelo}
+                                        </h5>
+                                        <span className="font-bold text-emerald-700 text-xs shrink-0 font-mono">
+                                          {v.valor_venda || v.valor}
+                                        </span>
+                                      </div>
+
+                                      <p className="text-[11px] text-gray-500 truncate">{v.versao || "Versão padrão"}</p>
+
+                                      <div className="flex flex-wrap gap-1 text-[10px] text-gray-600">
+                                        <span className="bg-gray-200/80 px-1.5 py-0.5 rounded">{v.ano}</span>
+                                        {v.km && <span className="bg-gray-200/80 px-1.5 py-0.5 rounded">{v.km}</span>}
+                                        {v.combustivel && <span className="bg-gray-200/80 px-1.5 py-0.5 rounded">{v.combustivel}</span>}
+                                        {v.cambio && <span className="bg-gray-200/80 px-1.5 py-0.5 rounded">{v.cambio}</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-400 italic">Nenhum veículo inicial foi anexado.</p>
+                          )}
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
@@ -574,6 +696,121 @@ export default function AdminOnboardingPage() {
                 Fechar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Importação de Veículos para Tabela de Estoque NocoDB */}
+      {showImportModal && selectedOnboarding && (
+        <div className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-xl border border-gray-100 animate-scaleUp">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <Download className="w-5 h-5 text-indigo-600" />
+                  Importar Veículos para NocoDB
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Insere os carros cadastrados no onboarding na tabela de estoque da concessionária.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="text-gray-400 hover:text-gray-600 font-bold p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {importResult ? (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs space-y-3">
+                <div className="flex items-center gap-2 font-bold text-sm">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  <span>Importação Concluída!</span>
+                </div>
+                <p className="leading-relaxed">{importResult}</p>
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(false)}
+                  className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                >
+                  OK, Fechar
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4 pt-1">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Nome da Tabela de Estoque no NocoDB *
+                  </label>
+                  
+                  {tablesList.length > 0 ? (
+                    <div className="space-y-2">
+                      <select
+                        value={importTabela}
+                        onChange={(e) => setImportTabela(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-xs font-mono focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="">-- Selecione uma tabela existente --</option>
+                        {tablesList.filter(t => t.toLowerCase().includes("estoque")).map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={importTabela}
+                        onChange={(e) => setImportTabela(e.target.value)}
+                        placeholder="Ou digite o nome exato da tabela"
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={importTabela}
+                      onChange={(e) => setImportTabela(e.target.value)}
+                      placeholder="Ex: styllo_estoque"
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono focus:outline-none focus:border-indigo-500"
+                    />
+                  )}
+
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Certifique-se de que a tabela já foi duplicada/criada no NocoDB antes de importar.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 text-xs text-indigo-900">
+                  <p>
+                    📦 Serão importados <strong>{selectedOnboarding.respostas_json?.veiculos_iniciais?.length || 0} veículo(s)</strong> com fotos e opcionais diretamente para a tabela ativa.
+                  </p>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowImportModal(false)}
+                    className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold hover:bg-gray-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmImport}
+                    disabled={importing || !importTabela.trim()}
+                    className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                  >
+                    {importing ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Importando...</span>
+                      </>
+                    ) : (
+                      <span>Confirmar Importação</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
