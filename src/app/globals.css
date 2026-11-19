@@ -35,6 +35,9 @@
 }
 
 @layer base {
+  body {
+    font-family: var(--font-poppins), 'Poppins', sans-serif;
+  }
   :root {
     --background: oklch(0.99 0 0);
     --foreground: oklch(0.15 0 0);

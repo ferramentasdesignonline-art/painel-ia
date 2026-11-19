@@ -466,34 +466,41 @@ export default function AdminOnboardingPage() {
                         2. Sistema de Gestão / CRM de Estoque
                       </h4>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                        <div>
-                          <span className="text-gray-400 block font-medium">Plataforma / Sistema</span>
-                          <span className="text-gray-900 font-bold text-sm">{r.sistema_estoque || "—"}</span>
+                      {r.sistema_estoque === "Não possui" ? (
+                        <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between">
+                          <span>📦 <strong>Não possui integrador externo:</strong> Os veículos serão gerenciados diretamente no módulo de Estoque do nosso painel.</span>
+                          <span className="font-bold text-[10px] bg-amber-200/80 px-2.5 py-1 rounded-full text-amber-900">Estoque Próprio</span>
                         </div>
-                        <div>
-                          <span className="text-gray-400 block font-medium">E-mail de Acesso</span>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <span className="text-gray-900 font-mono truncate">{r.acesso_crm?.email || "—"}</span>
-                            {r.acesso_crm?.email && (
-                              <button onClick={() => copyToClipboard(r.acesso_crm.email, "crm-email")} className="text-gray-400 hover:text-indigo-600">
-                                {copiedId === "crm-email" ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                              </button>
-                            )}
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                          <div>
+                            <span className="text-gray-400 block font-medium">Plataforma / Sistema</span>
+                            <span className="text-gray-900 font-bold text-sm">{r.sistema_estoque || "—"}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block font-medium">E-mail de Acesso</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-gray-900 font-mono truncate">{r.acesso_crm?.email || "—"}</span>
+                              {r.acesso_crm?.email && (
+                                <button onClick={() => copyToClipboard(r.acesso_crm.email, "crm-email")} className="text-gray-400 hover:text-indigo-600">
+                                  {copiedId === "crm-email" ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-gray-400 block font-medium">Senha de Acesso</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-gray-900 font-mono font-bold bg-gray-100 px-2 py-0.5 rounded">{r.acesso_crm?.senha || "—"}</span>
+                              {r.acesso_crm?.senha && (
+                                <button onClick={() => copyToClipboard(r.acesso_crm.senha, "crm-pass")} className="text-gray-400 hover:text-indigo-600">
+                                  {copiedId === "crm-pass" ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        <div>
-                          <span className="text-gray-400 block font-medium">Senha de Acesso</span>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <span className="text-gray-900 font-mono font-bold bg-gray-100 px-2 py-0.5 rounded">{r.acesso_crm?.senha || "—"}</span>
-                            {r.acesso_crm?.senha && (
-                              <button onClick={() => copyToClipboard(r.acesso_crm.senha, "crm-pass")} className="text-gray-400 hover:text-indigo-600">
-                                {copiedId === "crm-pass" ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      )}
                     </div>
 
                     {/* Bloco 3: Simulação de Bancos */}

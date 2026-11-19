@@ -113,6 +113,18 @@ export async function POST(request: Request, { params }: { params: { token: stri
         whatsapp_conectado,
       } = body
 
+      if (!nome_empresa?.trim()) {
+        return NextResponse.json({ error: "Nome da concessionária é obrigatório." }, { status: 400 })
+      }
+
+      if (!nome_ia?.trim()) {
+        return NextResponse.json({ error: "Nome da atendente IA é obrigatório." }, { status: 400 })
+      }
+
+      if (!whatsapp_avisos?.trim()) {
+        return NextResponse.json({ error: "WhatsApp de avisos é obrigatório." }, { status: 400 })
+      }
+
       if (!whatsapp_conectado) {
         return NextResponse.json({ error: "É obrigatório conectar o WhatsApp para concluir o onboarding." }, { status: 400 })
       }
