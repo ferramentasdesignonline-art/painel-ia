@@ -10,8 +10,15 @@ export async function middleware(request: NextRequest) {
   })
 
   const isAuthPage = request.nextUrl.pathname.startsWith('/login')
+  const isOnboardingPage = request.nextUrl.pathname.startsWith('/onboarding')
   
-  if (request.nextUrl.pathname.startsWith('/api/wacloud')) {
+  // Rotas de API públicas
+  if (request.nextUrl.pathname.startsWith('/api/wacloud') || request.nextUrl.pathname.startsWith('/api/onboarding')) {
+    return response
+  }
+
+  // Página pública de onboarding de novos clientes
+  if (isOnboardingPage) {
     return response
   }
 
