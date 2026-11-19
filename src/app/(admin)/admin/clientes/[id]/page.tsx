@@ -769,6 +769,8 @@ export default function EditarClientePage() {
                       setModuloEstoqueAtivo(ativo)
                       if (!ativo) {
                         setFormData((prev) => ({ ...prev, tabela_estoque: "" }))
+                      } else if (tipoAtendimento === 'sem_ia' && !formData.tabela_estoque) {
+                        setFormData((prev) => ({ ...prev, tabela_estoque: "semia_estoque" }))
                       }
                     }}
                     className="sr-only peer"
@@ -779,6 +781,18 @@ export default function EditarClientePage() {
 
               {moduloEstoqueAtivo && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
+                  {tipoAtendimento === 'sem_ia' && (
+                    <div className="mb-3 p-3 bg-indigo-50/60 border border-indigo-100 rounded-lg text-xs text-indigo-800 flex items-center justify-between">
+                      <span>Para clientes Sem IA, você pode usar a tabela compartilhada padrão <strong>semia_estoque</strong>.</span>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, tabela_estoque: "semia_estoque" })}
+                        className="text-xs font-semibold text-indigo-600 underline ml-2 shrink-0"
+                      >
+                        Usar semia_estoque
+                      </button>
+                    </div>
+                  )}
                   <TableSelect
                     label="Tabela de Estoque (NocoDB ou Supabase)"
                     value={formData.tabela_estoque}
@@ -787,7 +801,7 @@ export default function EditarClientePage() {
                     loadingTables={loadingTables}
                   />
                   <p className="text-[11px] text-gray-500 mt-1.5">
-                    Ex: <code className="text-indigo-600 font-mono font-semibold">cr_motors_estoque</code> ou o ID da tabela no NocoDB.
+                    Ex: <code className="text-indigo-600 font-mono font-semibold">semia_estoque</code> ou o ID da tabela no NocoDB.
                   </p>
                 </div>
               )}

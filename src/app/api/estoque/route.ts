@@ -39,7 +39,7 @@ export async function GET() {
       })
     }
 
-    const data = await listarEstoqueCliente(clientConfig.tabela_estoque)
+    const data = await listarEstoqueCliente(clientConfig.tabela_estoque, clientConfig.nome_instancia || clientConfig.whatsapp_instancia || clientConfig.slug)
     return NextResponse.json({
       enabled: true,
       isMasterAdmin,
@@ -73,7 +73,8 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const created = await criarVeiculo(clientConfig.tabela_estoque, body)
+    const instancia = clientConfig.nome_instancia || clientConfig.whatsapp_instancia || clientConfig.slug
+    const created = await criarVeiculo(clientConfig.tabela_estoque, { ...body, nome_instancia: instancia })
     return NextResponse.json({ success: true, vehicle: created })
   } catch (error: any) {
     console.error("Erro ao cadastrar veículo:", error)

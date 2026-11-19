@@ -89,6 +89,10 @@ export default function NovoClientePage() {
   const [instancias, setInstancias] = useState<any[]>([])
   const [loadingInstancias, setLoadingInstancias] = useState(true)
   const [isManualInstancia, setIsManualInstancia] = useState(false)
+  const [creatingInstancia, setCreatingInstancia] = useState(false)
+  const [instanciaQrCode, setInstanciaQrCode] = useState<string | null>(null)
+  const [novaInstanciaNome, setNovaInstanciaNome] = useState("")
+  const [showCriarModal, setShowCriarModal] = useState(false)
 
   const [tipoAtendimento, setTipoAtendimento] = useState<'com_ia' | 'sem_ia'>('sem_ia')
   const [moduloEstoqueAtivo, setModuloEstoqueAtivo] = useState(false)
@@ -198,6 +202,43 @@ export default function NovoClientePage() {
     fetchTables()
     fetchInstancias()
   }, [])
+
+  const handleCriarInstanciaUazapi = async () => {
+    const nome = novaInstanciaNome.trim() || formData.nome.trim()
+    if (!nome) {
+      alert("Por favor, digite um nome para a nova instância.")
+      return
+    }
+
+    setCreatingInstancia(true)
+    try {
+      const res = await fetch("/api/admin/instancias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nome_instancia: nome })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || "Erro ao criar instância na Uazapi")
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        nome_instancia: nome,
+        whatsapp_token: data.token || prev.whatsapp_token,
+      }))
+
+      if (data.qrcode) {
+        setInstanciaQrCode(data.qrcode)
+      }
+
+      await fetchInstancias()
+    } catch (err: any) {
+      alert(err.message || "Erro ao criar instância")
+    } finally {
+      setCreatingInstancia(false)
+    }
+  }
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const nome = e.target.value
@@ -351,13 +392,27 @@ export default function NovoClientePage() {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium text-gray-700">Instância WhatsApp Uazapi</label>
-                <button
-                  type="button"
-                  onClick={() => setIsManualInstancia(!isManualInstancia)}
-                  className="text-[10px] text-indigo-600 hover:underline font-medium"
-                >
-                  {isManualInstancia ? "Selecionar da Uazapi" : "Digitar manualmente"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNovaInstanciaNome(formData.nome || "")
+                      setShowCriarModal(true)
+                    }}
+                    className="text-[11px] text-emerald-600 hover:text-emerald-800 font-semibold flex items-center gap-1"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    + Criar nova na Uazapi
+                  </button>
+                  <span className="text-gray-300">•</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsManualInstancia(!isManualInstancia)}
+                    className="text-[10px] text-indigo-600 hover:underline font-medium"
+                  >
+                    {isManualInstancia ? "Selecionar da Uazapi" : "Digitar manualmente"}
+                  </button>
+                </div>
               </div>
 
               {isManualInstancia ? (
@@ -528,11 +583,13 @@ export default function NovoClientePage() {
                 />
               </div>
             </div>
+          </>
+        )}
 
-            {/* MÓDULOS E FUNCIONALIDADES */}
-            <div>
-              <div className="pb-3 border-b border-gray-100 mb-4">
-                <h3 className="text-base font-semibold text-gray-900">Módulos e Funcionalidades</h3>
+        {/* MÓDULOS E FUNCIONALIDADES */}
+        <div>
+          <div className="pb-3 border-b border-gray-100 mb-4">
+            <h3 className="text-base font-semibold text-gray-900">Módulos e Funcionalidades</h3>
                 <p className="text-xs text-gray-500 mt-0.5">Recursos opcionais habilitados para este cliente no painel.</p>
               </div>
 
@@ -707,6 +764,18 @@ export default function NovoClientePage() {
 
                   {moduloEstoqueAtivo && (
                     <div className="mt-4 pt-4 border-t border-gray-100">
+                      {tipoAtendimento === 'sem_ia' && (
+                        <div className="mb-3 p-3 bg-indigo-50/60 border border-indigo-100 rounded-lg text-xs text-indigo-800 flex items-center justify-between">
+                          <span>Para clientes Sem IA, você pode usar a tabela compartilhada padrão <strong>semia_estoque</strong>.</span>
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, tabela_estoque: "semia_estoque" })}
+                            className="text-xs font-semibold text-indigo-600 underline ml-2 shrink-0"
+                          >
+                            Usar semia_estoque
+                          </button>
+                        </div>
+                      )}
                       <TableSelect
                         label="Tabela de Estoque (NocoDB ou Supabase)"
                         value={formData.tabela_estoque}
@@ -715,7 +784,7 @@ export default function NovoClientePage() {
                         loadingTables={loadingTables}
                       />
                       <p className="text-[11px] text-gray-500 mt-1.5">
-                        Ex: <code className="text-indigo-600 font-mono font-semibold">cr_motors_estoque</code> ou o ID da tabela no NocoDB.
+                        Ex: <code className="text-indigo-600 font-mono font-semibold">semia_estoque</code> ou o ID da tabela no NocoDB.
                       </p>
                     </div>
                   )}
@@ -723,50 +792,50 @@ export default function NovoClientePage() {
               </div>
             </div>
 
-            <div>
-              <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
-                <div>
-                  <h3 className="text-base font-semibold text-gray-900">Configurações Avançadas (Opcional)</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Credenciais para o modelo Multi-Supabase e integração WhatsApp.</p>
+            {tipoAtendimento === 'com_ia' && (
+              <div>
+                <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">Configurações Avançadas (Opcional)</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">Credenciais para o modelo Multi-Supabase e integração WhatsApp.</p>
+                  </div>
                 </div>
-              </div>
               
-              <div className="grid grid-cols-1 gap-y-5 gap-x-4 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Supabase URL (Cliente)</label>
-                  <input
-                    type="text" value={formData.supabase_url}
-                    onChange={(e) => setFormData({ ...formData, supabase_url: e.target.value })}
-                    className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono text-xs"
-                    placeholder="https://xxx.supabase.co"
-                  />
-                </div>
-                
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Supabase Anon Key</label>
-                  <input
-                    type="text" value={formData.supabase_anon_key}
-                    onChange={(e) => setFormData({ ...formData, supabase_anon_key: e.target.value })}
-                    className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono text-xs"
-                    placeholder="eyJh..."
-                  />
-                </div>
-                
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Supabase Service Role Key</label>
-                  <input
-                    type="password" value={formData.supabase_service_role_key}
-                    onChange={(e) => setFormData({ ...formData, supabase_service_role_key: e.target.value })}
-                    className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono text-xs"
-                    placeholder="eyJh..."
-                  />
+                <div className="grid grid-cols-1 gap-y-5 gap-x-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Supabase URL (Cliente)</label>
+                    <input
+                      type="text" value={formData.supabase_url}
+                      onChange={(e) => setFormData({ ...formData, supabase_url: e.target.value })}
+                      className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono text-xs"
+                      placeholder="https://xxx.supabase.co"
+                    />
+                  </div>
+                  
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Supabase Anon Key</label>
+                    <input
+                      type="text" value={formData.supabase_anon_key}
+                      onChange={(e) => setFormData({ ...formData, supabase_anon_key: e.target.value })}
+                      className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono text-xs"
+                      placeholder="eyJh..."
+                    />
+                  </div>
+                  
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Supabase Service Role Key</label>
+                    <input
+                      type="password" value={formData.supabase_service_role_key}
+                      onChange={(e) => setFormData({ ...formData, supabase_service_role_key: e.target.value })}
+                      className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono text-xs"
+                      placeholder="eyJh..."
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          </>
-        )}
+            )}
 
-        <div className="pt-5 border-t border-gray-100 flex justify-end gap-3">
+            <div className="pt-5 border-t border-gray-100 flex justify-end gap-3">
           <button
             type="button" onClick={() => router.back()}
             className="py-2.5 px-5 border border-gray-300 rounded-xl shadow-xs text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
@@ -788,6 +857,109 @@ export default function NovoClientePage() {
           </button>
         </div>
       </form>
+
+      {/* Modal de Criação de Instância na Uazapi com QR Code */}
+      {showCriarModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 max-w-md w-full p-6 space-y-5">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Criar Instância na Uazapi</h3>
+                <p className="text-xs text-gray-500">Cria a instância e gera o QR Code na hora</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCriarModal(false)
+                  setInstanciaQrCode(null)
+                }}
+                className="text-gray-400 hover:text-gray-600 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {!instanciaQrCode ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Nome da Instância (ex: Nome da Loja)
+                  </label>
+                  <input
+                    type="text"
+                    value={novaInstanciaNome}
+                    onChange={(e) => setNovaInstanciaNome(e.target.value)}
+                    placeholder="Ex: FinezMotors"
+                    className="block w-full rounded-lg border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5 border font-mono"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Será criada diretamente no servidor da Uazapi e configurado o webhook.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCriarModal(false)}
+                    className="px-4 py-2 border border-gray-200 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCriarInstanciaUazapi}
+                    disabled={creatingInstancia || !novaInstanciaNome.trim()}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {creatingInstancia ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Criando na Uazapi...</span>
+                      </>
+                    ) : (
+                      <span>Criar e Gerar QR Code</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center space-y-4 py-2">
+                <div className="inline-flex p-3 bg-emerald-50 text-emerald-700 rounded-full text-xs font-bold items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Instância criada com sucesso!
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 mb-1">Escaneie o QR Code do WhatsApp</h4>
+                  <p className="text-xs text-gray-500 max-w-xs mx-auto">
+                    Abra o WhatsApp no aparelho da concessionária, vá em <strong>Aparelhos Conectados</strong> e aponte para o código:
+                  </p>
+                </div>
+
+                <div className="flex justify-center p-3 bg-gray-50 border border-gray-100 rounded-xl max-w-xs mx-auto">
+                  <img
+                    src={instanciaQrCode}
+                    alt="QR Code WhatsApp"
+                    className="w-56 h-56 rounded-lg object-contain"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCriarModal(false)
+                      setInstanciaQrCode(null)
+                    }}
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all"
+                  >
+                    Concluído (Instância vinculada)
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

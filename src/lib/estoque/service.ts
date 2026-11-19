@@ -162,14 +162,17 @@ function normalizeVehicle(raw: any, ativo: boolean): VeiculoEstoque {
   }
 }
 
-export async function listarEstoqueCliente(tabelaEstoque: string) {
+export async function listarEstoqueCliente(tabelaEstoque: string, nomeInstancia?: string) {
   const tableMap = await getNocoDBTableMap()
   const cleanName = (tabelaEstoque || "").toLowerCase().trim()
   const activeMeta = tableMap[cleanName]
 
+  const isSharedSemia = cleanName === "semia_estoque" && Boolean(nomeInstancia)
+  const filterQuery = isSharedSemia ? `&where=(nome_instancia,eq,${encodeURIComponent(nomeInstancia!)})` : ""
+
   if (activeMeta) {
     // 1. Tabela ativa no NocoDB
-    const resAtivos = await fetch(`${NOCODB_URL}/api/v2/tables/${activeMeta.id}/records?limit=250`, {
+    const resAtivos = await fetch(`${NOCODB_URL}/api/v2/tables/${activeMeta.id}/records?limit=250${filterQuery}`, {
       headers: { "xc-token": NOCODB_TOKEN },
       cache: "no-store",
     })
@@ -182,7 +185,7 @@ export async function listarEstoqueCliente(tabelaEstoque: string) {
 
     let veiculosInativos: VeiculoEstoque[] = []
     if (inativoMeta) {
-      const resInativos = await fetch(`${NOCODB_URL}/api/v2/tables/${inativoMeta.id}/records?limit=250`, {
+      const resInativos = await fetch(`${NOCODB_URL}/api/v2/tables/${inativoMeta.id}/records?limit=250${filterQuery}`, {
         headers: { "xc-token": NOCODB_TOKEN },
         cache: "no-store",
       })
@@ -328,13 +331,13 @@ export async function alternarStatusVeiculo(
   throw new Error("Tabela de estoque não encontrada no NocoDB ou Supabase.")
 }
 
-export async function criarVeiculo(tabelaEstoque: string, dados: Partial<VeiculoEstoque>) {
+export async function criarVeiculo(tabelaEstoque: string, dados: Partial<VeiculoEstoque> & { nome_instancia?: string }) {
   const tableMap = await getNocoDBTableMap()
   const cleanName = (tabelaEstoque || "").toLowerCase().trim()
   const activeMeta = tableMap[cleanName]
 
   if (activeMeta) {
-    const payload = {
+    const payload: any = {
       chave_externa: dados.chave_externa || String(Date.now()),
       marca: dados.marca || "",
       modelo: dados.modelo || "",
@@ -350,6 +353,10 @@ export async function criarVeiculo(tabelaEstoque: string, dados: Partial<Veiculo
       subcategoria: dados.subcategoria || null,
       tipo: dados.tipo || null,
       atualizado_em: new Date().toISOString().split("T")[0],
+    }
+
+    if (dados.nome_instancia) {
+      payload.nome_instancia = dados.nome_instancia
     }
 
     const res = await fetch(`${NOCODB_URL}/api/v2/tables/${activeMeta.id}/records`, {

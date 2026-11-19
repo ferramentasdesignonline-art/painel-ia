@@ -129,3 +129,51 @@ export async function GET() {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    const { nome_instancia } = body
+
+    if (!nome_instancia || typeof nome_instancia !== "string") {
+      return NextResponse.json({ error: "Nome da instância é obrigatório" }, { status: 400 })
+    }
+
+    const { createWacloudInstance } = await import("@/lib/wacloud/uazapi")
+    const result = await createWacloudInstance(nome_instancia.trim())
+
+    const instanceToken = result?.instance?.token
+    let qrcode: string | null = null
+
+    // Tentar gerar QR code imediatamente para conectar
+    if (instanceToken) {
+      try {
+        const { WACLOUD_CONFIG } = await import("@/lib/wacloud/config")
+        const qrRes = await fetch(`${WACLOUD_CONFIG.uazapiBaseUrl}/instance/connect`, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            token: instanceToken,
+          },
+        })
+        if (qrRes.ok) {
+          const qrData = await qrRes.json()
+          qrcode = qrData.base64 || qrData.instance?.qrcode || null
+        }
+      } catch (qrErr) {
+        console.warn("Aviso ao tentar gerar QR code após criar instância:", qrErr)
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      instance: result?.instance,
+      token: instanceToken,
+      qrcode,
+    })
+  } catch (err: any) {
+    console.error("Erro ao criar instância na Uazapi:", err)
+    return NextResponse.json({ error: err.message || "Erro ao criar instância" }, { status: 500 })
+  }
+}
