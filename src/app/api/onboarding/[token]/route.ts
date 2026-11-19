@@ -121,6 +121,10 @@ export async function POST(request: Request, { params }: { params: { token: stri
         return NextResponse.json({ error: "Nome da atendente IA é obrigatório." }, { status: 400 })
       }
 
+      if (!instagram?.trim()) {
+        return NextResponse.json({ error: "Instagram da concessionária é obrigatório." }, { status: 400 })
+      }
+
       if (!whatsapp_avisos?.trim()) {
         return NextResponse.json({ error: "WhatsApp de avisos é obrigatório." }, { status: 400 })
       }

@@ -19,7 +19,20 @@ import {
   Lock,
   Car,
   PackageCheck,
-  Info
+  Info,
+  Plus,
+  Search,
+  Check,
+  X,
+  UploadCloud,
+  Image as ImageIcon,
+  Fuel,
+  Gauge,
+  Calendar,
+  Layers,
+  SlidersHorizontal,
+  XCircle,
+  Eye
 } from "lucide-react"
 
 // Funções Utilitárias de Máscara
@@ -184,6 +197,71 @@ const BANCOS_CONFIG: Record<string, { label: string; fields: BancoField[] }> = {
   },
 }
 
+// Veículos de Demonstração Interativa para a opção "Não possui CRM"
+interface DemoVehicle {
+  id: string
+  marca: string
+  modelo: string
+  versao: string
+  ano: string
+  cor: string
+  km: string
+  combustivel: string
+  cambio: string
+  valor: string
+  foto: string
+  ativo: boolean
+  opcionais: string[]
+}
+
+const DEMO_VEICULOS_INICIAIS: DemoVehicle[] = [
+  {
+    id: "demo-1",
+    marca: "Toyota",
+    modelo: "Corolla",
+    versao: "Altis Hybrid 1.8 16V",
+    ano: "2023/2024",
+    cor: "Branco Pérola",
+    km: "28.500 km",
+    combustivel: "Híbrido",
+    cambio: "Automático CVT",
+    valor: "R$ 164.900",
+    foto: "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&w=600&q=80",
+    ativo: true,
+    opcionais: ["Teto Solar", "Bancos de Couro", "Sensor de Ré", "Piloto Automático", "Faróis Full LED"],
+  },
+  {
+    id: "demo-2",
+    marca: "Jeep",
+    modelo: "Compass",
+    versao: "Longitude 1.3 Turbo T270",
+    ano: "2022/2023",
+    cor: "Cinza Granite",
+    km: "41.200 km",
+    combustivel: "Flex",
+    cambio: "Automático",
+    valor: "R$ 139.900",
+    foto: "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=600&q=80",
+    ativo: true,
+    opcionais: ["Multimídia 10.1\"", "Câmera de Ré", "Ar Digital Dual Zone", "Rodas Aro 18"],
+  },
+  {
+    id: "demo-3",
+    marca: "Honda",
+    modelo: "Civic",
+    versao: "Touring 1.5 Turbo",
+    ano: "2021/2021",
+    cor: "Preto Cristal",
+    km: "54.000 km",
+    combustivel: "Gasolina",
+    cambio: "Automático CVT",
+    valor: "R$ 129.900",
+    foto: "https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=600&q=80",
+    ativo: false,
+    opcionais: ["Sistema LaneWatch", "Painel Digital TFT", "Teto Solar Elétrico", "Bancos em Couro"],
+  },
+]
+
 export default function OnboardingPublicPage() {
   const params = useParams()
   const token = params?.token as string
@@ -199,7 +277,7 @@ export default function OnboardingPublicPage() {
 
   // Formulário - Etapa 1
   const [nomeEmpresa, setNomeEmpresa] = useState("")
-  const [nomeIa, setNomeIa] = useState("") // Sem padrão para obrigar o preenchimento
+  const [nomeIa, setNomeIa] = useState("") // Sem padrão
   const [instagram, setInstagram] = useState("")
   const [cep, setCep] = useState("")
   const [buscandoCep, setBuscandoCep] = useState(false)
@@ -217,6 +295,14 @@ export default function OnboardingPublicPage() {
   const [sistemaOutro, setSistemaOutro] = useState("")
   const [crmEmail, setCrmEmail] = useState("")
   const [crmSenha, setCrmSenha] = useState("")
+
+  // Estado do Módulo de Estoque Interativo (Demonstração)
+  const [demoVeiculos, setDemoVeiculos] = useState<DemoVehicle[]>(DEMO_VEICULOS_INICIAIS)
+  const [demoTab, setDemoTab] = useState<"ativos" | "inativos">("ativos")
+  const [demoSearch, setDemoSearch] = useState("")
+  const [demoModalOpen, setDemoModalOpen] = useState(false)
+  const [demoSelectedVehicle, setDemoSelectedVehicle] = useState<DemoVehicle | null>(null)
+  const [demoToast, setDemoToast] = useState<string | null>(null)
 
   // Formulário - Etapa 3: Bancos
   const [vaiTerSimulacao, setVaiTerSimulacao] = useState(false)
@@ -325,6 +411,23 @@ export default function OnboardingPublicPage() {
     }))
   }
 
+  // Ações da Demonstração de Estoque
+  const handleToggleDemoAtivo = (id: string) => {
+    setDemoVeiculos(prev => prev.map(v => {
+      if (v.id === id) {
+        const novoStatus = !v.ativo
+        showDemoToast(`Veículo ${v.marca} ${v.modelo} ${novoStatus ? "reativado na IA" : "pausado temporariamente"}!`)
+        return { ...v, ativo: novoStatus }
+      }
+      return v
+    }))
+  }
+
+  const showDemoToast = (msg: string) => {
+    setDemoToast(msg)
+    setTimeout(() => setDemoToast(null), 3500)
+  }
+
   // Validador por Etapa
   const validateCurrentStep = (): boolean => {
     setStepError(null)
@@ -337,6 +440,10 @@ export default function OnboardingPublicPage() {
       }
       if (!nomeIa.trim()) {
         setStepError("Por favor, digite o Nome da sua IA (atendente virtual).")
+        return false
+      }
+      if (!instagram.trim()) {
+        setStepError("Por favor, informe o Instagram oficial da sua loja (@usuario).")
         return false
       }
       const cleanCep = cep.replace(/\D/g, "")
@@ -625,6 +732,14 @@ export default function OnboardingPublicPage() {
     )
   }
 
+  // Filtra veículos de demonstração
+  const demoExibidos = demoVeiculos.filter(v => {
+    const statusMatch = demoTab === "ativos" ? v.ativo : !v.ativo
+    const searchMatch = !demoSearch.trim() || 
+      `${v.marca} ${v.modelo} ${v.versao} ${v.ano}`.toLowerCase().includes(demoSearch.toLowerCase())
+    return statusMatch && searchMatch
+  })
+
   return (
     <div className="min-h-screen bg-slate-50/80 font-poppins py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto space-y-6">
@@ -739,17 +854,21 @@ export default function OnboardingPublicPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Instagram da Loja</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Instagram da Loja *</label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">@</span>
                     <input
                       type="text"
                       value={instagram.replace("@", "")}
-                      onChange={(e) => setInstagram(e.target.value)}
+                      onChange={(e) => {
+                        setInstagram(e.target.value)
+                        setStepError(null)
+                      }}
                       placeholder="automotors"
-                      className="w-full pl-8 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white"
+                      className="w-full pl-8 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white font-mono"
                     />
                   </div>
+                  <p className="text-[11px] text-slate-400 mt-1">Perfil oficial no Instagram (sem @).</p>
                 </div>
 
                 {/* Prévia da Apresentação da IA */}
@@ -983,61 +1102,236 @@ export default function OnboardingPublicPage() {
                   </div>
                 )}
 
-                {/* EXPLICAÇÃO COMPLETA QUANDO NÃO POSSUI CRM */}
+                {/* DEMONSTRAÇÃO REPLICANDO O MÓDULO DE ESTOQUE QUANDO "NÃO POSSUI" */}
                 {sistemaEstoque === "Não possui" ? (
-                  <div className="p-6 bg-linear-to-br from-indigo-50/80 via-purple-50/50 to-slate-50 border border-indigo-200/80 rounded-3xl space-y-4 text-slate-800">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                        <Car className="w-5 h-5" />
+                  <div className="space-y-4 pt-2">
+                    
+                    {/* Banner de Explicação */}
+                    <div className="p-5 bg-linear-to-br from-indigo-50/90 via-purple-50/50 to-slate-50 border border-indigo-200/80 rounded-3xl space-y-3 text-slate-800">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <Car className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="text-sm font-bold text-indigo-950">
+                              Como funcionará o seu estoque de veículos:
+                            </h3>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                              Módulo Próprio no Painel
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                            Como sua concessionária não usa integradores externos (CRM), você gerenciará seus carros <strong>diretamente no nosso módulo de Estoque</strong>. Veja abaixo uma demonstração de como o painel funciona:
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-indigo-950">
-                          Como funcionará o seu estoque de veículos:
-                        </h3>
-                        <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                          Como você não possui um sistema ou integrador externo, o estoque da sua concessionária será gerenciado <strong>diretamente no nosso Painel/CRM</strong>, através do nosso módulo dedicado de <strong>Estoque</strong>.
-                        </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
+                        <div className="bg-white/90 p-3 rounded-2xl border border-indigo-100 space-y-1">
+                          <span className="font-bold text-indigo-700 flex items-center gap-1.5 text-[11px]">
+                            <PackageCheck className="w-3.5 h-3.5" />
+                            1. Cadastro Prático
+                          </span>
+                          <p className="text-[11px] text-slate-600 leading-snug">
+                            Insira fotos, marca, modelo, ano, opcionais e valor em segundos.
+                          </p>
+                        </div>
+                        <div className="bg-white/90 p-3 rounded-2xl border border-indigo-100 space-y-1">
+                          <span className="font-bold text-indigo-700 flex items-center gap-1.5 text-[11px]">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            2. Sincronia em Tempo Real
+                          </span>
+                          <p className="text-[11px] text-slate-600 leading-snug">
+                            A IA é atualizada no mesmo segundo em que você cadastra ou vende.
+                          </p>
+                        </div>
+                        <div className="bg-white/90 p-3 rounded-2xl border border-indigo-100 space-y-1">
+                          <span className="font-bold text-indigo-700 flex items-center gap-1.5 text-[11px]">
+                            <Smartphone className="w-3.5 h-3.5" />
+                            3. WhatsApp Automático
+                          </span>
+                          <p className="text-[11px] text-slate-600 leading-snug">
+                            A IA envia fotos, especificações e propostas exatas aos leads.
+                          </p>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                      <div className="bg-white p-3.5 rounded-2xl border border-indigo-100 shadow-2xs space-y-1.5">
-                        <span className="text-[11px] font-bold text-indigo-700 flex items-center gap-1.5">
-                          <PackageCheck className="w-3.5 h-3.5" />
-                          1. Cadastro Prático
-                        </span>
-                        <p className="text-[11px] text-slate-600 leading-relaxed">
-                          Você ou sua equipe cadastram os carros com fotos, marca, modelo, versão, ano, km, opcionais e valor em poucos segundos.
-                        </p>
+                    {/* MOCKUP INTERATIVO DO MÓDULO DE ESTOQUE */}
+                    <div className="p-4 sm:p-5 bg-slate-900 rounded-3xl border border-slate-800 text-white space-y-4 shadow-xl">
+                      
+                      {/* Top Bar da Demonstração */}
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                              Demonstração do Módulo de Estoque
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Assim será a tela onde você e sua equipe gerenciarão os veículos.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDemoSelectedVehicle(null)
+                            setDemoModalOpen(true)
+                          }}
+                          className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Simular Cadastro de Veículo
+                        </button>
                       </div>
 
-                      <div className="bg-white p-3.5 rounded-2xl border border-indigo-100 shadow-2xs space-y-1.5">
-                        <span className="text-[11px] font-bold text-indigo-700 flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5" />
-                          2. Sincronização em Tempo Real
-                        </span>
-                        <p className="text-[11px] text-slate-600 leading-relaxed">
-                          Assim que um veículo entra ou é vendido no painel, a Inteligência Artificial é atualizada no mesmo instante.
-                        </p>
+                      {/* Notificação Toast da Demo */}
+                      {demoToast && (
+                        <div className="p-2.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-xl text-xs flex items-center gap-2 animate-fadeIn">
+                          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                          <span>{demoToast}</span>
+                        </div>
+                      )}
+
+                      {/* Controles de Filtros e Abas da Demo */}
+                      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3">
+                        {/* Abas */}
+                        <div className="flex bg-slate-800/80 p-1 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => setDemoTab("ativos")}
+                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                              demoTab === "ativos" ? "bg-indigo-600 text-white shadow-xs" : "text-slate-400 hover:text-slate-200"
+                            }`}
+                          >
+                            Ativos ({demoVeiculos.filter(v => v.ativo).length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDemoTab("inativos")}
+                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                              demoTab === "inativos" ? "bg-indigo-600 text-white shadow-xs" : "text-slate-400 hover:text-slate-200"
+                            }`}
+                          >
+                            Pausados / Vendidos ({demoVeiculos.filter(v => !v.ativo).length})
+                          </button>
+                        </div>
+
+                        {/* Barra de Busca da Demo */}
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={demoSearch}
+                            onChange={(e) => setDemoSearch(e.target.value)}
+                            placeholder="Buscar modelo na demo..."
+                            className="w-full sm:w-48 pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
                       </div>
 
-                      <div className="bg-white p-3.5 rounded-2xl border border-indigo-100 shadow-2xs space-y-1.5">
-                        <span className="text-[11px] font-bold text-indigo-700 flex items-center gap-1.5">
-                          <Smartphone className="w-3.5 h-3.5" />
-                          3. Atendimento no WhatsApp
-                        </span>
-                        <p className="text-[11px] text-slate-600 leading-relaxed">
-                          A IA responderá aos clientes com as fotos, detalhes e propostas exatas dos veículos que estão no seu pátio.
-                        </p>
+                      {/* Grid de Cards de Veículos da Demonstração */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {demoExibidos.map((carro) => (
+                          <div 
+                            key={carro.id}
+                            className="bg-slate-800/90 border border-slate-700/80 rounded-2xl overflow-hidden shadow-xs hover:border-indigo-500/60 transition-all flex flex-col"
+                          >
+                            {/* Imagem do Carro */}
+                            <div className="relative aspect-16/9 bg-slate-950 overflow-hidden">
+                              <img 
+                                src={carro.foto} 
+                                alt={`${carro.marca} ${carro.modelo}`}
+                                className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                              />
+                              <div className="absolute top-2 left-2 flex gap-1">
+                                {carro.ativo ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/90 text-white backdrop-blur-xs flex items-center gap-1 shadow-xs">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                                    Sincronizado na IA
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-600/90 text-slate-200 backdrop-blur-xs">
+                                    Pausado
+                                  </span>
+                                )}
+                              </div>
+                              <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[11px] font-bold bg-black/75 text-white backdrop-blur-xs font-mono">
+                                {carro.valor}
+                              </span>
+                            </div>
+
+                            {/* Informações */}
+                            <div className="p-3 space-y-2 flex-1 flex flex-col justify-between">
+                              <div>
+                                <h4 className="text-xs font-bold text-white">
+                                  {carro.marca} {carro.modelo}
+                                </h4>
+                                <p className="text-[11px] text-slate-400 truncate">
+                                  {carro.versao}
+                                </p>
+
+                                <div className="flex flex-wrap gap-1.5 mt-2 text-[10px] text-slate-300">
+                                  <span className="bg-slate-700/60 px-1.5 py-0.5 rounded">{carro.ano}</span>
+                                  <span className="bg-slate-700/60 px-1.5 py-0.5 rounded">{carro.km}</span>
+                                  <span className="bg-slate-700/60 px-1.5 py-0.5 rounded">{carro.combustivel}</span>
+                                  <span className="bg-slate-700/60 px-1.5 py-0.5 rounded">{carro.cambio}</span>
+                                </div>
+                              </div>
+
+                              {/* Ações Demo */}
+                              <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDemoSelectedVehicle(carro)
+                                    setDemoModalOpen(true)
+                                  }}
+                                  className="text-[11px] font-semibold text-indigo-300 hover:text-indigo-200 flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  Ver Detalhes
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleDemoAtivo(carro.id)}
+                                  className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                                    carro.ativo 
+                                      ? "bg-rose-500/20 text-rose-300 hover:bg-rose-500/30" 
+                                      : "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                                  }`}
+                                >
+                                  {carro.ativo ? "Pausar no WhatsApp" : "Reativar no WhatsApp"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Rodapé explicativo da Demonstração */}
+                      <div className="p-3 bg-slate-800/60 rounded-2xl border border-slate-700/60 flex items-center justify-between text-xs text-slate-300">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>
+                            Prático e intuitivo: sua equipe poderá subir ou pausar carros a qualquer momento.
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 flex items-center gap-2">
+                    {/* Aviso de liberação de senha */}
+                    <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 flex items-center gap-2.5">
                       <Info className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span>
-                        <strong>Nenhuma senha externa é necessária!</strong> Liberaremos o acesso ao painel de estoque assim que concluirmos o onboarding.
+                        <strong>Nenhuma senha ou sistema externo é necessário!</strong> O acesso ao painel do estoque será liberado para sua equipe assim que o onboarding for concluído.
                       </span>
                     </div>
+
                   </div>
                 ) : (
                   <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
@@ -1424,6 +1718,190 @@ export default function OnboardingPublicPage() {
         </div>
 
       </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL DE DEMONSTRAÇÃO (SIMULAÇÃO DE CADASTRO DE VEÍCULO) */}
+      {/* ========================================================================= */}
+      {demoModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto font-poppins">
+          <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-scaleUp">
+            
+            {/* Header Modal Demo */}
+            <div className="p-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">
+                    Modo Demonstração
+                  </span>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    {demoSelectedVehicle ? `Detalhes: ${demoSelectedVehicle.marca} ${demoSelectedVehicle.modelo}` : "Simulação: Cadastrar Novo Veículo"}
+                  </h3>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Exemplo de formulário que sua equipe usará no painel para cadastrar os carros.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDemoModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Conteúdo com Scroll do Modal Demo */}
+            <div className="p-6 overflow-y-auto space-y-4 text-xs text-slate-700">
+              
+              {/* Fotos Mockup */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
+                  Fotos do Veículo (Demonstração)
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="aspect-square rounded-xl overflow-hidden border border-slate-200 relative group">
+                    <img 
+                      src={demoSelectedVehicle?.foto || "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?auto=format&fit=crop&w=400&q=80"} 
+                      alt="Capa"
+                      className="w-full h-full object-cover" 
+                    />
+                    <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1 rounded font-bold">Capa</span>
+                  </div>
+                  <div className="aspect-square rounded-xl bg-slate-50 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-center p-1">
+                    <ImageIcon className="w-4 h-4 mb-1 text-slate-400" />
+                    <span className="text-[9px] leading-tight">Foto 2</span>
+                  </div>
+                  <div className="aspect-square rounded-xl bg-slate-50 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 text-center p-1">
+                    <ImageIcon className="w-4 h-4 mb-1 text-slate-400" />
+                    <span className="text-[9px] leading-tight">Foto 3</span>
+                  </div>
+                  <div className="aspect-square rounded-xl bg-indigo-50/60 border border-dashed border-indigo-300 flex flex-col items-center justify-center text-indigo-600 text-center p-1">
+                    <UploadCloud className="w-4 h-4 mb-1" />
+                    <span className="text-[9px] font-bold">+ Adicionar</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Campos do Veículo Mockup */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Marca</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={demoSelectedVehicle?.marca || "Toyota"}
+                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-not-allowed font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Modelo</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={demoSelectedVehicle?.modelo || "Corolla"}
+                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-not-allowed font-medium"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Versão Completa</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={demoSelectedVehicle?.versao || "Altis Hybrid 1.8 16V"}
+                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Ano / Modelo</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={demoSelectedVehicle?.ano || "2023/2024"}
+                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Valor de Venda</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={demoSelectedVehicle?.valor || "R$ 164.900"}
+                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-emerald-700 font-bold cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Quilometragem</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={demoSelectedVehicle?.km || "28.500 km"}
+                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-not-allowed font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Câmbio</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={demoSelectedVehicle?.cambio || "Automático CVT"}
+                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-700 cursor-not-allowed"
+                  />
+                </div>
+              </div>
+
+              {/* Opcionais Tags Mockup */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1.5">
+                  Opcionais e Itens de Série
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {(demoSelectedVehicle?.opcionais || ["Teto Solar", "Bancos de Couro", "Sensor de Ré", "Piloto Automático"]).map((op, idx) => (
+                    <span key={idx} className="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-semibold">
+                      ✓ {op}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Aviso da Demonstração */}
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] text-amber-900 leading-relaxed space-y-1">
+                <span className="font-bold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  Pronto para a sua loja!
+                </span>
+                <p>
+                  Não é necessário preencher nada agora. Assim que concluir o onboarding e conectar o WhatsApp, você receberá acesso a essa mesma tela para cadastrar seus veículos reais!
+                </p>
+              </div>
+            </div>
+
+            {/* Footer Modal Demo */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setDemoModalOpen(false)}
+                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-100 cursor-pointer"
+              >
+                Voltar ao Formulário
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDemoModalOpen(false)
+                  showDemoToast("Simulação concluída! No painel real, a IA já começaria a ofertar o carro pelo WhatsApp.")
+                }}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+              >
+                Entendi, Fechar Exemplo
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
