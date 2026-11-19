@@ -65,6 +65,42 @@ function maskCpf(value: string): string {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`
 }
 
+function formatCurrency(val: string): string {
+  const digits = val.replace(/\D/g, "")
+  if (!digits) return ""
+  const num = parseInt(digits, 10)
+  return `R$ ${num.toLocaleString("pt-BR")}`
+}
+
+function formatKm(val: string): string {
+  const digits = val.replace(/\D/g, "")
+  if (!digits) return ""
+  const num = parseInt(digits, 10)
+  return `${num.toLocaleString("pt-BR")} km`
+}
+
+function maskAno(val: string): string {
+  const digits = val.replace(/\D/g, "").slice(0, 8)
+  if (digits.length > 4) {
+    return `${digits.slice(0, 4)}/${digits.slice(4)}`
+  }
+  return digits
+}
+
+const CORES_VEICULO = [
+  { label: "Branco", swatch: "#FFFFFF", border: "border-slate-300" },
+  { label: "Preto", swatch: "#111827", border: "border-slate-900" },
+  { label: "Prata", swatch: "#E2E8F0", border: "border-slate-400" },
+  { label: "Cinza", swatch: "#64748B", border: "border-slate-500" },
+  { label: "Vermelho", swatch: "#DC2626", border: "border-red-600" },
+  { label: "Azul", swatch: "#2563EB", border: "border-blue-600" },
+  { label: "Verde", swatch: "#16A34A", border: "border-emerald-600" },
+  { label: "Marrom", swatch: "#78350F", border: "border-amber-900" },
+  { label: "Bege", swatch: "#FDE68A", border: "border-amber-300" },
+  { label: "Amarelo", swatch: "#EAB308", border: "border-yellow-500" },
+  { label: "Outra", swatch: "linear-gradient(135deg, #ec4899, #8b5cf6)", border: "border-purple-300" },
+]
+
 // Lista de CRM / Sistemas
 const SISTEMAS_CRM = [
   "BNDV",
@@ -274,6 +310,8 @@ export default function OnboardingPublicPage() {
   })
   const [uploadingCarPhotos, setUploadingCarPhotos] = useState(false)
   const [showAddCarForm, setShowAddCarForm] = useState(true)
+  const [customOpcionalInput, setCustomOpcionalInput] = useState("")
+  const [customCorInput, setCustomCorInput] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Formulário - Etapa 3: Bancos
@@ -430,6 +468,19 @@ export default function OnboardingPublicPage() {
     }
   }
 
+  const handleAddCustomOpcional = () => {
+    const trimmed = customOpcionalInput.trim()
+    if (!trimmed) return
+    const current = novoCarro.opcionais || []
+    if (!current.includes(trimmed)) {
+      setNovoCarro(prev => ({
+        ...prev,
+        opcionais: [...current, trimmed]
+      }))
+    }
+    setCustomOpcionalInput("")
+  }
+
   const handleSalvarCarroNaLista = () => {
     if (!novoCarro.marca?.trim()) {
       setStepError("Por favor, informe a Marca do veículo (ex: Toyota).")
@@ -481,6 +532,8 @@ export default function OnboardingPublicPage() {
       fotos: [],
       opcionais: [],
     })
+    setCustomCorInput("")
+    setCustomOpcionalInput("")
     setShowAddCarForm(false)
     setStepError(null)
   }
@@ -574,6 +627,8 @@ export default function OnboardingPublicPage() {
           }
           veics.push(autoVeic)
           setVeiculosIniciais(veics)
+          setCustomCorInput("")
+          setCustomOpcionalInput("")
         }
 
         if (veics.length === 0) {
@@ -1382,8 +1437,9 @@ export default function OnboardingPublicPage() {
                             <input
                               type="text"
                               value={novoCarro.ano}
-                              onChange={(e) => setNovoCarro(prev => ({ ...prev, ano: e.target.value }))}
+                              onChange={(e) => setNovoCarro(prev => ({ ...prev, ano: maskAno(e.target.value) }))}
                               placeholder="Ex: 2023/2024"
+                              maxLength={9}
                               className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 font-mono"
                             />
                           </div>
@@ -1393,9 +1449,9 @@ export default function OnboardingPublicPage() {
                             <input
                               type="text"
                               value={novoCarro.valor}
-                              onChange={(e) => setNovoCarro(prev => ({ ...prev, valor: e.target.value }))}
+                              onChange={(e) => setNovoCarro(prev => ({ ...prev, valor: formatCurrency(e.target.value) }))}
                               placeholder="Ex: R$ 145.000"
-                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 font-bold text-emerald-700"
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 font-bold text-emerald-700 font-mono"
                             />
                           </div>
 
@@ -1404,7 +1460,7 @@ export default function OnboardingPublicPage() {
                             <input
                               type="text"
                               value={novoCarro.km}
-                              onChange={(e) => setNovoCarro(prev => ({ ...prev, km: e.target.value }))}
+                              onChange={(e) => setNovoCarro(prev => ({ ...prev, km: formatKm(e.target.value) }))}
                               placeholder="Ex: 28.500 km"
                               className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 font-mono"
                             />
@@ -1439,24 +1495,107 @@ export default function OnboardingPublicPage() {
                             </select>
                           </div>
 
-                          <div className="sm:col-span-2">
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Cor</label>
-                            <input
-                              type="text"
-                              value={novoCarro.cor}
-                              onChange={(e) => setNovoCarro(prev => ({ ...prev, cor: e.target.value }))}
-                              placeholder="Ex: Branco Pérola, Preto, Cinza..."
-                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500"
-                            />
+                          {/* Cores com opções visuais */}
+                          <div className="sm:col-span-2 space-y-2">
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Cor do Veículo
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              {CORES_VEICULO.map((cor) => {
+                                const isSelected = novoCarro.cor === cor.label || (cor.label === "Outra" && novoCarro.cor && !CORES_VEICULO.some(c => c.label !== "Outra" && c.label === novoCarro.cor))
+                                return (
+                                  <button
+                                    key={cor.label}
+                                    type="button"
+                                    onClick={() => {
+                                      if (cor.label === "Outra") {
+                                        setNovoCarro(prev => ({ ...prev, cor: customCorInput || "Outra" }))
+                                      } else {
+                                        setNovoCarro(prev => ({ ...prev, cor: cor.label }))
+                                      }
+                                    }}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition-all cursor-pointer ${
+                                      isSelected 
+                                        ? "bg-indigo-50 border-indigo-600 text-indigo-900 ring-2 ring-indigo-500/20 font-bold shadow-2xs" 
+                                        : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                                    }`}
+                                  >
+                                    <span 
+                                      className={`w-3.5 h-3.5 rounded-full border ${cor.border} shrink-0`}
+                                      style={{ background: cor.swatch }}
+                                    />
+                                    <span>{cor.label}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+
+                            {/* Se selecionou Outra, abre o campo de digitação */}
+                            {(novoCarro.cor === "Outra" || (novoCarro.cor && !CORES_VEICULO.some(c => c.label !== "Outra" && c.label === novoCarro.cor))) && (
+                              <div className="pt-1">
+                                <input
+                                  type="text"
+                                  value={customCorInput}
+                                  onChange={(e) => {
+                                    setCustomCorInput(e.target.value)
+                                    setNovoCarro(prev => ({ ...prev, cor: e.target.value }))
+                                  }}
+                                  placeholder="Digite a cor exata (ex: Vinho Metálico, Laranja Solar, Grafite)..."
+                                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500"
+                                />
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        {/* Opcionais */}
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-2">
+                        {/* Opcionais com seleção rápida + digitação de personalizados */}
+                        <div className="space-y-2 pt-1">
+                          <label className="block text-xs font-bold text-slate-700">
                             Opcionais e Itens do Veículo:
                           </label>
-                          <div className="flex flex-wrap gap-1.5">
+
+                          {/* Campo de Escrever Opcionais Personalizados */}
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={customOpcionalInput}
+                              onChange={(e) => setCustomOpcionalInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault()
+                                  handleAddCustomOpcional()
+                                }
+                              }}
+                              placeholder="Escreva outro opcional (ex: Blindado, Som Harman Kardon, Escape) e clique em Adicionar..."
+                              className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddCustomOpcional}
+                              disabled={!customOpcionalInput.trim()}
+                              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer disabled:opacity-40"
+                            >
+                              + Adicionar
+                            </button>
+                          </div>
+
+                          {/* Badges de Opcionais Selecionados e Sugeridos */}
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {/* Personalizados já adicionados */}
+                            {novoCarro.opcionais?.filter(op => !OPCIONAIS_SUGESTOES.includes(op)).map((op) => (
+                              <button
+                                key={op}
+                                type="button"
+                                onClick={() => toggleOpcionalCarro(op)}
+                                className="px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer bg-purple-600 text-white border-purple-600 flex items-center gap-1.5 shadow-2xs"
+                                title="Clique para remover"
+                              >
+                                <span>✓ {op}</span>
+                                <span className="text-[10px] bg-purple-800 text-purple-100 rounded-full w-3.5 h-3.5 flex items-center justify-center">✕</span>
+                              </button>
+                            ))}
+
+                            {/* Sugestões padrão */}
                             {OPCIONAIS_SUGESTOES.map((op) => {
                               const isSelected = novoCarro.opcionais?.includes(op)
                               return (
@@ -1466,7 +1605,7 @@ export default function OnboardingPublicPage() {
                                   onClick={() => toggleOpcionalCarro(op)}
                                   className={`px-2.5 py-1 rounded-xl text-[11px] font-medium border transition-all cursor-pointer ${
                                     isSelected 
-                                      ? "bg-indigo-600 text-white border-indigo-600 font-bold" 
+                                      ? "bg-indigo-600 text-white border-indigo-600 font-bold shadow-2xs" 
                                       : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
                                   }`}
                                 >
